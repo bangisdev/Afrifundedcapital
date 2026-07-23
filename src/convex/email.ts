@@ -133,9 +133,23 @@ export const sendFundedConfirmation = action({
     name: v.string(),
     accountSize: v.string(),
     profitSharePercent: v.number(),
+    verificationCode: v.optional(v.string()),
   },
   handler: async (_ctx, args) => {
-    const { email, name, accountSize, profitSharePercent } = args;
+    const { email, name, accountSize, profitSharePercent, verificationCode } = args;
+
+    const verifySection = verificationCode
+      ? `
+<tr><td style="padding:0 40px 20px;">
+<table width="100%" cellpadding="0" cellspacing="0" style="border-radius:6px;background-color:#fafafa;border:1px solid #eee;">
+<tr><td style="padding:16px 20px;text-align:center;">
+<p style="margin:0 0 8px;font-size:11px;color:#666;">Share your achievement — get your funded certificate:</p>
+<a href="https://afrifundedcapital.com/verify/${verificationCode}" style="display:inline-block;font-size:12px;color:#111;font-weight:500;text-decoration:none;border-bottom:1px solid #111;">
+afrifundedcapital.com/verify/${verificationCode.slice(0, 4)}…${verificationCode.slice(-4)}
+</a>
+</td></tr></table>
+</td></tr>`
+      : "";
 
     const subject = `🎉 You're Funded! — ${accountSize} Account | AfriFundedCapital`;
     const html = `
@@ -172,12 +186,13 @@ export const sendFundedConfirmation = action({
 </table>
 </td></tr></table>
 </td></tr>
+${verifySection}
 <tr><td style="padding:24px 40px 0;font-size:14px;color:#555;line-height:1.7;">
 <p style="margin:0;">You have passed all evaluation phases and now have a funded trading account. Trade responsibly and keep up to ${profitSharePercent}% of the profits you generate.</p>
 </td></tr>
 <tr><td style="padding:20px 40px 32px;text-align:center;">
-<a href="https://afrifundedcapital.com/dashboard/trading" style="display:inline-block;padding:12px 32px;background-color:#111;color:#fff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:500;">
-Start Trading
+<a href="https://afrifundedcapital.com/dashboard/certificates" style="display:inline-block;padding:12px 32px;background-color:#111;color:#fff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:500;">
+View Your Certificate
 </a>
 </td></tr>
 <tr><td style="padding:24px 40px;background-color:#fafafa;border-top:1px solid #eee;">
@@ -187,7 +202,7 @@ Start Trading
 </td></tr></table>
 </body></html>`;
 
-    const text = `Dear ${name},\n\nCONGRATULATIONS! You're now funded with a ${accountSize} live trading account.\n\nYou keep ${profitSharePercent}% of the profits.\n\nLog in to your dashboard to start trading.`;
+    const text = `Dear ${name},\n\nCONGRATULATIONS! You're now funded with a ${accountSize} live trading account.\n\nYou keep ${profitSharePercent}% of the profits.${verificationCode ? `\n\nShare your certificate: https://afrifundedcapital.com/verify/${verificationCode}` : ''}\n\nLog in to your dashboard to start trading.`;
 
     return await sendEmail(email, subject, html, text);
   },

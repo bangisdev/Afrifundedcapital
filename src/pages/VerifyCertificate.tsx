@@ -13,6 +13,7 @@ import {
   User,
   ExternalLink,
   Copy,
+  Printer,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -167,6 +168,10 @@ export default function VerifyCertificate() {
           >
             <Copy className="h-3 w-3 mr-1.5" />
             Copy Verification Link
+          </Button>
+          <Button variant="outline" size="sm" className="text-xs w-full" onClick={() => window.print()}>
+            <Printer className="h-3 w-3 mr-1.5" />
+            Print / Save as PDF
           </Button>
           <Button variant="ghost" size="sm" className="text-xs w-full" asChild>
             <Link to="/">

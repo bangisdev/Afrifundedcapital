@@ -535,15 +535,23 @@ export const updateChallengeStatus = mutation({
         createdAt: now,
       });
 
-      // Send funded confirmation email
+      // Send funded confirmation email with certificate verification link if available
       try {
         const user = await ctx.db.get(challenge.userId);
         if (user?.email) {
+          // Look for existing certificate for this challenge
+          const certificates = await ctx.db
+            .query("certificates")
+            .withIndex("challengeId", (q) => q.eq("challengeId", args.challengeId))
+            .collect();
+          const cert = certificates.find((c) => c.type === "funded");
+
           await (ctx.scheduler as any).runAfter(0, (internal as any).email.sendFundedConfirmation, {
             email: user.email,
             name: user.name || "Trader",
             accountSize: `$${challenge.accountSize.toLocaleString()}`,
             profitSharePercent: 90,
+            verificationCode: cert?.verificationCode,
           });
         }
       } catch (e: any) {
