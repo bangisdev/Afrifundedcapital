@@ -1,7 +1,8 @@
-import { useQuery } from "convex/react";
+import { useQuery, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   ChartContainer,
   ChartTooltip,
@@ -20,6 +21,7 @@ import {
   BarChart3,
   PieChart,
   AlertCircle,
+  Sparkles,
 } from "lucide-react";
 import {
   LineChart,
@@ -31,7 +33,7 @@ import {
   CartesianGrid,
   ResponsiveContainer,
 } from "recharts";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 
 const chartConfig = {
@@ -96,8 +98,27 @@ export default function Trading() {
   const metrics = useQuery(api.challenges.getDashboardMetrics);
   const metricsHistory = useQuery(api.challenges.getMyMetricsHistory);
   const mt5Accounts = useQuery(api.mt5.getMyMt5Accounts);
+  const seedDemoData = useAction(api.demoSeeder.seedDemoTradingData);
+  const [seeding, setSeeding] = useState(false);
+  const [seedResult, setSeedResult] = useState<string | null>(null);
 
   const isLoading = !challenges || !metrics || !metricsHistory || !mt5Accounts;
+
+  const handleSeedDemoData = async () => {
+    setSeeding(true);
+    setSeedResult(null);
+    try {
+      const result = await seedDemoData();
+      setSeedResult(
+        result.message ||
+          `Seeded ${(result as any).seeded} data points across ${challenges?.length || 0} challenge(s)`,
+      );
+    } catch (e: any) {
+      setSeedResult(`Error: ${e.message || "Failed to generate demo data"}`);
+    } finally {
+      setSeeding(false);
+    }
+  };
 
   const chartData = useMemo(() => {
     if (!metricsHistory || metricsHistory.length === 0) return [];
@@ -386,11 +407,35 @@ export default function Trading() {
         </div>
       ) : (
         mt5Accounts.length > 0 && (
-          <div className="card-subtle p-8 text-center space-y-2">
+          <div className="card-subtle p-8 text-center space-y-3">
             <BarChart3 className="h-8 w-8 mx-auto text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              No trading metrics recorded yet. Charts will appear once trading data is synced.
-            </p>
+            <div>
+              <p className="text-sm text-muted-foreground">
+                No trading metrics recorded yet. Charts will appear once trading data is synced.
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Generate sample trading data to see charts and metrics in action immediately.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSeedDemoData}
+              disabled={seeding}
+              className="gap-1.5"
+            >
+              {seeding ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" />
+              )}
+              {seeding ? "Generating…" : "Generate Demo Data"}
+            </Button>
+            {seedResult && (
+              <p className={`text-xs ${seedResult.startsWith("Error") ? "text-destructive" : "text-muted-foreground"}`}>
+                {seedResult}
+              </p>
+            )}
           </div>
         )
       )}
@@ -464,11 +509,35 @@ export default function Trading() {
           </div>
         </div>
       ) : mt5Accounts.length > 0 ? (
-        <div className="card-subtle p-8 text-center space-y-2">
+        <div className="card-subtle p-8 text-center space-y-3">
           <Activity className="h-8 w-8 mx-auto text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">
-            No trading metrics available yet. Metrics appear once your MT5 account receives trading data.
-          </p>
+          <div>
+            <p className="text-sm text-muted-foreground">
+              No trading metrics available yet. Metrics appear once your MT5 account receives trading data.
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Generate sample trading data to see metrics and charts immediately.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSeedDemoData}
+            disabled={seeding}
+            className="gap-1.5"
+          >
+            {seeding ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="h-3.5 w-3.5" />
+            )}
+            {seeding ? "Generating…" : "Generate Demo Data"}
+          </Button>
+          {seedResult && (
+            <p className={`text-xs ${seedResult.startsWith("Error") ? "text-destructive" : "text-muted-foreground"}`}>
+              {seedResult}
+            </p>
+          )}
         </div>
       ) : null}
 

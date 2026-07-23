@@ -101,6 +101,73 @@ export const getEnabledPaymentProviders = query({
 //  SEED ACTION
 // ═══════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════
+//  INTERNAL HELPERS FOR DEMO TRADING DATA SEEDER
+//  (consumed by convex/seed-trading.ts)
+// ═══════════════════════════════════════════════
+
+export const listChallengesForDemo = query({
+  handler: async (ctx) => {
+    const challenges = await ctx.db.query("userChallenges").collect();
+    // Only seed data for active, funded, or recently started challenges
+    return challenges.filter(
+      (c) =>
+        c.status === "active" ||
+        c.status === "funded" ||
+        c.status === "phase_1_passed" ||
+        c.status === "phase_2_passed",
+    );
+  },
+});
+
+export const createDemoMt5Account = mutation({
+  args: {
+    userId: v.id("users"),
+    login: v.string(),
+    password: v.string(),
+    investorPassword: v.string(),
+    balance: v.number(),
+    equity: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const accountId = await ctx.db.insert("mt5Accounts", {
+      userId: args.userId,
+      login: args.login,
+      password: args.password,
+      investorPassword: args.investorPassword,
+      server: "AfriFundedCapital-Demo",
+      group: "AFC-Demo",
+      leverage: 100,
+      balance: args.balance,
+      equity: args.equity,
+      currency: "NGN",
+      isActive: true,
+      isSuspended: false,
+      createdAt: Date.now(),
+    });
+    return accountId;
+  },
+});
+
+export const linkMt5ToChallenge = mutation({
+  args: {
+    challengeId: v.id("userChallenges"),
+    mt5AccountId: v.id("mt5Accounts"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.challengeId, {
+      mt5AccountId: args.mt5AccountId,
+      status: "active",
+      startedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+// ═══════════════════════════════════════════════
+//  MAIN SEED ACTION
+// ═══════════════════════════════════════════════
+
 export const seed = action({
   handler: async (ctx) => {
     // Seed default roles
