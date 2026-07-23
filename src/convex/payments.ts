@@ -703,3 +703,30 @@ export const getPaymentByIdAction = query({
     return await ctx.db.get(args.paymentId);
   },
 });
+
+export const getAllPaymentsReport = query({
+  handler: async (ctx) => {
+    await requireRole(ctx, [ROLES.SUPER_ADMIN, ROLES.FINANCE_ADMIN]);
+    const payments = await ctx.db.query("payments").order("desc").collect();
+
+    const enriched = await Promise.all(
+      payments.map(async (p) => {
+        const user = await ctx.db.get(p.userId);
+        return {
+          reference: p.reference,
+          amount: p.amount,
+          currency: p.currency,
+          status: p.status,
+          provider: p.provider,
+          description: p.description || "",
+          userName: user?.name || "",
+          userEmail: user?.email || "",
+          createdAt: new Date(p.createdAt).toISOString(),
+          completedAt: p.completedAt ? new Date(p.completedAt).toISOString() : "",
+        };
+      }),
+    );
+
+    return enriched;
+  },
+});

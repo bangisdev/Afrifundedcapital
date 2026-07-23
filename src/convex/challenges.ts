@@ -678,3 +678,32 @@ export const resetChallenge = mutation({
     });
   },
 });
+
+export const getAllChallengesReport = query({
+  handler: async (ctx) => {
+    await requireRole(ctx, [ROLES.SUPER_ADMIN, ROLES.CLIENT_MANAGER]);
+    const challenges = await ctx.db.query("userChallenges").order("desc").collect();
+
+    const enriched = await Promise.all(
+      challenges.map(async (ch) => {
+        const user = await ctx.db.get(ch.userId);
+        const template = await ctx.db.get(ch.templateId);
+        return {
+          userName: user?.name || "",
+          userEmail: user?.email || "",
+          templateName: template?.name || "",
+          accountSize: ch.accountSize,
+          status: ch.status,
+          profitTarget: ch.profitTarget,
+          amountPaid: ch.amountPaid,
+          violationsCount: ch.violations?.length || 0,
+          createdAt: new Date(ch.createdAt).toISOString(),
+          startedAt: ch.startedAt ? new Date(ch.startedAt).toISOString() : "",
+          fundedAt: ch.fundedAt ? new Date(ch.fundedAt).toISOString() : "",
+        };
+      }),
+    );
+
+    return enriched;
+  },
+});

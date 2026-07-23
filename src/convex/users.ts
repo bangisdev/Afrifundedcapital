@@ -325,6 +325,25 @@ export const generateReferralCodeForUser = mutation({
   },
 });
 
+export const getAllUsersReport = query({
+  handler: async (ctx) => {
+    await requireRole(ctx, [ROLES.SUPER_ADMIN]);
+    const users = await ctx.db.query("users").collect();
+
+    return users.map((u) => ({
+      name: u.name || "",
+      email: u.email || "",
+      role: u.role || "user",
+      kycStatus: u.kycStatus || "unverified",
+      twoFactorEnabled: u.twoFactorEnabled || false,
+      emailNotifications: u.emailNotifications !== false,
+      referralCode: u.referralCode || "",
+      country: u.country || "",
+      createdAt: new Date(u._creationTime ?? 0).toISOString(),
+    }));
+  },
+});
+
 export const updatePreferences = mutation({
   args: {
     emailNotifications: v.optional(v.boolean()),
