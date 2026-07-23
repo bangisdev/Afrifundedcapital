@@ -16,28 +16,42 @@ import {
 
 import { useAuth } from "@/hooks/use-auth";
 import logo from "@/assets/logo.svg";
-import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
+import { ArrowRight, Loader2, Mail, UserX, LogIn } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+
+const REMEMBER_KEY = "_afc_remember";
 
 interface AuthProps {
   redirectAfterAuth?: string;
 }
 
 function Auth({ redirectAfterAuth }: AuthProps = {}) {
-  const { isLoading: authLoading, isAuthenticated, signIn } = useAuth();
+  const { isLoading: authLoading, isAuthenticated, signIn, signOut } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState<"signIn" | { email: string }>("signIn");
   const [otp, setOtp] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rememberMe, setRememberMe] = useState(
+    () => localStorage.getItem(REMEMBER_KEY) === "true",
+  );
 
+  // ── Mount-side check: sign out returning users without "remember me" ──
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
+      const remembered = localStorage.getItem(REMEMBER_KEY) === "true";
+      if (!remembered) {
+        signOut();
+        return;
+      }
+      // Remembered and authenticated — proceed to redirect
       const redirect = redirectAfterAuth || "/";
-      navigate(redirect);
+      navigate(redirect, { replace: true });
     }
-  }, [authLoading, isAuthenticated, navigate, redirectAfterAuth]);
+  }, [authLoading, isAuthenticated, navigate, redirectAfterAuth, signOut]);
   const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoading(true);
@@ -154,6 +168,26 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                   {error && (
                     <p className="mt-2 text-sm text-red-500">{error}</p>
                   )}
+
+                  <div className="mt-4 flex items-center gap-2">
+                    <Checkbox
+                      id="remember-me"
+                      checked={rememberMe}
+                      onCheckedChange={(checked) => {
+                        const val = checked === true;
+                        setRememberMe(val);
+                        if (val) {
+                          localStorage.setItem(REMEMBER_KEY, "true");
+                        } else {
+                          localStorage.removeItem(REMEMBER_KEY);
+                        }
+                      }}
+                      disabled={isLoading}
+                    />
+                    <Label htmlFor="remember-me" className="text-xs text-muted-foreground cursor-pointer font-normal">
+                      Remember me
+                    </Label>
+                  </div>
                   
                   <div className="mt-4">
                     <div className="relative">
@@ -174,7 +208,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                       onClick={handleGuestLogin}
                       disabled={isLoading}
                     >
-                      <UserX className="mr-2 h-4 w-4" />
+                      <LogIn className="mr-2 h-4 w-4" />
                       Continue as Guest
                     </Button>
                   </div>
