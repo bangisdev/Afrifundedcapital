@@ -611,15 +611,48 @@ export const verifyFlutterwaveTransaction = action({
       customerEmail: data.customer?.email || "",
       customerName: data.customer?.name,
       paymentType: data.payment_type || "card",
-    });
-
-    // Create user challenge if payment was for a challenge
+    });      // Create user challenge if payment was for a challenge
     if (payment.templateId && payment.accountSizeId) {
       await ctx.runMutation((internal as any).challenges.createUserChallenge, {
         templateId: payment.templateId as any,
         accountSizeId: payment.accountSizeId as any,
         paymentId: args.paymentId,
       });
+    }
+
+    // Send payment confirmation email
+    try {
+      const user = await ctx.runQuery((internal as any).users.getUserById, {
+        userId: payment.userId,
+      });
+
+      if (user?.email) {
+        const template = payment.templateId
+          ? await ctx.runQuery((internal as any).challenges.getChallengeTemplate, {
+              templateId: payment.templateId,
+            })
+          : null;
+
+        const accountSize = payment.accountSizeId
+          ? await ctx.runQuery((internal as any).challenges.getAccountSize, {
+              sizeId: payment.accountSizeId,
+            })
+          : null;
+
+        await ctx.runAction((internal as any).email.sendPaymentConfirmation, {
+          email: user.email,
+          name: user.name || "Trader",
+          amount: payment.amount,
+          currency: payment.currency,
+          reference: payment.reference,
+          challengeName: template?.name || "Trading",
+          accountSize: accountSize?.label || "",
+          provider: payment.provider,
+        });
+      }
+    } catch (emailError: any) {
+      // Email failure shouldn't block the payment flow
+      console.error("Failed to send payment confirmation email:", emailError.message);
     }
 
     return {
