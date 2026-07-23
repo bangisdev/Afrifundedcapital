@@ -2,7 +2,6 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { requireAuth, requireRole } from "./users";
 import { ROLES, CHALLENGE_STATUS } from "./schema";
-import { internal } from "./_generated/api";
 
 // ═══════════════════════════════════════════════
 //  QUERIES

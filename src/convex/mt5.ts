@@ -221,6 +221,42 @@ export const purgeMt5SyncQueue = mutation({
 //  ACTIONS
 
 // ═══════════════════════════════════════════════
+//  INTERNAL MUTATIONS — Used by daily sync action
+// ═══════════════════════════════════════════════
+
+export const updateMt5AccountSyncTime = mutation({
+  args: { accountId: v.id("mt5Accounts") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.accountId, { lastSyncAt: Date.now() });
+  },
+});
+
+export const processMt5SyncQueueItem = mutation({
+  args: {
+    queueItemId: v.id("mt5SyncQueue"),
+    status: v.string(),
+    error: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const item = await ctx.db.get(args.queueItemId);
+    if (!item) throw new Error("Queue item not found");
+
+    const updates: any = {
+      status: args.status as any,
+      processedAt: Date.now(),
+    };
+    if (args.error !== undefined) updates.error = args.error;
+
+    // Increment retry count when re-queuing
+    if (args.status === "pending") {
+      updates.retryCount = item.retryCount + 1;
+    }
+
+    await ctx.db.patch(args.queueItemId, updates);
+  },
+});
+
+// ═══════════════════════════════════════════════
 //  ACTIONS — External API calls
 // ═══════════════════════════════════════════════
 
