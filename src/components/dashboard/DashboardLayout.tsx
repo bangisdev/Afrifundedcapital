@@ -56,7 +56,7 @@ export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boole
               variant="ghost"
               size="icon"
               className="h-8 w-8 relative"
-              onClick={() => navigate(isAdmin ? "/admin" : "/dashboard")}
+              onClick={() => navigate(isAdmin ? "/admin" : "/dashboard/notifications")}
             >
               <Bell className="h-4 w-4" />
               {unreadCount && unreadCount > 0 ? (

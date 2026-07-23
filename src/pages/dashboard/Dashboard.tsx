@@ -8,6 +8,7 @@ import Affiliate from "./Affiliate";
 import Certificates from "./Certificates";
 import Support from "./Support";
 import Profile from "./Profile";
+import Notifications from "./Notifications";
 
 export default function Dashboard() {
   return (
@@ -21,6 +22,7 @@ export default function Dashboard() {
         <Route path="certificates" element={<Certificates />} />
         <Route path="support" element={<Support />} />
         <Route path="profile" element={<Profile />} />
+        <Route path="notifications" element={<Notifications />} />
       </Routes>
     </DashboardLayout>
   );
