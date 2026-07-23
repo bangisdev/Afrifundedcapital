@@ -18,13 +18,15 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@/components/ui/tabs";
-import { Loader2, CheckCircle, XCircle } from "lucide-react";
+import { useNavigate } from "react-router";
+import { Loader2, CheckCircle, XCircle, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
 type Doc = Record<string, any>;
 
 export default function Challenges() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const templates = useQuery(api.challenges.listChallengeTemplates, {});
   const myChallenges = useQuery(api.challenges.getMyChallenges);
   const paymentProviders = useQuery(api.seed.getEnabledPaymentProviders);
@@ -209,7 +211,11 @@ export default function Challenges() {
             </div>
           ) : (
             myChallenges.map((ch: Doc) => (
-              <div key={ch._id} className="card-subtle p-4">
+              <button
+                key={ch._id}
+                onClick={() => navigate(`/dashboard/challenges/${ch._id}`)}
+                className="w-full card-subtle p-4 text-left hover:bg-secondary/30 transition-colors"
+              >
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-sm font-medium">{ch.templateName}</div>
@@ -217,8 +223,9 @@ export default function Challenges() {
                       ${ch.accountSize.toLocaleString()} — Started {new Date(ch.createdAt).toLocaleDateString()}
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
                     {statusBadge(ch.status)}
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
                   </div>
                 </div>
                 {ch.status === "active" && (
@@ -232,7 +239,7 @@ export default function Challenges() {
                     </div>
                   </div>
                 )}
-              </div>
+              </button>
             ))
           )}
         </TabsContent>
