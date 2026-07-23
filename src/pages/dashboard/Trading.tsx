@@ -33,7 +33,7 @@ import {
   CartesianGrid,
   ResponsiveContainer,
 } from "recharts";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 
 const chartConfig = {
@@ -100,17 +100,49 @@ export default function Trading() {
   const mt5Accounts = useQuery(api.mt5.getMyMt5Accounts);
   const seedDemoData = useAction(api.demoSeeder.seedDemoTradingData);
   const [seeding, setSeeding] = useState(false);
+  const [autoSeeding, setAutoSeeding] = useState(false);
   const [seedResult, setSeedResult] = useState<string | null>(null);
+  const autoSeededRef = useRef(false);
 
   const isLoading = !challenges || !metrics || !metricsHistory || !mt5Accounts;
 
+  // Auto-seed demo data when the page first loads and detects empty metrics
+  useEffect(() => {
+    if (
+      !isLoading &&
+      !autoSeededRef.current &&
+      challenges.length > 0 &&
+      mt5Accounts.length > 0 &&
+      metricsHistory.length === 0
+    ) {
+      autoSeededRef.current = true;
+      setAutoSeeding(true);
+
+      seedDemoData()
+        .then((result: any) => {
+          setSeedResult(
+            result.message ||
+              `Seeded ${result.seeded} data points across ${challenges.length} challenge(s)`,
+          );
+        })
+        .catch((e: any) => {
+          setSeedResult(`Error: ${e.message || "Failed to generate demo data"}`);
+        })
+        .finally(() => {
+          setAutoSeeding(false);
+        });
+    }
+  }, [isLoading, challenges, mt5Accounts, metricsHistory, seedDemoData]);
+
   const handleSeedDemoData = async () => {
+    if (autoSeeding) return;
     setSeeding(true);
+    setAutoSeeding(false);
     setSeedResult(null);
     try {
       const result = await seedDemoData();
       setSeedResult(
-        result.message ||
+        (result as any).message ||
           `Seeded ${(result as any).seeded} data points across ${challenges?.length || 0} challenge(s)`,
       );
     } catch (e: any) {
@@ -119,6 +151,8 @@ export default function Trading() {
       setSeeding(false);
     }
   };
+
+  const isSeeding = seeding || autoSeeding;
 
   const chartData = useMemo(() => {
     if (!metricsHistory || metricsHistory.length === 0) return [];
@@ -408,29 +442,45 @@ export default function Trading() {
       ) : (
         mt5Accounts.length > 0 && (
           <div className="card-subtle p-8 text-center space-y-3">
-            <BarChart3 className="h-8 w-8 mx-auto text-muted-foreground" />
-            <div>
-              <p className="text-sm text-muted-foreground">
-                No trading metrics recorded yet. Charts will appear once trading data is synced.
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Generate sample trading data to see charts and metrics in action immediately.
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSeedDemoData}
-              disabled={seeding}
-              className="gap-1.5"
-            >
-              {seeding ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Sparkles className="h-3.5 w-3.5" />
-              )}
-              {seeding ? "Generating…" : "Generate Demo Data"}
-            </Button>
+            {autoSeeding ? (
+              <>
+                <Loader2 className="h-8 w-8 mx-auto animate-spin text-muted-foreground" />
+                <div>
+                  <p className="text-sm text-muted-foreground">
+                    Generating demo trading data…
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Creating 60 days of sample metrics so charts render immediately.
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <BarChart3 className="h-8 w-8 mx-auto text-muted-foreground" />
+                <div>
+                  <p className="text-sm text-muted-foreground">
+                    No trading metrics recorded yet. Charts will appear once trading data is synced.
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Generate sample trading data to see charts and metrics in action immediately.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSeedDemoData}
+                  disabled={isSeeding}
+                  className="gap-1.5"
+                >
+                  {seeding ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3.5 w-3.5" />
+                  )}
+                  {seeding ? "Generating…" : "Generate Demo Data"}
+                </Button>
+              </>
+            )}
             {seedResult && (
               <p className={`text-xs ${seedResult.startsWith("Error") ? "text-destructive" : "text-muted-foreground"}`}>
                 {seedResult}
@@ -508,31 +558,46 @@ export default function Trading() {
             />
           </div>
         </div>
-      ) : mt5Accounts.length > 0 ? (
-        <div className="card-subtle p-8 text-center space-y-3">
-          <Activity className="h-8 w-8 mx-auto text-muted-foreground" />
-          <div>
-            <p className="text-sm text-muted-foreground">
-              No trading metrics available yet. Metrics appear once your MT5 account receives trading data.
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Generate sample trading data to see metrics and charts immediately.
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSeedDemoData}
-            disabled={seeding}
-            className="gap-1.5"
-          >
-            {seeding ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Sparkles className="h-3.5 w-3.5" />
-            )}
-            {seeding ? "Generating…" : "Generate Demo Data"}
-          </Button>
+      ) : mt5Accounts.length > 0 ? (          <div className="card-subtle p-8 text-center space-y-3">
+          {autoSeeding ? (
+            <>
+              <Loader2 className="h-8 w-8 mx-auto animate-spin text-muted-foreground" />
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  Generating demo trading data…
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Creating 60 days of sample metrics so charts render immediately.
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <Activity className="h-8 w-8 mx-auto text-muted-foreground" />
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  No trading metrics available yet. Metrics appear once your MT5 account receives trading data.
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Generate sample trading data to see metrics and charts immediately.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSeedDemoData}
+                disabled={isSeeding}
+                className="gap-1.5"
+              >
+                {seeding ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5" />
+                )}
+                {seeding ? "Generating…" : "Generate Demo Data"}
+              </Button>
+            </>
+          )}
           {seedResult && (
             <p className={`text-xs ${seedResult.startsWith("Error") ? "text-destructive" : "text-muted-foreground"}`}>
               {seedResult}
