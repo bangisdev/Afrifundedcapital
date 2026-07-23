@@ -284,6 +284,89 @@ export const getDashboardMetrics = query({
     };
   },
 });
+
+export const getAdminChallengeStats = query({
+  handler: async (ctx) => {
+    await requireRole(ctx, [ROLES.SUPER_ADMIN, ROLES.CLIENT_MANAGER]);
+
+    const challenges = await ctx.db.query("userChallenges").collect();
+    const funded = await ctx.db.query("fundedAccounts").collect();
+
+    // Status breakdown
+    const statusBreakdown = {
+      pending: challenges.filter((c) => c.status === CHALLENGE_STATUS.PENDING).length,
+      active: challenges.filter((c) => c.status === CHALLENGE_STATUS.ACTIVE).length,
+      phase1Passed: challenges.filter((c) => c.status === CHALLENGE_STATUS.PHASE_1_PASSED).length,
+      phase2Passed: challenges.filter((c) => c.status === CHALLENGE_STATUS.PHASE_2_PASSED).length,
+      funded: challenges.filter((c) => c.status === CHALLENGE_STATUS.FUNDED).length,
+      violated: challenges.filter((c) => c.status === CHALLENGE_STATUS.VIOLATED).length,
+      expired: challenges.filter((c) => c.status === CHALLENGE_STATUS.EXPIRED).length,
+    };
+
+    // Total revenue from challenges
+    const totalChallengeRevenue = challenges
+      .filter((c) => c.status === CHALLENGE_STATUS.FUNDED || c.status === "active" || c.status === "phase_1_passed" || c.status === "phase_2_passed")
+      .reduce((sum, c) => sum + (c.amountPaid || 0), 0);
+
+    // Funded stats
+    const fundedAccounts = {
+      total: funded.length,
+      active: funded.filter((f) => f.isActive).length,
+      totalAccountSize: funded.reduce((sum, f) => sum + f.accountSize, 0),
+      totalPayouts: funded.reduce((sum, f) => sum + (f.totalPayouts || 0), 0),
+    };
+
+    // Template distribution
+    const templates = await ctx.db.query("challengeTemplates").collect();
+    const templateCounts: Record<string, number> = {};
+    const templateRevenue: Record<string, number> = {};
+    for (const ch of challenges) {
+      const t = templates.find((t) => t._id === ch.templateId);
+      const name = t?.name || "Unknown";
+      templateCounts[name] = (templateCounts[name] || 0) + 1;
+      templateRevenue[name] = (templateRevenue[name] || 0) + (ch.amountPaid || 0);
+    }
+
+    // Growth: challenges created per month (last 6 months)
+    const months: Record<string, number> = {};
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      months[key] = 0;
+    }
+    for (const ch of challenges) {
+      const d = new Date(ch.createdAt);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (months[key] !== undefined) months[key]++;
+    }
+
+    const challengeGrowth = Object.entries(months).map(([month, count]) => ({ month, count }));
+
+    // Account size distribution
+    const sizeBuckets = {
+      under10k: challenges.filter((c) => c.accountSize <= 10000).length,
+      under50k: challenges.filter((c) => c.accountSize > 10000 && c.accountSize <= 50000).length,
+      under100k: challenges.filter((c) => c.accountSize > 50000 && c.accountSize <= 100000).length,
+      over100k: challenges.filter((c) => c.accountSize > 100000).length,
+    };
+
+    return {
+      totalChallenges: challenges.length,
+      statusBreakdown,
+      totalChallengeRevenue,
+      fundedAccounts,
+      templateDistribution: Object.entries(templateCounts).map(([name, count]) => ({
+        name,
+        count,
+        revenue: templateRevenue[name] || 0,
+      })),
+      challengeGrowth,
+      sizeBuckets,
+    };
+  },
+});
+
 // ═══════════════════════════════════════════════
 //  MUTATIONS — TEMPLATES
 // ═══════════════════════════════════════════════
