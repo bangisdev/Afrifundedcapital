@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
-import { requireAuth, requireRole } from "./users";
+import { requireAuth, requireRole, checkEmailPref } from "./users";
 import { ROLES, TICKET_STATUS } from "./schema";
 import { internal } from "./_generated/api";
 
@@ -195,7 +195,8 @@ export const addTicketMessage = mutation({
     if (isAdmin) {
       try {
         const customer = await ctx.db.get(ticket.userId);
-        if (customer?.email) {
+        const shouldEmail = await checkEmailPref(ctx, ticket.userId, "support_reply");
+        if (customer?.email && shouldEmail) {
           await (ctx.scheduler as any).runAfter(0, (internal as any).email.sendSupportReply, {
             email: customer.email,
             name: customer.name || "Trader",

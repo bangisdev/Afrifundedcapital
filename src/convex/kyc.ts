@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
-import { requireAuth, requireRole } from "./users";
+import { requireAuth, requireRole, checkEmailPref } from "./users";
 import { KYC_STATUS, DOCUMENT_TYPES, ROLES } from "./schema";
 import { internal } from "./_generated/api";
 
@@ -205,7 +205,8 @@ export const approveKycDocument = mutation({
       // Send KYC approved email
       try {
         const user = await ctx.db.get(doc.userId);
-        if (user?.email) {
+        const shouldEmail = await checkEmailPref(ctx, doc.userId, "kyc_notification");
+        if (user?.email && shouldEmail) {
           await (ctx.scheduler as any).runAfter(0, (internal as any).email.sendKycNotification, {
             email: user.email,
             name: user.name || "Trader",
@@ -269,7 +270,8 @@ export const rejectKycDocument = mutation({
     // Send KYC rejection email
     try {
       const user = await ctx.db.get(doc.userId);
-      if (user?.email) {
+      const shouldEmail = await checkEmailPref(ctx, doc.userId, "kyc_notification");
+      if (user?.email && shouldEmail) {
         await (ctx.scheduler as any).runAfter(0, (internal as any).email.sendKycNotification, {
           email: user.email,
           name: user.name || "Trader",

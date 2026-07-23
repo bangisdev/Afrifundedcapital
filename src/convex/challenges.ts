@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { query, mutation, action } from "./_generated/server";
-import { requireAuth, requireRole } from "./users";
+import { requireAuth, requireRole, checkEmailPref } from "./users";
 import { ROLES, CHALLENGE_TYPES, CHALLENGE_STATUS } from "./schema";
 import { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
@@ -571,7 +571,8 @@ export const updateChallengeStatus = mutation({
       // Send funded confirmation email with certificate verification link if available
       try {
         const user = await ctx.db.get(challenge.userId);
-        if (user?.email) {
+        const shouldEmail = await checkEmailPref(ctx, challenge.userId, "funded_confirmation");
+        if (user?.email && shouldEmail) {
           // Look for existing certificate for this challenge
           const certificates = await ctx.db
             .query("certificates")
@@ -638,7 +639,8 @@ export const addChallengeViolation = mutation({
       try {
         const template = await ctx.db.get(challenge.templateId);
         const user = await ctx.db.get(challenge.userId);
-        if (user?.email) {
+        const shouldEmail = await checkEmailPref(ctx, challenge.userId, "challenge_violation");
+        if (user?.email && shouldEmail) {
           await (ctx.scheduler as any).runAfter(0, (internal as any).email.sendChallengeViolation, {
             email: user.email,
             name: user.name || "Trader",

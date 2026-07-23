@@ -30,6 +30,51 @@ export async function requireRole(ctx: any, allowedRoles: string[]) {
   return { userId, user };
 }
 
+// ═══════════════════════════════════════════════
+//  NOTIFICATION PREFERENCES HELPERS
+// ═══════════════════════════════════════════════
+
+const PREFERENCE_KEY_MAP: Record<string, string> = {
+  payment_confirmation: "email_payment",
+  challenge_violation: "email_challenge",
+  funded_confirmation: "email_challenge",
+  kyc_notification: "email_kyc",
+  support_reply: "email_support",
+  marketing: "marketing",
+};
+
+/**
+ * Check whether a user has opted in to a specific email notification type.
+ * Can be called from any mutation or query context.
+ * Returns true if the preference is not explicitly set to false.
+ */
+export async function checkEmailPref(
+  ctx: any,
+  userId: string,
+  notificationType: string,
+): Promise<boolean> {
+  const user = await ctx.db.get(userId);
+  if (!user) return false;
+  if (!user.email) return false;
+  if (user.emailNotifications === false) return false;
+
+  const prefs = user.notificationPreferences || {};
+  const prefKey = PREFERENCE_KEY_MAP[notificationType];
+  if (!prefKey) return true; // Unknown types default to allowed
+
+  return prefs[prefKey] !== false;
+}
+
+export const checkEmailPreference = query({
+  args: {
+    userId: v.id("users"),
+    notificationType: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await checkEmailPref(ctx, args.userId, args.notificationType);
+  },
+});
+
 export function generateReferralCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "AFC";

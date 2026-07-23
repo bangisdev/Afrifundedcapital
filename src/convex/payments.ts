@@ -656,7 +656,12 @@ export const verifyFlutterwaveTransaction = action({
         userId: payment.userId,
       });
 
-      if (user?.email) {
+      const shouldEmail = await ctx.runQuery((internal as any).users.checkEmailPreference, {
+        userId: payment.userId,
+        notificationType: "payment_confirmation",
+      });
+
+      if (user?.email && shouldEmail) {
         const template = payment.templateId
           ? await ctx.runQuery((internal as any).challenges.getChallengeTemplate, {
               templateId: payment.templateId,
