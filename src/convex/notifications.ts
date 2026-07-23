@@ -12,11 +12,12 @@ export const getMyNotifications = query({
     unreadOnly: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const userId = await requireAuth(ctx);
+    const user = await getCurrentUser(ctx);
+    if (!user) return [];
 
     const notifications = await ctx.db
       .query("notifications")
-      .withIndex("userId_createdAt", (q) => q.eq("userId", userId))
+      .withIndex("userId_createdAt", (q) => q.eq("userId", user._id))
       .order("desc")
       .collect();
 
