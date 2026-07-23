@@ -1,17 +1,16 @@
-import { useEffect, useState } from "react";
-import { useNavigate, Outlet, useLocation } from "react-router";
+import { useEffect } from "react";
+import { useNavigate, Outlet } from "react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { Sidebar } from "./Sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
-import { Bell, ChevronRight } from "lucide-react";
+import { Bell } from "lucide-react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
 export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boolean; children?: React.ReactNode }) {
   const { isLoading, isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
   const unreadCount = useQuery(api.notifications.getUnreadCount, {});
 
   useEffect(() => {
@@ -20,15 +19,8 @@ export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boole
     }
   }, [isLoading, isAuthenticated, navigate]);
 
-  // Redirect from base /dashboard to /dashboard/ (overview)
-  useEffect(() => {
-    if (location.pathname === "/dashboard" && !isAdmin) {
-      navigate("/dashboard", { replace: true });
-    }
-    if (location.pathname === "/admin" && isAdmin) {
-      navigate("/admin", { replace: true });
-    }
-  }, [location.pathname, isAdmin, navigate]);
+  // No need to redirect — the index Route in Dashboard.tsx / AdminDashboard.tsx
+  // already matches and renders the overview component at these exact paths.
 
   if (isLoading) {
     return (
