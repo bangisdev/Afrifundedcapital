@@ -14,6 +14,7 @@ const Landing = lazy(() => import("./pages/Landing.tsx"));
 const AuthPage = lazy(() => import("./pages/Auth.tsx"));
 const Dashboard = lazy(() => import("./pages/dashboard/Dashboard.tsx"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard.tsx"));
+const VerifyCertificate = lazy(() => import("./pages/VerifyCertificate.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 function RouteLoading() {
@@ -118,6 +119,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="/auth" element={<AuthPage redirectAfterAuth="/dashboard" />} />
                 <Route path="/dashboard/*" element={<Dashboard />} />
                 <Route path="/admin/*" element={<AdminDashboard />} />
+                <Route path="/verify/:verificationCode" element={<VerifyCertificate />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>

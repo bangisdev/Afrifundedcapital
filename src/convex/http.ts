@@ -110,4 +110,49 @@ http.route({
   }),
 });
 
+// ═══════════════════════════════════════════════
+//  PUBLIC CERTIFICATE VERIFICATION
+//  Anyone can verify a certificate by code
+// ═══════════════════════════════════════════════
+
+http.route({
+  path: "/api/verify-certificate",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const url = new URL(request.url);
+      const code = url.searchParams.get("code") || "";
+
+      if (!code) {
+        return new Response(
+          JSON.stringify({ valid: false, message: "Verification code is required." }),
+          {
+            status: 400,
+            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+          },
+        );
+      }
+
+      const result = await ctx.runAction(
+        (internal as any).certificates.publicVerifyCertificate,
+        { code },
+      );
+
+      return new Response(JSON.stringify(result), {
+        status: result.valid ? 200 : 404,
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+      });
+    } catch (error: any) {
+      console.error("Certificate verification error:", error);
+      return new Response(
+        JSON.stringify({ valid: false, message: "Verification service unavailable." }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        },
+      );
+    }
+  }),
+});
+
 export default http;

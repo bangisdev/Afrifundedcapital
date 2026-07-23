@@ -1,7 +1,8 @@
 import { v } from "convex/values";
-import { query, mutation } from "./_generated/server";
+import { query, mutation, action } from "./_generated/server";
 import { requireAuth, requireRole } from "./users";
 import { ROLES } from "./schema";
+import { internal } from "./_generated/api";
 
 // ═══════════════════════════════════════════════
 //  QUERIES
@@ -51,11 +52,21 @@ export const verifyCertificate = query({
     const user = await ctx.db.get(cert.userId);
     const challenge = await ctx.db.get(cert.challengeId);
 
+    const typeLabel =
+      (
+        {
+          phase_1: "Phase 1 Passed",
+          phase_2: "Phase 2 Passed",
+          funded: "Funded Trader",
+        } as Record<string, string>
+      )[cert.type] || cert.type;
+
     return {
       valid: true,
       certificate: {
         certificateNumber: cert.certificateNumber,
         type: cert.type,
+        typeLabel,
         issuedAt: cert.issuedAt,
       },
       trader: {
@@ -97,6 +108,96 @@ function generateVerificationCode(): string {
   }
   return code;
 }
+
+export const getCertificateByCode = query({
+  args: { code: v.string() },
+  handler: async (ctx, args) => {
+    // Try verification code first, then certificate number
+    let cert = await ctx.db
+      .query("certificates")
+      .withIndex("verificationCode", (q) => q.eq("verificationCode", args.code))
+      .first();
+
+    if (!cert) {
+      cert = await ctx.db
+        .query("certificates")
+        .withIndex("certificateNumber", (q) => q.eq("certificateNumber", args.code))
+        .first();
+    }
+
+    if (!cert) return null;
+
+    const user = await ctx.db.get(cert.userId);
+    const challenge = await ctx.db.get(cert.challengeId);
+
+    const typeLabel =
+      (
+        {
+          phase_1: "Phase 1 Passed",
+          phase_2: "Phase 2 Passed",
+          funded: "Funded Trader",
+        } as Record<string, string>
+      )[cert.type] || cert.type;
+
+    return {
+      certificateId: cert._id,
+      certificateNumber: cert.certificateNumber,
+      type: cert.type,
+      typeLabel,
+      issuedAt: cert.issuedAt,
+      traderName: user?.name || "Verified Trader",
+      accountSize: challenge?.accountSize || null,
+    };
+  },
+});
+
+export const publicVerifyCertificate = action({
+  args: { code: v.string() },
+  handler: async (ctx, args): Promise<{
+    valid: boolean;
+    message?: string;
+    certificate?: {
+      certificateNumber: string;
+      type: string;
+      typeLabel: string;
+      issuedAt: number;
+    };
+    trader?: { name: string };
+    challenge?: { accountSize: string | null };
+  }> => {
+    const data: any = await ctx.runQuery((internal as any).certificates.getCertificateByCode, {
+      code: args.code,
+    });
+
+    if (!data) {
+      return { valid: false, message: "Certificate not found." };
+    }
+
+    // Record the verification
+    await ctx.runMutation((internal as any).certificates.recordVerification, {
+      certificateId: data.certificateId,
+      ipAddress: "",
+    });
+
+    return {
+      valid: true,
+      certificate: {
+        certificateNumber: data.certificateNumber,
+        type: data.type,
+        typeLabel: data.typeLabel,
+        issuedAt: data.issuedAt,
+      },
+      trader: {
+        name: data.traderName,
+      },
+      challenge: {
+        accountSize: data.accountSize
+          ? `$${data.accountSize.toLocaleString()}`
+          : null,
+      },
+    };
+  },
+});
 
 export const issueCertificate = mutation({
   args: {
