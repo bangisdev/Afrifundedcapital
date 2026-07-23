@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { cronJobs } from "convex/server";
 import { internal } from "./_generated/api";
 

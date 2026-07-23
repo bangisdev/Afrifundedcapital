@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { v } from "convex/values";
 import { query, mutation, action } from "./_generated/server";
 import { internal } from "./_generated/api";

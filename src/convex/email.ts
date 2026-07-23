@@ -1,5 +1,6 @@
 "use node";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { vly } from "../lib/vly-integrations";

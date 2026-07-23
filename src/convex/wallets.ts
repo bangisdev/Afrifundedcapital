@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { requireAuth, requireRole } from "./users";
