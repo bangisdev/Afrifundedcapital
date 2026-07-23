@@ -1,9 +1,17 @@
-import { motion } from "framer-motion";
+import { motion, useScroll, useTransform, useInView } from "framer-motion";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/hooks/use-auth";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel";
 import {
   ArrowRight,
   BarChart3,
@@ -13,88 +21,222 @@ import {
   Award,
   ChevronRight,
   TrendingUp,
-  Globe,
   CheckCircle,
+  Quote,
+  Star,
+  MoveRight,
+  Sparkles,
+  MousePointer2,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { LogoDropdown } from "@/components/LogoDropdown";
 
-const fadeInUp = {
-  initial: { opacity: 0, y: 20 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" as const } },
+// ─── Animation Variants ───
+
+const fadeUp: any = {
+  hidden: { opacity: 0, y: 30 },
+  visible: (i = 0) => ({
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.7, delay: i * 0.08 },
+  }),
 };
 
-const stagger = {
-  animate: {
-    transition: { staggerChildren: 0.1, delayChildren: 0.2 },
+const fadeIn: any = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { duration: 0.8 },
   },
 };
+
+const scaleIn: any = {
+  hidden: { opacity: 0, scale: 0.95 },
+  visible: (i = 0) => ({
+    opacity: 1,
+    scale: 1,
+    transition: { duration: 0.5, delay: i * 0.06 },
+  }),
+};
+
+const stagger: any = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.08, delayChildren: 0.15 } },
+};
+
+// ─── Animated Counter ───
+
+function AnimatedCounter({ value, suffix = "", prefix = "" }: { value: string; suffix?: string; prefix?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const isInView = useInView(ref, { once: true });
+  const num = parseInt(value.replace(/[^0-9]/g, ""));
+  const hasPlus = value.includes("+");
+  const [display, setDisplay] = useState(0);
+
+  useEffect(() => {
+    if (!isInView) return;
+    let start = 0;
+    const duration = 2000;
+    const step = Math.max(1, Math.floor(num / 60));
+    const timer = setInterval(() => {
+      start += step;
+      if (start >= num) {
+        setDisplay(num);
+        clearInterval(timer);
+      } else {
+        setDisplay(start);
+      }
+    }, duration / 60);
+    return () => clearInterval(timer);
+  }, [isInView, num]);
+
+  return (
+    <div ref={ref} className="text-center">
+      <div className="text-3xl sm:text-4xl font-light tracking-tight">
+        {prefix}{display.toLocaleString()}{hasPlus ? "+" : ""}{suffix}
+      </div>
+    </div>
+  );
+}
+
+// ─── Testimonial Data ───
+
+const testimonials = [
+  {
+    name: "Emeka O.",
+    role: "Funded Trader — $100K Account",
+    content:
+      "After failing two challenges with other firms, AfriFundedCapital's transparent rules and fair evaluation gave me the confidence to succeed. Passed my one-step on the first try.",
+    rating: 5,
+  },
+  {
+    name: "Amina K.",
+    role: "Funded Trader — $50K Account",
+    content:
+      "The 90% profit share is unmatched. I've already received two payouts and the process was seamless. Finally a prop firm that actually pays what they promise.",
+    rating: 5,
+  },
+  {
+    name: "Tunde B.",
+    role: "Funded Trader — $200K Account",
+    content:
+      "What sets AFC apart is the support team. When I had questions about my trading metrics, they responded within minutes. Real people who care about your success.",
+    rating: 5,
+  },
+  {
+    name: "Chidinma N.",
+    role: "Funded Trader — $25K Account",
+    content:
+      "Started with the $5K account to test the waters. The scaling plan is incredible — I'm now trading a $50K account and working toward $100K. Best decision I've made.",
+    rating: 5,
+  },
+  {
+    name: "Kofi A.",
+    role: "Funded Trader — $10K Account",
+    content:
+      "The consistency rules helped me become a better trader. Having clear targets and drawdown limits forced me to develop a proper risk management strategy.",
+    rating: 5,
+  },
+];
+
+// ─── Feature Data ───
+
+const features = [
+  {
+    icon: <BarChart3 className="h-5 w-5" />,
+    title: "Challenge-Based Funding",
+    description: "Pass our structured evaluation and get funded with up to $1M in capital. Choose from one-step, two-step, or instant funding.",
+  },
+  {
+    icon: <Shield className="h-5 w-5" />,
+    title: "90% Profit Share",
+    description: "Keep 90% of every dollar you earn. No hidden fees, no performance gates, no excuses. You earn, we pay.",
+  },
+  {
+    icon: <Zap className="h-5 w-5" />,
+    title: "Instant Funding",
+    description: "Select instant funding and begin trading with real capital immediately. Skip the evaluation and start earning right away.",
+  },
+  {
+    icon: <Users className="h-5 w-5" />,
+    title: "Scaling Plan",
+    description: "Prove your consistency and grow your account up to $5M. Every profitable quarter unlocks the next level of capital.",
+  },
+  {
+    icon: <Award className="h-5 w-5" />,
+    title: "Multi-Phase Evaluation",
+    description: "One-step and two-step challenges designed to identify top traders. Fair profit targets with reasonable time frames.",
+  },
+  {
+    icon: <TrendingUp className="h-5 w-5" />,
+    title: "MT5 Integration",
+    description: "Trade on MetaTrader 5 with raw ECN spreads. Real-time metrics, drawdown tracking, and daily performance monitoring.",
+  },
+];
 
 export default function Landing() {
   const navigate = useNavigate();
   const { isLoading, isAuthenticated } = useAuth();
+  const { scrollYProgress } = useScroll();
+  const heroRef = useRef<HTMLDivElement>(null);
+  const [mousePos, setMousePos] = useState({ x: 0.5, y: 0.5 });
+  const [autoplay, setAutoplay] = useState(true);
+  const autoplayRef = useRef<NodeJS.Timeout | null>(null);
 
-  const features = [
-    {
-      icon: <BarChart3 className="h-5 w-5" />,
-      title: "Challenge-Based Funding",
-      description: "Pass our structured evaluation and get funded with up to $1M in capital.",
-    },
-    {
-      icon: <Shield className="h-5 w-5" />,
-      title: "90% Profit Share",
-      description: "Keep 90% of your profits. No hidden fees, no catch.",
-    },
-    {
-      icon: <Zap className="h-5 w-5" />,
-      title: "Instant Funding",
-      description: "Choose instant funding and start trading immediately with real capital.",
-    },
-    {
-      icon: <Users className="h-5 w-5" />,
-      title: "Scaling Plan",
-      description: "Grow your account up to $5M as you prove your consistency.",
-    },
-    {
-      icon: <Award className="h-5 w-5" />,
-      title: "Multi-Phase Evaluation",
-      description: "One-step and two-step challenges designed to identify top traders.",
-    },
-    {
-      icon: <TrendingUp className="h-5 w-5" />,
-      title: "MT5 Integration",
-      description: "Trade on the industry-standard MetaTrader 5 platform with ECN execution.",
-    },
-  ];
+  // Parallax mouse tracking
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    const rect = heroRef.current?.getBoundingClientRect();
+    if (rect) {
+      setMousePos({
+        x: (e.clientX - rect.left) / rect.width,
+        y: (e.clientY - rect.top) / rect.height,
+      });
+    }
+  }, []);
 
-  const accountSizes = [
-    { size: "$5,000", price: "₦55,000" },
-    { size: "$10,000", price: "₦99,000" },
-    { size: "$25,000", price: "₦199,000" },
-    { size: "$50,000", price: "₦349,000" },
-    { size: "$100,000", price: "₦549,000" },
-    { size: "$200,000", price: "₦999,000" },
-  ];
+  // Hero parallax transforms
+  const heroBgX = useTransform(scrollYProgress, [0, 0.3], [0, -50]);
+  const heroBgY = useTransform(scrollYProgress, [0, 0.3], [0, 50]);
+  const heroScale = useTransform(scrollYProgress, [0, 0.3], [1, 0.98]);
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.25], [1, 0]);
 
-  const stats = [
-    { label: "Funded Traders", value: "2,400+" },
-    { label: "Total Capital Deployed", value: "$48M+" },
-    { label: "Payouts Processed", value: "$12M+" },
-    { label: "Avg. Trader Earnings", value: "$8,400" },
-  ];
+  // Auto-play carousel
+  const [carouselApi, setCarouselApi] = useState<any>(null);
+  useEffect(() => {
+    if (!carouselApi || !autoplay) return;
+    autoplayRef.current = setInterval(() => {
+      carouselApi.scrollNext();
+    }, 5000);
+    return () => {
+      if (autoplayRef.current) clearInterval(autoplayRef.current);
+    };
+  }, [carouselApi, autoplay]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background overflow-x-hidden">
+      {/* ─── Scroll Progress ─── */}
+      <motion.div
+        className="fixed top-0 left-0 right-0 h-[1px] bg-foreground/20 z-[60] origin-left"
+        style={{ scaleX: scrollYProgress }}
+      />
+
       {/* ─── Navigation ─── */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-sm border-b border-border">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border/50">
         <div className="container-page flex items-center justify-between h-16">
           <div className="flex items-center gap-3">
             <LogoDropdown />
             <span className="text-sm font-medium tracking-tight">AfriFundedCapital</span>
           </div>
           <nav className="hidden md:flex items-center gap-8 text-xs text-muted-foreground">
-            <a href="#features" className="hover:text-foreground transition-colors">Features</a>
-            <a href="#pricing" className="hover:text-foreground transition-colors">Pricing</a>
-            <a href="#how-it-works" className="hover:text-foreground transition-colors">How It Works</a>
+            {["features", "testimonials", "pricing"].map((section) => (
+              <a
+                key={section}
+                href={`#${section}`}
+                className="relative hover:text-foreground transition-colors duration-200 after:absolute after:bottom-[-4px] after:left-0 after:h-[1px] after:w-0 after:bg-foreground after:transition-all after:duration-300 hover:after:w-full"
+              >
+                {section.charAt(0).toUpperCase() + section.slice(1)}
+              </a>
+            ))}
           </nav>
           <div className="flex items-center gap-3">
             {isLoading ? null : isAuthenticated ? (
@@ -102,96 +244,192 @@ export default function Landing() {
                 variant="outline"
                 size="sm"
                 onClick={() => navigate("/dashboard")}
-                className="text-xs"
+                className="text-xs group"
               >
                 Dashboard
-                <ChevronRight className="ml-1 h-3 w-3" />
+                <ChevronRight className="ml-1 h-3 w-3 transition-transform group-hover:translate-x-0.5" />
               </Button>
             ) : (
               <Button
                 size="sm"
                 onClick={() => navigate("/auth")}
-                className="text-xs"
+                className="text-xs group"
               >
                 Get Started
-                <ArrowRight className="ml-1 h-3 w-3" />
+                <ArrowRight className="ml-1 h-3 w-3 transition-transform group-hover:translate-x-1" />
               </Button>
             )}
           </div>
         </div>
       </header>
 
-      {/* ─── Hero ─── */}
-      <section className="min-h-screen flex items-center justify-center px-4 pt-16">
+      {/* ─── HERO ─── */}
+      <section
+        ref={heroRef}
+        onMouseMove={handleMouseMove}
+        className="relative min-h-screen flex items-center justify-center px-4 pt-16 overflow-hidden"
+      >
+        {/* Animated background grid */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <motion.div
+            className="absolute inset-0"
+            style={{ x: heroBgX, y: heroBgY, scale: heroScale }}
+          >
+            <div
+              className="absolute inset-0 opacity-[0.03] dark:opacity-[0.05]"
+              style={{
+                backgroundImage:
+                  "radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)",
+                backgroundSize: "48px 48px",
+              }}
+            />
+            {/* Gradient orbs */}
+            <motion.div
+              className="absolute w-[600px] h-[600px] rounded-full bg-foreground/5 blur-[120px] -top-48 -right-48"
+              animate={{
+                x: mousePos.x * 30 - 15,
+                y: mousePos.y * 30 - 15,
+              }}
+              transition={{ type: "spring", stiffness: 50, damping: 30 }}
+            />
+            <motion.div
+              className="absolute w-[400px] h-[400px] rounded-full bg-foreground/3 blur-[100px] -bottom-32 -left-32"
+              animate={{
+                x: mousePos.x * -20 + 10,
+                y: mousePos.y * -20 + 10,
+              }}
+              transition={{ type: "spring", stiffness: 50, damping: 30 }}
+            />
+          </motion.div>
+        </div>
+
         <motion.div
           variants={stagger}
-          initial="initial"
-          animate="animate"
-          className="max-w-4xl mx-auto text-center"
+          initial="hidden"
+          animate="visible"
+          style={{ opacity: heroOpacity }}
+          className="max-w-4xl mx-auto text-center relative z-10"
         >
-          <motion.div variants={fadeInUp} className="mb-6">
-            <Badge variant="outline" className="rounded-full px-4 py-1 text-xs font-normal border-border">
+          {/* Badge */}
+          <motion.div variants={fadeUp} custom={0} className="mb-8">
+            <Badge
+              variant="outline"
+              className="rounded-full px-5 py-1.5 text-xs font-normal border-border/60 bg-background/50 backdrop-blur-sm"
+            >
+              <Sparkles className="h-3 w-3 mr-1.5 inline-block" />
               Africa's Premier Prop Trading Firm
             </Badge>
           </motion.div>
 
+          {/* Headline */}
           <motion.h1
-            variants={fadeInUp}
-            className="text-4xl sm:text-5xl md:text-6xl font-light tracking-tight leading-[1.1] mb-6"
+            variants={fadeUp}
+            custom={1}
+            className="text-4xl sm:text-5xl md:text-7xl font-light tracking-tight leading-[1.05] mb-6"
           >
             Get Funded to{" "}
-            <span className="font-medium">Trade</span>
+            <span className="relative inline-block">
+              <span className="font-medium">Trade</span>
+              <motion.span
+                className="absolute -bottom-1 left-0 right-0 h-[2px] bg-foreground/20"
+                initial={{ scaleX: 0 }}
+                animate={{ scaleX: 1 }}
+                transition={{ delay: 1.2, duration: 0.8, ease: "easeOut" }}
+              />
+            </span>
             <br />
-            Keep{" "}
-            <span className="font-medium">90% of Profits</span>
+            <span className="relative">
+              Keep{" "}
+              <span className="font-medium">90%</span>
+              <span className="font-medium"> of Profits</span>
+            </span>
           </motion.h1>
 
+          {/* Subtitle */}
           <motion.p
-            variants={fadeInUp}
-            className="text-muted-foreground text-sm max-w-xl mx-auto mb-10 leading-relaxed"
+            variants={fadeUp}
+            custom={2}
+            className="text-muted-foreground text-sm sm:text-base max-w-xl mx-auto mb-12 leading-relaxed"
           >
             AfriFundedCapital provides ambitious traders with access to significant capital.
             Pass our evaluation, prove your strategy, and trade with funds up to $1M.
           </motion.p>
 
-          <motion.div variants={fadeInUp} className="flex items-center justify-center gap-4">
+          {/* CTA Buttons */}
+          <motion.div variants={fadeUp} custom={3} className="flex items-center justify-center gap-4">
             <Button
               size="lg"
               onClick={() => navigate("/auth")}
-              className="px-8 text-sm"
+              className="px-8 text-sm group relative overflow-hidden"
             >
-              Start Your Challenge
-              <ArrowRight className="ml-2 h-4 w-4" />
+              <span className="relative z-10 flex items-center">
+                Start Your Challenge
+                <MoveRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </span>
+              <motion.div
+                className="absolute inset-0 bg-foreground/10"
+                initial={{ x: "-100%" }}
+                whileHover={{ x: 0 }}
+                transition={{ duration: 0.3 }}
+              />
             </Button>
             <Button
               variant="outline"
               size="lg"
-              onClick={() => navigate("/auth")}
+              onClick={() => {
+                document.getElementById("features")?.scrollIntoView({ behavior: "smooth" });
+              }}
               className="px-8 text-sm"
             >
-              Learn More
+              Explore Features
             </Button>
           </motion.div>
 
-          {/* Stats */}
+          {/* Scroll indicator */}
           <motion.div
-            variants={fadeInUp}
-            className="mt-20 grid grid-cols-2 md:grid-cols-4 gap-8"
+            variants={fadeIn}
+            className="mt-24 flex flex-col items-center gap-2"
+            animate={{ opacity: [0.3, 0.7, 0.3] }}
+            transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
           >
-            {stats.map((stat) => (
-              <div key={stat.label} className="text-center">
-                <div className="text-2xl font-light tracking-tight">{stat.value}</div>
-                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-1">
-                  {stat.label}
-                </div>
-              </div>
-            ))}
+            <MousePointer2 className="h-4 w-4 text-muted-foreground/50" />
+            <span className="text-[10px] text-muted-foreground/40 uppercase tracking-[0.15em]">
+              Scroll to explore
+            </span>
           </motion.div>
         </motion.div>
       </section>
 
-      {/* ─── How It Works ─── */}
-      <section id="how-it-works" className="py-32 px-4">
+      {/* ─── STATS BAR ─── */}
+      <section className="py-16 px-4 border-y border-border/50">
+        <div className="container-page max-w-5xl">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            {[
+              { value: "2,400", label: "Funded Traders" },
+              { value: "48,000,000", label: "Capital Deployed", prefix: "$", suffix: "+" },
+              { value: "12,000,000", label: "Payouts Processed", prefix: "$", suffix: "+" },
+              { value: "8,400", label: "Avg. Earnings", prefix: "$" },
+            ].map((stat, i) => (
+              <motion.div
+                key={stat.label}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.1, duration: 0.5 }}
+                className="text-center"
+              >
+                <AnimatedCounter value={stat.value} prefix={stat.prefix} suffix={stat.suffix} />
+                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-2">
+                  {stat.label}
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─── HOW IT WORKS ─── */}
+      <section className="py-28 px-4">
         <div className="container-page max-w-5xl">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -200,43 +438,57 @@ export default function Landing() {
             transition={{ duration: 0.6 }}
             className="text-center mb-20"
           >
-            <h2 className="text-2xl font-light tracking-tight mb-3">How It Works</h2>
+            <Badge variant="outline" className="rounded-full px-4 py-1 text-xs font-normal mb-6 border-border/60">
+              Process
+            </Badge>
+            <h2 className="text-2xl sm:text-3xl font-light tracking-tight mb-3">
+              How It Works
+            </h2>
             <p className="text-sm text-muted-foreground max-w-md mx-auto">
-              Three simple steps to becoming a funded trader
+              Three simple steps to becoming a funded trader with AfriFundedCapital
             </p>
           </motion.div>
 
-          <div className="grid md:grid-cols-3 gap-12">
+          <div className="grid md:grid-cols-3 gap-8 md:gap-16 relative">
+            {/* Connecting line */}
+            <div className="hidden md:block absolute top-12 left-[16.66%] right-[16.66%] h-px bg-border/60" />
+
             {[
               {
                 step: "01",
                 title: "Choose Your Challenge",
-                description: "Select an account size and challenge type that suits your trading style.",
+                description: "Select an account size and challenge type that fits your trading style. Options from $5K to $200K+.",
+                icon: <BarChart3 className="h-6 w-6" />,
               },
               {
                 step: "02",
                 title: "Pass the Evaluation",
-                description: "Trade normally to meet profit targets while respecting risk parameters.",
+                description: "Trade normally to meet profit targets while respecting daily and maximum drawdown limits.",
+                icon: <TrendingUp className="h-6 w-6" />,
               },
               {
                 step: "03",
                 title: "Get Funded",
-                description: "Receive your funded account and start trading with real capital.",
+                description: "Receive your funded account, start trading with real capital, and keep 90% of your profits.",
+                icon: <Award className="h-6 w-6" />,
               },
-            ].map((item) => (
+            ].map((item, i) => (
               <motion.div
                 key={item.step}
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: Number(item.step) * 0.1 }}
-                className="text-center"
+                transition={{ duration: 0.6, delay: i * 0.15 }}
+                className="text-center relative"
               >
-                <div className="text-4xl font-light text-muted-foreground/30 mb-4">
+                <div className="h-24 w-24 rounded-full border border-border/60 bg-background flex items-center justify-center mx-auto mb-6 relative z-10">
+                  {item.icon}
+                </div>
+                <div className="text-[10px] font-mono text-muted-foreground/40 mb-3 tracking-widest">
                   {item.step}
                 </div>
                 <h3 className="text-sm font-medium mb-3">{item.title}</h3>
-                <p className="text-xs text-muted-foreground leading-relaxed">
+                <p className="text-xs text-muted-foreground leading-relaxed max-w-xs mx-auto">
                   {item.description}
                 </p>
               </motion.div>
@@ -245,48 +497,59 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ─── Features ─── */}
-      <section id="features" className="py-32 px-4 bg-secondary/50">
-        <div className="container-page max-w-5xl">
+      {/* ─── FEATURES GRID ─── */}
+      <section id="features" className="py-28 px-4 bg-secondary/30">
+        <div className="container-page max-w-6xl">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-center mb-20"
+            className="text-center mb-16"
           >
-            <h2 className="text-2xl font-light tracking-tight mb-3">
+            <Badge variant="outline" className="rounded-full px-4 py-1 text-xs font-normal mb-6 border-border/60">
+              Features
+            </Badge>
+            <h2 className="text-2xl sm:text-3xl font-light tracking-tight mb-3">
               Everything You Need to Succeed
             </h2>
-            <p className="text-sm text-muted-foreground max-w-md mx-auto">
-              Comprehensive tools and features built for serious traders
+            <p className="text-sm text-muted-foreground max-w-lg mx-auto">
+              Comprehensive tools and infrastructure built for serious traders who demand the best
             </p>
           </motion.div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {features.map((feature, i) => (
               <motion.div
                 key={feature.title}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.4, delay: i * 0.05 }}
-                className="p-6 border border-border rounded-lg hover:bg-secondary/50 transition-colors"
+                variants={scaleIn}
+                initial="hidden"
+                whileInView="visible"
+                custom={i}
+                viewport={{ once: true, margin: "-50px" }}
+                className="group relative p-6 border border-border/60 rounded-lg bg-background hover:bg-secondary/50 transition-all duration-300 hover:border-foreground/20"
               >
-                <div className="h-8 w-8 rounded-full border border-border flex items-center justify-center mb-4">
-                  {feature.icon}
+                {/* Hover indicator */}
+                <div className="absolute inset-0 rounded-lg bg-gradient-to-b from-foreground/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+                <div className="relative z-10">
+                  <div className="h-10 w-10 rounded-full border border-border/60 flex items-center justify-center mb-4 group-hover:border-foreground/30 transition-colors duration-300">
+                    {feature.icon}
+                  </div>
+                  <h3 className="text-sm font-medium mb-2 group-hover:text-foreground transition-colors">
+                    {feature.title}
+                  </h3>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {feature.description}
+                  </p>
                 </div>
-                <h3 className="text-sm font-medium mb-2">{feature.title}</h3>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  {feature.description}
-                </p>
               </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ─── Pricing ─── */}
-      <section id="pricing" className="py-32 px-4">
+      {/* ─── TESTIMONIALS CAROUSEL ─── */}
+      <section id="testimonials" className="py-28 px-4">
         <div className="container-page max-w-5xl">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -294,30 +557,121 @@ export default function Landing() {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <h2 className="text-2xl font-light tracking-tight mb-3">
+            <Badge variant="outline" className="rounded-full px-4 py-1 text-xs font-normal mb-6 border-border/60">
+              Testimonials
+            </Badge>
+            <h2 className="text-2xl sm:text-3xl font-light tracking-tight mb-3">
+              Trusted by Traders Across Africa
+            </h2>
+            <p className="text-sm text-muted-foreground max-w-lg mx-auto">
+              Hear from traders who have transformed their careers with AfriFundedCapital
+            </p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
+            <Carousel
+              setApi={setCarouselApi}
+              className="w-full max-w-2xl mx-auto"
+              opts={{
+                align: "center",
+                loop: true,
+              }}
+              onMouseEnter={() => setAutoplay(false)}
+              onMouseLeave={() => setAutoplay(true)}
+            >
+              <CarouselContent>
+                {testimonials.map((t, i) => (
+                  <CarouselItem key={i}>
+                    <div className="px-2">
+                      <div className="card-subtle p-8 md:p-10 text-center">
+                        {/* Quote icon */}
+                        <Quote className="h-8 w-8 mx-auto mb-6 text-muted-foreground/20" />
+
+                        {/* Stars */}
+                        <div className="flex items-center justify-center gap-1 mb-6">
+                          {Array.from({ length: t.rating }).map((_, j) => (
+                            <Star
+                              key={j}
+                              className="h-4 w-4 fill-foreground/80 text-foreground/80"
+                            />
+                          ))}
+                        </div>
+
+                        {/* Testimonial */}
+                        <blockquote className="text-sm sm:text-base text-foreground/80 leading-relaxed mb-8 max-w-lg mx-auto">
+                          "{t.content}"
+                        </blockquote>
+
+                        {/* Author */}
+                        <div>
+                          <div className="text-sm font-medium">{t.name}</div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {t.role}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </CarouselItem>
+                ))}
+              </CarouselContent>
+
+              <div className="flex items-center justify-center gap-4 mt-8">
+                <CarouselPrevious className="static translate-y-0 size-8 rounded-full border-border/60" />
+                <CarouselNext className="static translate-y-0 size-8 rounded-full border-border/60" />
+              </div>
+            </Carousel>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ─── PRICING ─── */}
+      <section id="pricing" className="py-28 px-4 bg-secondary/30">
+        <div className="container-page max-w-5xl">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-16"
+          >
+            <Badge variant="outline" className="rounded-full px-4 py-1 text-xs font-normal mb-6 border-border/60">
+              Pricing
+            </Badge>
+            <h2 className="text-2xl sm:text-3xl font-light tracking-tight mb-3">
               Choose Your Account Size
             </h2>
             <p className="text-sm text-muted-foreground max-w-md mx-auto">
-              Affordable entry prices for every level of trader
+              Affordable entry prices designed for every level of trader, from beginners to professionals
             </p>
           </motion.div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            {accountSizes.map((acct, i) => (
+            {[
+              { size: "$5,000", price: "₦55,000" },
+              { size: "$10,000", price: "₦99,000" },
+              { size: "$25,000", price: "₦199,000" },
+              { size: "$50,000", price: "₦349,000" },
+              { size: "$100,000", price: "₦549,000" },
+              { size: "$200,000", price: "₦999,000" },
+            ].map((acct, i) => (
               <motion.div
                 key={acct.size}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.3, delay: i * 0.05 }}
-                className="p-5 border border-border rounded-lg text-center hover:bg-secondary/30 transition-colors"
+                variants={scaleIn}
+                initial="hidden"
+                whileInView="visible"
+                custom={i}
+                viewport={{ once: true, margin: "-30px" }}
+                className="group p-5 border border-border/60 rounded-lg text-center bg-background hover:border-foreground/20 transition-all duration-300"
               >
-                <div className="text-lg font-light tracking-tight">{acct.size}</div>
-                <div className="text-xs text-muted-foreground mt-2">{acct.price}</div>
+                <div className="text-lg font-light tracking-tight mb-1">{acct.size}</div>
+                <div className="text-xs text-muted-foreground mb-5">{acct.price}</div>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="w-full mt-4 text-xs"
+                  className="w-full text-xs group-hover:bg-foreground group-hover:text-background transition-all duration-300"
                   onClick={() => navigate("/auth")}
                 >
                   Select
@@ -326,42 +680,60 @@ export default function Landing() {
             ))}
           </div>
 
-          <div className="mt-12 text-center">
+          <motion.div
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            className="mt-10 text-center"
+          >
             <p className="text-xs text-muted-foreground">
               All account sizes available for One Step, Two Step, and Instant Funding challenges
             </p>
-          </div>
+          </motion.div>
         </div>
       </section>
 
       {/* ─── CTA ─── */}
-      <section className="py-32 px-4 border-t border-border">
+      <section className="py-28 px-4">
         <div className="container-page max-w-3xl text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
           >
-            <h2 className="text-2xl font-light tracking-tight mb-4">
+            <Badge variant="outline" className="rounded-full px-4 py-1 text-xs font-normal mb-6 border-border/60">
+              Get Started
+            </Badge>
+            <h2 className="text-2xl sm:text-3xl font-light tracking-tight mb-4">
               Ready to Start Your Journey?
             </h2>
-            <p className="text-sm text-muted-foreground max-w-md mx-auto mb-8">
-              Join thousands of funded traders. No experience required, just skill and discipline.
+            <p className="text-sm text-muted-foreground max-w-md mx-auto mb-10 leading-relaxed">
+              Join thousands of funded traders across Africa. No experience required, just skill, discipline, and the desire to succeed.
             </p>
-            <Button
-              size="lg"
-              onClick={() => navigate("/auth")}
-              className="px-10 text-sm"
-            >
-              Get Funded Now
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
+            <div className="flex items-center justify-center gap-4">
+              <Button
+                size="lg"
+                onClick={() => navigate("/auth")}
+                className="px-10 text-sm group"
+              >
+                Get Funded Now
+                <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </Button>
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => navigate("/auth")}
+                className="px-10 text-sm"
+              >
+                Learn More
+              </Button>
+            </div>
           </motion.div>
         </div>
       </section>
 
-      {/* ─── Footer ─── */}
-      <footer className="py-12 px-4 border-t border-border">
+      {/* ─── FOOTER ─── */}
+      <footer className="py-12 px-4 border-t border-border/50">
         <div className="container-page">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -369,9 +741,10 @@ export default function Landing() {
               <span className="text-xs text-muted-foreground">© 2026</span>
             </div>
             <div className="flex items-center gap-6 text-xs text-muted-foreground">
-              <a href="#" className="hover:text-foreground transition-colors">Terms</a>
-              <a href="#" className="hover:text-foreground transition-colors">Privacy</a>
-              <a href="#" className="hover:text-foreground transition-colors">Contact</a>
+              <a href="#" className="hover:text-foreground transition-colors duration-200">Terms</a>
+              <a href="#" className="hover:text-foreground transition-colors duration-200">Privacy</a>
+              <a href="#" className="hover:text-foreground transition-colors duration-200">Contact</a>
+              <span className="hidden md:inline text-muted-foreground/60">|</span>
               <span className="hidden md:inline">support@afrifundedcapital.com</span>
             </div>
           </div>
