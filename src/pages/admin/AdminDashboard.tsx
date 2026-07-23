@@ -12,6 +12,7 @@ import AdminCertificates from "./AdminCertificates";
 import AdminSettings from "./AdminSettings";
 import AdminAuditLogs from "./AdminAuditLogs";
 import AdminMT5 from "./AdminMT5";
+import AdminNotifications from "./AdminNotifications";
 
 export default function AdminDashboard() {
   return (
@@ -29,6 +30,7 @@ export default function AdminDashboard() {
         <Route path="settings" element={<AdminSettings />} />
         <Route path="mt5" element={<AdminMT5 />} />
         <Route path="audit-logs" element={<AdminAuditLogs />} />
+        <Route path="notifications" element={<AdminNotifications />} />
       </Routes>
     </DashboardLayout>
   );
