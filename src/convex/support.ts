@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { requireAuth, requireRole } from "./users";
 import { ROLES, TICKET_STATUS } from "./schema";
+import { internal } from "./_generated/api";
 
 // ═══════════════════════════════════════════════
 //  QUERIES
@@ -189,6 +190,25 @@ export const addTicketMessage = mutation({
       link: `/dashboard/support/${args.ticketId}`,
       createdAt: Date.now(),
     });
+
+    // Send email when admin replies
+    if (isAdmin) {
+      try {
+        const customer = await ctx.db.get(ticket.userId);
+        if (customer?.email) {
+          await (ctx.scheduler as any).runAfter(0, (internal as any).email.sendSupportReply, {
+            email: customer.email,
+            name: customer.name || "Trader",
+            ticketSubject: ticket.subject,
+            messagePreview: args.message,
+            ticketId: args.ticketId,
+            isAdminReply: true,
+          });
+        }
+      } catch (e: any) {
+        console.error("Failed to send support reply email:", e.message);
+      }
+    }
   },
 });
 

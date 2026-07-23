@@ -3,6 +3,7 @@ import { query, mutation, action } from "./_generated/server";
 import { requireAuth, requireRole } from "./users";
 import { ROLES, CHALLENGE_TYPES, CHALLENGE_STATUS } from "./schema";
 import { Doc, Id } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
 
 // ═══════════════════════════════════════════════
 //  SEED DATA — Default challenge templates
@@ -533,6 +534,21 @@ export const updateChallengeStatus = mutation({
         link: `/dashboard/challenges/${args.challengeId}`,
         createdAt: now,
       });
+
+      // Send funded confirmation email
+      try {
+        const user = await ctx.db.get(challenge.userId);
+        if (user?.email) {
+          await (ctx.scheduler as any).runAfter(0, (internal as any).email.sendFundedConfirmation, {
+            email: user.email,
+            name: user.name || "Trader",
+            accountSize: `$${challenge.accountSize.toLocaleString()}`,
+            profitSharePercent: 90,
+          });
+        }
+      } catch (e: any) {
+        console.error("Failed to send funded email:", e.message);
+      }
     }
   },
 });
@@ -576,6 +592,25 @@ export const addChallengeViolation = mutation({
         link: `/dashboard/challenges/${args.challengeId}`,
         createdAt: Date.now(),
       });
+
+      // Send violation email
+      try {
+        const template = await ctx.db.get(challenge.templateId);
+        const user = await ctx.db.get(challenge.userId);
+        if (user?.email) {
+          await (ctx.scheduler as any).runAfter(0, (internal as any).email.sendChallengeViolation, {
+            email: user.email,
+            name: user.name || "Trader",
+            challengeName: template?.name || "Challenge",
+            accountSize: `$${challenge.accountSize.toLocaleString()}`,
+            violationType: args.type,
+            description: args.description,
+            severity: args.severity,
+          });
+        }
+      } catch (e: any) {
+        console.error("Failed to send violation email:", e.message);
+      }
     }
 
     await ctx.db.patch(args.challengeId, updates);

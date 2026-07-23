@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { requireAuth, requireRole } from "./users";
 import { KYC_STATUS, DOCUMENT_TYPES, ROLES } from "./schema";
+import { internal } from "./_generated/api";
 
 // ═══════════════════════════════════════════════
 //  QUERIES
@@ -200,6 +201,20 @@ export const approveKycDocument = mutation({
         link: "/dashboard/profile",
         createdAt: Date.now(),
       });
+
+      // Send KYC approved email
+      try {
+        const user = await ctx.db.get(doc.userId);
+        if (user?.email) {
+          await (ctx.scheduler as any).runAfter(0, (internal as any).email.sendKycNotification, {
+            email: user.email,
+            name: user.name || "Trader",
+            status: "approved",
+          });
+        }
+      } catch (e: any) {
+        console.error("Failed to send KYC approval email:", e.message);
+      }
     }
 
     // Audit
@@ -250,6 +265,21 @@ export const rejectKycDocument = mutation({
       link: "/dashboard/kyc",
       createdAt: Date.now(),
     });
+
+    // Send KYC rejection email
+    try {
+      const user = await ctx.db.get(doc.userId);
+      if (user?.email) {
+        await (ctx.scheduler as any).runAfter(0, (internal as any).email.sendKycNotification, {
+          email: user.email,
+          name: user.name || "Trader",
+          status: "rejected",
+          rejectionReason: args.rejectionReason,
+        });
+      }
+    } catch (e: any) {
+      console.error("Failed to send KYC rejection email:", e.message);
+    }
 
     // Audit
     await ctx.db.insert("auditLogs", {
