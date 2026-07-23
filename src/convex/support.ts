@@ -206,8 +206,8 @@ export const addTicketMessage = mutation({
             isAdminReply: true,
           });
         }
-      } catch (e: any) {
-        console.error("Failed to send support reply email:", e.message);
+      } catch (e: unknown) {
+        console.error("Failed to send support reply email:", e instanceof Error ? e.message : String(e));
       }
     }
   },

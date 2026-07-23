@@ -2,7 +2,6 @@ import { v } from "convex/values";
 import { query, mutation, action } from "./_generated/server";
 import { requireAuth, requireRole, checkEmailPref } from "./users";
 import { ROLES, CHALLENGE_TYPES, CHALLENGE_STATUS } from "./schema";
-import { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 
 // ═══════════════════════════════════════════════
@@ -478,6 +477,7 @@ export const updateChallengeTemplate = mutation({
   handler: async (ctx, args) => {
     await requireRole(ctx, [ROLES.SUPER_ADMIN]);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updates: Record<string, any> = { updatedAt: Date.now() };
     if (args.name !== undefined) updates.name = args.name;
     if (args.description !== undefined) updates.description = args.description;
@@ -530,7 +530,7 @@ export const updateAccountSize = mutation({
   handler: async (ctx, args) => {
     await requireRole(ctx, [ROLES.SUPER_ADMIN]);
 
-    const updates: Record<string, any> = {};
+    const updates: Record<string, unknown> = {};
     if (args.label !== undefined) updates.label = args.label;
     if (args.size !== undefined) updates.size = args.size;
     if (args.price !== undefined) updates.price = args.price;
@@ -635,9 +635,11 @@ export const updateChallengeStatus = mutation({
     const now = Date.now();
 
     await ctx.db.patch(args.challengeId, {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       status: args.status as any,
       updatedAt: now,
-    });      // If funded, create funded account
+    });
+      // If funded, create funded account
     if (args.status === CHALLENGE_STATUS.FUNDED && challenge.mt5AccountId) {
       await ctx.db.insert("fundedAccounts", {
         userId: challenge.userId,
@@ -692,8 +694,8 @@ export const updateChallengeStatus = mutation({
           link: "/dashboard/certificates",
           createdAt: Date.now(),
         });
-      } catch (e: any) {
-        console.error("Failed to auto-issue certificate:", e.message);
+      } catch (e: unknown) {
+        console.error("Failed to auto-issue certificate:", e instanceof Error ? e.message : String(e));
       }
 
       // Send funded confirmation email with certificate verification link if available
@@ -716,8 +718,8 @@ export const updateChallengeStatus = mutation({
             verificationCode: cert?.verificationCode,
           });
         }
-      } catch (e: any) {
-        console.error("Failed to send funded email:", e.message);
+      } catch (e: unknown) {
+        console.error("Failed to send funded email:", e instanceof Error ? e.message : String(e));
       }
     }
   },
@@ -744,7 +746,7 @@ export const addChallengeViolation = mutation({
       severity: args.severity,
     });
 
-    const updates: Record<string, any> = {
+    const updates: Record<string, unknown> = {
       violations,
       updatedAt: Date.now(),
     };
@@ -779,8 +781,8 @@ export const addChallengeViolation = mutation({
             severity: args.severity,
           });
         }
-      } catch (e: any) {
-        console.error("Failed to send violation email:", e.message);
+      } catch (e: unknown) {
+        console.error("Failed to send violation email:", e instanceof Error ? e.message : String(e));
       }
     }
 

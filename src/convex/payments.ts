@@ -3,7 +3,7 @@ import { query, mutation, action } from "./_generated/server";
 import { requireAuth, requireRole } from "./users";
 import { ROLES, PAYMENT_STATUS } from "./schema";
 import { internal } from "./_generated/api";
-import { Doc, Id } from "./_generated/dataModel";
+import type { Id } from "./_generated/dataModel";
 
 // ═══════════════════════════════════════════════
 //  QUERIES
@@ -167,6 +167,7 @@ export const initiatePayment = mutation({
       userId,
       amount: finalAmount,
       currency,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       provider: args.provider as any,
       status: PAYMENT_STATUS.PENDING,
       reference: ref,
@@ -204,6 +205,7 @@ export const initiatePayment = mutation({
     // Log the payment initiation
     await ctx.db.insert("paymentLogs", {
       paymentId,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       provider: args.provider as any,
       event: "payment_initiated",
       data: { amount: args.amount, currency, reference: ref },
@@ -644,8 +646,8 @@ export const verifyFlutterwaveTransaction = action({
     });      // Create user challenge if payment was for a challenge
     if (payment.templateId && payment.accountSizeId) {
       await ctx.runMutation((internal as any).challenges.createUserChallenge, {
-        templateId: payment.templateId as any,
-        accountSizeId: payment.accountSizeId as any,
+        templateId: payment.templateId,
+        accountSizeId: payment.accountSizeId,
         paymentId: args.paymentId,
       });
     }
@@ -685,9 +687,10 @@ export const verifyFlutterwaveTransaction = action({
           provider: payment.provider,
         });
       }
-    } catch (emailError: any) {
+    } catch (emailError: unknown) {
       // Email failure shouldn't block the payment flow
-      console.error("Failed to send payment confirmation email:", emailError.message);
+      const emsg = emailError instanceof Error ? emailError.message : String(emailError);
+      console.error("Failed to send payment confirmation email:", emsg);
     }
 
     return {

@@ -23,7 +23,8 @@ export const resetChallengeDemoData = action({
   },
   handler: async (ctx, args) => {
     // Find the challenge
-    const challenge: any = await (ctx as any).runQuery(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const challenge: any = await ctx.runQuery(
       (internal as any).seed.getChallengeForReset,
       { challengeId: args.challengeId },
     );
@@ -35,7 +36,7 @@ export const resetChallengeDemoData = action({
     const userId = challenge.userId;
 
     // Clear existing demo data
-    await (ctx as any).runMutation((internal as any).seed.clearDemoDataForChallenge, {
+    await ctx.runMutation((internal as any).seed.clearDemoDataForChallenge, {
       challengeId: args.challengeId,
       userId,
     });
@@ -51,7 +52,7 @@ export const resetChallengeDemoData = action({
       const password = `Tr@der${generateChars(6)}!`;
       const investorPassword = `Inv@${generateChars(6)}!`;
 
-      const accountId = await (ctx as any).runMutation((internal as any).seed.createDemoMt5Account, {
+      const accountId = await ctx.runMutation((internal as any).seed.createDemoMt5Account, {
         userId,
         login,
         password,
@@ -62,7 +63,7 @@ export const resetChallengeDemoData = action({
 
       mt5AccountId = accountId;
 
-      await (ctx as any).runMutation((internal as any).seed.linkMt5ToChallenge, {
+      await ctx.runMutation((internal as any).seed.linkMt5ToChallenge, {
         challengeId: args.challengeId,
         mt5AccountId: accountId,
       });
@@ -184,13 +185,13 @@ export const resetChallengeDemoData = action({
           consecutiveWins: maxConsecutiveWins,
           consecutiveLosses: maxConsecutiveLosses,
         });
-      } catch (e: any) {
-        console.error(`Failed to record metrics for day ${day}:`, e?.message);
+      } catch (e: unknown) {
+        const emsg = e instanceof Error ? e.message : String(e);
+        console.error(`Failed to record metrics for day ${day}:`, emsg);
       }
     }
 
-    // Ensure user is marked as seeded
-    await (ctx as any).runMutation((internal as any).seed.markUserAsDemoSeeded, { userId });
+    // Ensure user is marked as seeded    await ctx.runMutation((internal as any).seed.markUserAsDemoSeeded, { userId });
 
     return {
       success: true,
@@ -202,16 +203,8 @@ export const resetChallengeDemoData = action({
 export const seedDemoTradingData = action({
   handler: async (ctx) => {
     // Find all active/funded user challenges
-    const challenges: Array<{
-      _id: any;
-      userId: any;
-      accountSize: number;
-      profitTarget: number;
-      maxDrawdown: number;
-      dailyDrawdown: number;
-      minTradingDays: number;
-      mt5AccountId: any;
-    }> = await (ctx as any).runQuery((internal as any).seed.listChallengesForDemo, {});
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const challenges: Array<any> = await ctx.runQuery((internal as any).seed.listChallengesForDemo, {});
 
     if (challenges.length === 0) {
       return { seeded: 0, accountsCreated: 0, message: "No challenges found. Purchase a challenge first." };
@@ -233,7 +226,7 @@ export const seedDemoTradingData = action({
         const password = `Tr@der${generateChars(6)}!`;
         const investorPassword = `Inv@${generateChars(6)}!`;
 
-        const accountId = await (ctx as any).runMutation((internal as any).seed.createDemoMt5Account, {
+        const accountId = await ctx.runMutation((internal as any).seed.createDemoMt5Account, {
           userId,
           login,
           password,
@@ -246,7 +239,7 @@ export const seedDemoTradingData = action({
         accountsCreated++;
 
         // Link MT5 account to challenge
-        await (ctx as any).runMutation((internal as any).seed.linkMt5ToChallenge, {
+        await ctx.runMutation((internal as any).seed.linkMt5ToChallenge, {
           challengeId: challenge._id,
           mt5AccountId: accountId,
         });
@@ -353,7 +346,7 @@ export const seedDemoTradingData = action({
 
         // Record the metrics snapshot via the real mutation (which also runs the rule engine)
         try {
-          await (ctx as any).runMutation((internal as any).trading.recordTradingMetrics, {
+          await ctx.runMutation((internal as any).trading.recordTradingMetrics, {
             mt5AccountId,
             challengeId: challenge._id,
             balance: Math.round(currentBalance * 100) / 100,
@@ -389,14 +382,15 @@ export const seedDemoTradingData = action({
     }
 
     // Mark all affected users as demo-seeded
-    const affectedUserIds = new Set(challenges.map((c: any) => c.userId));
+    const affectedUserIds = new Set(challenges.map((c) => c.userId));
     for (const userId of affectedUserIds) {
       try {
         await (ctx as any).runMutation((internal as any).seed.markUserAsDemoSeeded, {
           userId,
         });
-      } catch (e: any) {
-        console.error(`Failed to mark user ${userId} as demo-seeded:`, e?.message);
+      } catch (e: unknown) {
+        const emsg = e instanceof Error ? e.message : String(e);
+        console.error(`Failed to mark user ${userId} as demo-seeded:`, emsg);
       }
     }
 

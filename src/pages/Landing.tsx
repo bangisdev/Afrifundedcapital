@@ -1,4 +1,4 @@
-import { motion, useScroll, useTransform, useInView } from "framer-motion";
+import { motion, useScroll, useTransform, useInView, type Variants } from "framer-motion";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -39,16 +39,16 @@ import { LogoDropdown } from "@/components/LogoDropdown";
 
 // ─── Animation Variants ───
 
-const fadeUp: any = {
+const fadeUp: Variants = {
   hidden: { opacity: 0, y: 30 },
-  visible: (i = 0) => ({
+  visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.7, delay: i * 0.08 },
-  }),
+    transition: { duration: 0.7 },
+  },
 };
 
-const fadeIn: any = {
+const fadeIn: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -56,16 +56,16 @@ const fadeIn: any = {
   },
 };
 
-const scaleIn: any = {
+const scaleIn: Variants = {
   hidden: { opacity: 0, scale: 0.95 },
-  visible: (i = 0) => ({
+  visible: {
     opacity: 1,
     scale: 1,
-    transition: { duration: 0.5, delay: i * 0.06 },
-  }),
+    transition: { duration: 0.5 },
+  },
 };
 
-const stagger: any = {
+const stagger: Variants = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.08, delayChildren: 0.15 } },
 };

@@ -136,7 +136,7 @@ export const updateMt5Account = mutation({
   handler: async (ctx, args) => {
     await requireRole(ctx, [ROLES.SUPER_ADMIN]);
 
-    const updates: Record<string, any> = {};
+    const updates: Record<string, unknown> = {};
     if (args.balance !== undefined) updates.balance = args.balance;
     if (args.equity !== undefined) updates.equity = args.equity;
     if (args.isActive !== undefined) updates.isActive = args.isActive;
@@ -241,8 +241,8 @@ export const processMt5SyncQueueItem = mutation({
     const item = await ctx.db.get(args.queueItemId);
     if (!item) throw new Error("Queue item not found");
 
-    const updates: any = {
-      status: args.status as any,
+    const updates: Record<string, unknown> = {
+      status: args.status,
       processedAt: Date.now(),
     };
     if (args.error !== undefined) updates.error = args.error;

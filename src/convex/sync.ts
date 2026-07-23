@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 
-// Use as any to break circular type dependency with internal references
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const I: any = {};
 
 // ═══════════════════════════════════════════════
@@ -14,7 +14,7 @@ export const dailyMt5Sync = action({
   args: {},
   handler: async (ctx) => {
     // 1. Get all active, non-suspended MT5 accounts
-    const allAccounts: any[] = await ctx.runQuery(I.queries?.getAllActiveMt5Accounts, {});
+    const allAccounts = await ctx.runQuery(I.queries?.getAllActiveMt5Accounts as any, {});
 
     let syncedCount = 0;
     let errorCount = 0;
@@ -23,14 +23,14 @@ export const dailyMt5Sync = action({
     for (const account of allAccounts) {
       try {
         // 2. Find the linked challenge
-        const challenge: any = await ctx.runQuery(I.queries?.getChallengeByMt5Account, {
+        const challenge = await ctx.runQuery(I.queries?.getChallengeByMt5Account as any, {
           mt5AccountId: account._id,
         });
 
         if (!challenge) continue;
 
         // 3. Get the latest metrics to carry forward win/loss stats
-        const latestMetrics: any = await ctx.runQuery(I.queries?.getLatestMetricsForChallenge, {
+        const latestMetrics = await ctx.runQuery(I.queries?.getLatestMetricsForChallenge as any, {
           challengeId: challenge._id,
         });
 
@@ -113,8 +113,9 @@ export const dailyMt5Sync = action({
         });
 
         syncedCount++;
-      } catch (error: any) {
-        console.error(`Failed to sync account ${account._id}:`, error.message);
+      } catch (error: unknown) {
+        const emsg = error instanceof Error ? error.message : String(error);
+        console.error(`Failed to sync account ${account._id}:`, emsg);
         errorCount++;
       }
     }
@@ -134,7 +135,7 @@ export const dailyMt5Sync = action({
 export const processSyncQueue = action({
   args: {},
   handler: async (ctx) => {
-    const pendingItems: any[] = await ctx.runQuery(I.queries?.getPendingSyncItems, {});
+    const pendingItems = await ctx.runQuery(I.queries?.getPendingSyncItems as any, {});
 
     let processed = 0;
     let failed = 0;
@@ -148,7 +149,7 @@ export const processSyncQueue = action({
         });
 
         // Check account exists
-        const account: any = await ctx.runQuery(I.queries?.getMt5AccountById, {
+        const account = await ctx.runQuery(I.queries?.getMt5AccountById as any, {
           accountId: item.mt5AccountId,
         });
 
@@ -168,23 +169,24 @@ export const processSyncQueue = action({
           status: "completed",
         });
         processed++;
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const emsg2 = error instanceof Error ? error.message : String(error);
         // Retry logic
-        const queueItem: any = await ctx.runQuery(I.queries?.getSyncQueueItem, {
+        const queueItem = await ctx.runQuery(I.queries?.getSyncQueueItem as any, {
           queueItemId: item._id,
         });
 
-        if (queueItem && queueItem.retryCount < queueItem.maxRetries) {
-          await ctx.runMutation(I.mt5?.processMt5SyncQueueItem, {
+        if (queueItem && (queueItem as any).retryCount < (queueItem as any).maxRetries) {
+          await ctx.runMutation(I.mt5?.processMt5SyncQueueItem as any, {
             queueItemId: item._id,
             status: "pending",
-            error: error.message,
+            error: emsg2,
           });
         } else {
-          await ctx.runMutation(I.mt5?.processMt5SyncQueueItem, {
+          await ctx.runMutation(I.mt5?.processMt5SyncQueueItem as any, {
             queueItemId: item._id,
             status: "failed",
-            error: error.message,
+            error: emsg2,
           });
         }
         failed++;

@@ -43,10 +43,11 @@ http.route({
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
-    } catch (error: any) {
-      console.error("Flutterwave webhook error:", error);
+    } catch (error: unknown) {
+      const emsg = error instanceof Error ? error.message : String(error);
+      console.error("Flutterwave webhook error:", emsg);
       // Return 200 to prevent Flutterwave from retrying malformed requests
-      return new Response(JSON.stringify({ status: "error", message: error.message }), {
+      return new Response(JSON.stringify({ status: "error", message: emsg }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
@@ -100,9 +101,10 @@ http.route({
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
-    } catch (error: any) {
-      console.error("Paystack webhook error:", error);
-      return new Response(JSON.stringify({ status: "error", message: error.message }), {
+    } catch (error: unknown) {
+      const emsg = error instanceof Error ? error.message : String(error);
+      console.error("Paystack webhook error:", emsg);
+      return new Response(JSON.stringify({ status: "error", message: emsg }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
@@ -142,8 +144,8 @@ http.route({
         status: result.valid ? 200 : 404,
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
       });
-    } catch (error: any) {
-      console.error("Certificate verification error:", error);
+    } catch (error: unknown) {
+      console.error("Certificate verification error:", error instanceof Error ? error.message : String(error));
       return new Response(
         JSON.stringify({ valid: false, message: "Verification service unavailable." }),
         {

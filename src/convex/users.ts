@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { Doc, Id } from "./_generated/dataModel";
+import type { Id } from "./_generated/dataModel";
 import { ROLES, KYC_STATUS } from "./schema";
 
 // ═══════════════════════════════════════════════
@@ -263,6 +263,7 @@ export const updateProfile = mutation({
       // For now, allow updates but flag them
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updates: Record<string, any> = {};
     if (args.name !== undefined) updates.name = args.name;
     if (args.phone !== undefined) updates.phone = args.phone;
@@ -298,6 +299,7 @@ export const updateUserRole = mutation({
     ]);
 
     if (args.role) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await ctx.db.patch(args.userId, { role: args.role as any });
     }
 
@@ -382,7 +384,7 @@ export const updatePreferences = mutation({
   handler: async (ctx, args) => {
     const userId = await requireAuth(ctx);
 
-    const updates: Record<string, any> = {};
+    const updates: Record<string, unknown> = {};
     if (args.emailNotifications !== undefined) updates.emailNotifications = args.emailNotifications;
     if (args.notificationPreferences !== undefined) updates.notificationPreferences = args.notificationPreferences;
 

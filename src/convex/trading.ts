@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
-import { requireAuth, requireRole } from "./users";
-import { ROLES, CHALLENGE_STATUS } from "./schema";
+import { requireAuth } from "./users";
+import { CHALLENGE_STATUS } from "./schema";
 
 // ═══════════════════════════════════════════════
 //  QUERIES
@@ -181,6 +181,7 @@ export const recordTradingMetrics = mutation({
 //  RULE ENGINE
 // ═══════════════════════════════════════════════
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function checkChallengeRules(ctx: any, metrics: any) {
   const challenge = await ctx.db.get(metrics.challengeId);
   if (!challenge || challenge.status !== CHALLENGE_STATUS.ACTIVE) return;
@@ -257,7 +258,7 @@ async function checkChallengeRules(ctx: any, metrics: any) {
   }
 
   if (violations.length > (challenge.violations?.length || 0)) {
-    const criticalViolation = violations.find((v) => v.severity === "critical" && !challenge.violations?.some((cv: any) => cv.type === v.type));
+    const criticalViolation = violations.find((v) => v.severity === "critical" && !(challenge.violations as Array<{type: string}> | undefined)?.some((cv) => cv.type === v.type));
     if (criticalViolation) {
       await ctx.db.patch(metrics.challengeId, {
         violations,
@@ -284,6 +285,7 @@ async function checkChallengeRules(ctx: any, metrics: any) {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function calculateRiskScore(metrics: any): number {
   let score = 0;
   if (metrics.currentDrawdown > 5) score += 20;
@@ -294,6 +296,7 @@ function calculateRiskScore(metrics: any): number {
   return Math.min(score, 100);
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function calculateHealthScore(metrics: any): number {
   let score = 50;
   if ((metrics.winRate || 0) > 50) score += 10;

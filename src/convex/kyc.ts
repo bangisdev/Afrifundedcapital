@@ -213,8 +213,8 @@ export const approveKycDocument = mutation({
             status: "approved",
           });
         }
-      } catch (e: any) {
-        console.error("Failed to send KYC approval email:", e.message);
+      } catch (e: unknown) {
+        console.error("Failed to send KYC approval email:", e instanceof Error ? e.message : String(e));
       }
     }
 
@@ -278,10 +278,9 @@ export const rejectKycDocument = mutation({
           status: "rejected",
           rejectionReason: args.rejectionReason,
         });
+      }    } catch (e: unknown) {
+        console.error("Failed to send KYC rejection email:", e instanceof Error ? e.message : String(e));
       }
-    } catch (e: any) {
-      console.error("Failed to send KYC rejection email:", e.message);
-    }
 
     // Audit
     await ctx.db.insert("auditLogs", {
