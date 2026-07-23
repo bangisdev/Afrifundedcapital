@@ -234,7 +234,7 @@ export default function Landing() {
             <span className="text-sm font-medium tracking-tight">AfriFundedCapital</span>
           </div>
           <nav className="hidden md:flex items-center gap-8 text-xs text-muted-foreground">
-            {["features", "testimonials", "pricing"].map((section) => (
+            {["features", "testimonials", "pricing", "faq"].map((section) => (
               <a
                 key={section}
                 href={`#${section}`}
