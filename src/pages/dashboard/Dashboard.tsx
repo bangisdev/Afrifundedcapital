@@ -11,6 +11,7 @@ import Support from "./Support";
 import Profile from "./Profile";
 import Notifications from "./Notifications";
 import NotificationPreferences from "./NotificationPreferences";
+import Payouts from "./Payouts";
 
 export default function Dashboard() {
   return (
@@ -21,6 +22,7 @@ export default function Dashboard() {
         <Route path="challenges/:id" element={<ChallengeDetail />} />
         <Route path="trading" element={<Trading />} />
         <Route path="wallet" element={<Wallet />} />
+        <Route path="payouts" element={<Payouts />} />
         <Route path="affiliate" element={<Affiliate />} />
         <Route path="certificates" element={<Certificates />} />
         <Route path="support" element={<Support />} />

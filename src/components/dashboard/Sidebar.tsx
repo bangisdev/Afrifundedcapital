@@ -19,6 +19,7 @@ import {
   ChevronLeft,
   UserCircle,
   Percent,
+  DollarSign,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -35,6 +36,7 @@ const clientNavItems: NavItem[] = [
   { label: "Challenges", icon: <BarChart3 className="h-4 w-4" />, path: "/dashboard/challenges" },
   { label: "Trading", icon: <TrendingUp className="h-4 w-4" />, path: "/dashboard/trading" },
   { label: "Wallet", icon: <Wallet className="h-4 w-4" />, path: "/dashboard/wallet" },
+  { label: "Payouts", icon: <DollarSign className="h-4 w-4" />, path: "/dashboard/payouts" },
   { label: "Notifications", icon: <Bell className="h-4 w-4" />, path: "/dashboard/notifications" },
   { label: "Affiliate", icon: <Users className="h-4 w-4" />, path: "/dashboard/affiliate" },
   { label: "Certificates", icon: <Award className="h-4 w-4" />, path: "/dashboard/certificates" },

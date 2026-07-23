@@ -713,6 +713,32 @@ const schema = defineSchema(
       .index("userId", ["userId"])
       .index("status", ["status"]),
 
+    // ── Profit Payouts (Funded Trader Withdrawals) ──
+    profitPayouts: defineTable({
+      userId: v.id("users"),
+      fundedAccountId: v.id("fundedAccounts"),
+      challengeId: v.id("userChallenges"),
+      amount: v.number(),
+      currency: v.string(),
+      status: v.union(
+        v.literal("pending"),
+        v.literal("approved"),
+        v.literal("paid"),
+        v.literal("rejected"),
+      ),
+      paymentMethod: v.string(),
+      paymentDetails: v.string(),
+      processedBy: v.optional(v.id("users")),
+      notes: v.optional(v.string()),
+      rejectionReason: v.optional(v.string()),
+      requestedAt: v.number(),
+      processedAt: v.optional(v.number()),
+    })
+      .index("userId", ["userId"])
+      .index("status", ["status"])
+      .index("fundedAccountId", ["fundedAccountId"])
+      .index("challengeId", ["challengeId"]),
+
     // ── Coupons ──
     coupons: defineTable({
       code: v.string(),
