@@ -1,12 +1,13 @@
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Loader2, Settings as SettingsIcon, Save } from "lucide-react";
+import { Loader2, Settings as SettingsIcon, Save, Database, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 
 export default function AdminSettings() {
@@ -91,6 +92,76 @@ export default function AdminSettings() {
           </TabsContent>
         ))}
       </Tabs>
+
+      <Separator />
+
+      {/* ── Seed Data ── */}
+      <div>
+        <h2 className="text-sm font-medium mb-2">Seed Data</h2>
+        <p className="text-xs text-muted-foreground mb-4">
+          Populate the database with default challenge templates (One Step, Two Step, Instant Funding)
+          with 6 account sizes each ($5K to $200K), default roles, and platform settings.
+          This only runs if no templates exist yet.
+        </p>
+        <SeedDataButton />
+      </div>
+    </div>
+  );
+}
+
+function SeedDataButton() {
+  const seed = useAction(api.seed.seed);
+  const templates = useQuery(api.challenges.listChallengeTemplates, {});
+  const [seeding, setSeeding] = useState(false);
+
+  const seededCount = templates?.length ?? 0;
+
+  const handleSeed = async () => {
+    setSeeding(true);
+    try {
+      await seed();
+      toast.success("Database seeded successfully!");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to seed database");
+    }
+    setSeeding(false);
+  };
+
+  return (
+    <div className="card-subtle p-4 flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <Database className="h-4 w-4 text-muted-foreground" />
+        <div>
+          <div className="text-sm font-medium">
+            {seededCount > 0
+              ? `${seededCount} template${seededCount !== 1 ? "s" : ""} already seeded`
+              : "No templates yet"}
+          </div>
+          {seededCount > 0 && (
+            <div className="flex items-center gap-1 mt-0.5">
+              <CheckCircle className="h-3 w-3 text-emerald-500" />
+              <span className="text-xs text-emerald-500">Challenge data is ready</span>
+            </div>
+          )}
+        </div>
+      </div>
+      <Button
+        variant={seededCount > 0 ? "outline" : "default"}
+        size="sm"
+        onClick={handleSeed}
+        disabled={seeding}
+      >
+        {seeding ? (
+          <>
+            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            Seeding…
+          </>
+        ) : seededCount > 0 ? (
+          "Re-seed"
+        ) : (
+          "Seed Now"
+        )}
+      </Button>
     </div>
   );
 }
