@@ -164,6 +164,17 @@ export const linkMt5ToChallenge = mutation({
   },
 });
 
+export const markUserAsDemoSeeded = mutation({
+  args: {
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.userId, {
+      isDemoSeeded: true,
+    });
+  },
+});
+
 // ═══════════════════════════════════════════════
 //  MAIN SEED ACTION
 // ═══════════════════════════════════════════════

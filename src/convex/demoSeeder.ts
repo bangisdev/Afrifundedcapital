@@ -208,6 +208,18 @@ export const seedDemoTradingData = action({
       }
     }
 
+    // Mark all affected users as demo-seeded
+    const affectedUserIds = new Set(challenges.map((c: any) => c.userId));
+    for (const userId of affectedUserIds) {
+      try {
+        await (ctx as any).runMutation((internal as any).seed.markUserAsDemoSeeded, {
+          userId,
+        });
+      } catch (e: any) {
+        console.error(`Failed to mark user ${userId} as demo-seeded:`, e?.message);
+      }
+    }
+
     return {
       seeded: totalMetricsSeeded,
       accountsCreated,

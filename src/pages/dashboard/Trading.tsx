@@ -33,7 +33,7 @@ import {
   CartesianGrid,
   ResponsiveContainer,
 } from "recharts";
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -103,20 +103,18 @@ export default function Trading() {
   const [seeding, setSeeding] = useState(false);
   const [autoSeeding, setAutoSeeding] = useState(false);
   const [seedResult, setSeedResult] = useState<string | null>(null);
-  const autoSeededRef = useRef(false);
 
   const isLoading = !challenges || !metrics || !metricsHistory || !mt5Accounts;
 
-  // Auto-seed demo data when the page first loads and detects empty metrics
+  // Auto-seed demo data once — checks the persistent isDemoSeeded flag on the user
   useEffect(() => {
     if (
       !isLoading &&
-      !autoSeededRef.current &&
+      !user?.isDemoSeeded &&
       challenges.length > 0 &&
       mt5Accounts.length > 0 &&
       metricsHistory.length === 0
     ) {
-      autoSeededRef.current = true;
       setAutoSeeding(true);
 
       seedDemoData()
