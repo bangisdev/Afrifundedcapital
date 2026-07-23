@@ -1,9 +1,9 @@
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useState } from "react";
+import { useAuth } from "@/hooks/use-auth";
+import { useFlutterwavePayment } from "@/hooks/use-flutterwave";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -18,10 +18,13 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@/components/ui/tabs";
-import { Loader2, CheckCircle, Clock, XCircle, DollarSign, ArrowRight } from "lucide-react";
+import { Loader2, CheckCircle, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
+type Doc = Record<string, any>;
+
 export default function Challenges() {
+  const { user } = useAuth();
   const templates = useQuery(api.challenges.listChallengeTemplates, {});
   const myChallenges = useQuery(api.challenges.getMyChallenges);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
@@ -29,7 +32,7 @@ export default function Challenges() {
   const [couponCode, setCouponCode] = useState("");
   const [showPurchase, setShowPurchase] = useState(false);
 
-  const initiatePayment = useMutation(api.payments.initiatePayment);
+  const { state: paymentState, startCheckout, reset: resetPayment } = useFlutterwavePayment();
 
   const sizes = useQuery(
     api.challenges.getAccountSizesForTemplate,
@@ -58,26 +61,67 @@ export default function Challenges() {
     return <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded ${v.className}`}>{v.label}</span>;
   };
 
-  const handlePurchase = async () => {
-    if (!selectedTemplate || !selectedSize) {
+  const handleProceedToPayment = async () => {
+    if (!selectedTemplate || !selectedSize || !user?.email) {
       toast.error("Please select a challenge and account size");
       return;
     }
 
-    try {
-      const result = await initiatePayment({
-        amount: sizes?.find((s) => s._id === selectedSize)?.price || 0,
-        provider: "flutterwave",
-        templateId: selectedTemplate as any,
-        accountSizeId: selectedSize as any,
-        couponCode: couponCode || undefined,
-        description: `Challenge purchase`,
-      });
+    const selectedAccountSize = sizes?.find((s: Doc) => s._id === selectedSize);
+    if (!selectedAccountSize) {
+      toast.error("Selected account size not found");
+      return;
+    }
 
-      toast.success("Payment initiated! Reference: " + result.reference);
+    await startCheckout({
+      amount: selectedAccountSize.price,
+      currency: "NGN",
+      email: user.email,
+      name: user.name || "Trader",
+      phoneNumber: user.phone || "",
+      templateId: selectedTemplate as any,
+      accountSizeId: selectedSize as any,
+      couponCode: couponCode || undefined,
+      description: `${selectedAccountSize.label} Challenge`,
+    });
+  };
+
+  const getPaymentButtonContent = () => {
+    switch (paymentState.status) {
+      case "initiating":
+        return (
+          <div className="flex items-center justify-center gap-2">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            <span>Preparing payment...</span>
+          </div>
+        );
+      case "verifying":
+        return (
+          <div className="flex items-center justify-center gap-2">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            <span>Verifying payment...</span>
+          </div>
+        );
+      case "success":
+        return (
+          <div className="flex items-center justify-center gap-2 text-emerald-600 dark:text-emerald-400">
+            <CheckCircle className="h-3 w-3" />
+            <span>Challenge Created!</span>
+          </div>
+        );
+      case "error":
+        return "Try Again";
+      default:
+        return "Proceed to Payment";
+    }
+  };
+
+  const handleDialogClose = (open: boolean) => {
+    if (!open) {
+      if (paymentState.status === "success") {
+        resetPayment();
+      }
       setShowPurchase(false);
-    } catch (error: any) {
-      toast.error(error.message || "Payment failed");
     }
   };
 
@@ -98,7 +142,7 @@ export default function Challenges() {
 
         <TabsContent value="browse" className="space-y-6">
           <div className="grid md:grid-cols-3 gap-4">
-            {templates.map((template) => (
+            {templates.map((template: Doc) => (
               <div
                 key={template._id}
                 className={`card-subtle p-6 cursor-pointer transition-all hover:bg-secondary/30 ${
@@ -139,6 +183,7 @@ export default function Challenges() {
                   variant="outline"
                   size="sm"
                   className="w-full mt-4 text-xs"
+                  disabled={paymentState.status === "initiating" || paymentState.status === "verifying"}
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelectedTemplate(template._id);
@@ -158,7 +203,7 @@ export default function Challenges() {
               <p className="text-sm text-muted-foreground">No challenges yet. Start your journey!</p>
             </div>
           ) : (
-            myChallenges.map((ch) => (
+            myChallenges.map((ch: Doc) => (
               <div key={ch._id} className="card-subtle p-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -189,19 +234,69 @@ export default function Challenges() {
       </Tabs>
 
       {/* Purchase Dialog */}
-      <Dialog open={showPurchase} onOpenChange={setShowPurchase}>
+      <Dialog open={showPurchase} onOpenChange={handleDialogClose}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-base font-medium">Purchase Challenge</DialogTitle>
+            <DialogTitle className="text-base font-medium">
+              {paymentState.status === "success" ? "Payment Successful!" : "Purchase Challenge"}
+            </DialogTitle>
             <DialogDescription className="text-xs">
-              Select your account size and apply any coupon codes
+              {paymentState.status === "success"
+                ? "Your challenge has been created. Happy trading!"
+                : "Select your account size and apply any coupon codes"}
             </DialogDescription>
           </DialogHeader>
 
-          {selectedTemplate && sizes && (
+          {paymentState.status === "success" ? (
+            <div className="space-y-4 py-4">
+              <div className="flex flex-col items-center gap-3 text-center">
+                <div className="h-12 w-12 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                  <CheckCircle className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Challenge Created</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Reference: {paymentState.reference?.slice(0, 16)}...
+                  </p>
+                </div>
+              </div>
+              <Button
+                className="w-full text-xs"
+                size="sm"
+                onClick={() => {
+                  resetPayment();
+                  setShowPurchase(false);
+                }}
+              >
+                View My Challenges
+              </Button>
+            </div>
+          ) : paymentState.status === "error" ? (
+            <div className="space-y-4 py-4">
+              <div className="flex flex-col items-center gap-3 text-center">
+                <div className="h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                  <XCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Payment Failed</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {paymentState.message || "Something went wrong. Please try again."}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                className="w-full text-xs"
+                size="sm"
+                onClick={() => resetPayment()}
+              >
+                Try Again
+              </Button>
+            </div>
+          ) : selectedTemplate && sizes ? (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-2">
-                {sizes.map((size) => (
+                {sizes.map((size: Doc) => (
                   <button
                     key={size._id}
                     className={`p-3 border rounded-lg text-left transition-colors ${
@@ -210,6 +305,7 @@ export default function Challenges() {
                         : "border-border hover:bg-secondary/30"
                     }`}
                     onClick={() => setSelectedSize(size._id)}
+                    disabled={paymentState.status === "initiating" || paymentState.status === "verifying"}
                   >
                     <div className="text-sm font-medium">{size.label}</div>
                     <div className="text-xs text-muted-foreground mt-1">
@@ -228,6 +324,7 @@ export default function Challenges() {
                   value={couponCode}
                   onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
                   className="text-xs h-9"
+                  disabled={paymentState.status === "initiating" || paymentState.status === "verifying"}
                 />
               </div>
 
@@ -236,7 +333,7 @@ export default function Challenges() {
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Total</span>
                     <span className="font-medium">
-                      ₦{sizes.find((s) => s._id === selectedSize)?.price.toLocaleString()}
+                      ₦{(sizes as Doc[]).find((s: Doc) => s._id === selectedSize)?.price.toLocaleString()}
                     </span>
                   </div>
                 </div>
@@ -245,13 +342,21 @@ export default function Challenges() {
               <Button
                 className="w-full text-xs"
                 size="sm"
-                disabled={!selectedSize}
-                onClick={handlePurchase}
+                disabled={
+                  !selectedSize ||
+                  paymentState.status === "initiating" ||
+                  paymentState.status === "verifying"
+                }
+                onClick={handleProceedToPayment}
               >
-                Proceed to Payment
+                {getPaymentButtonContent()}
               </Button>
+
+              <p className="text-[10px] text-muted-foreground text-center">
+                Secure payment powered by Flutterwave. Your payment data is encrypted.
+              </p>
             </div>
-          )}
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>

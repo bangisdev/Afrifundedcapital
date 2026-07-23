@@ -515,3 +515,123 @@ export const recordPaystackTransaction = mutation({
     });
   },
 });
+
+// ═══════════════════════════════════════════════
+//  FLUTTERWAVE FRONTEND ACTIONS
+// ═══════════════════════════════════════════════
+
+/**
+ * Returns the Flutterwave public key for frontend checkout initialization.
+ * The public key is safe to expose to the client.
+ */
+export const getFlutterwaveConfig = action({
+  args: {},
+  handler: async () => {
+    return {
+      publicKey: process.env.FLW_PUBLIC_KEY || "",
+    };
+  },
+});
+
+/**
+ * Verifies a Flutterwave transaction from the frontend callback
+ * by calling the Flutterwave verification API with the secret key.
+ * If verified, completes the payment and creates the challenge.
+ */
+export const verifyFlutterwaveTransaction = action({
+  args: {
+    paymentId: v.id("payments"),
+    transactionId: v.string(),
+    flwRef: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const secretKey = process.env.FLW_SECRET_KEY;
+    if (!secretKey) {
+      throw new Error("Flutterwave secret key not configured");
+    }
+
+    // Verify the transaction with Flutterwave API
+    const verifyUrl = `https://api.flutterwave.com/v3/transactions/${args.transactionId}/verify`;
+    const response = await fetch(verifyUrl, {
+      headers: {
+        Authorization: `Bearer ${secretKey}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Flutterwave verification failed: ${response.status}`);
+    }
+
+    const verification = await response.json();
+
+    if (verification.status !== "success" || verification.data?.status !== "successful") {
+      // Payment wasn't successful — mark as failed
+      await ctx.runMutation((internal as any).payments.failPayment, {
+        paymentId: args.paymentId,
+        reason: verification.data?.processor_response || "Verification failed",
+        providerData: verification.data,
+      });
+      throw new Error("Payment verification failed: transaction not successful");
+    }
+
+    const data = verification.data;
+
+    // Get payment to check if already completed (idempotency)
+    const payment = await ctx.runQuery((internal as any).payments.getPaymentByIdAction, {
+      paymentId: args.paymentId,
+    });
+
+    if (!payment) {
+      throw new Error("Payment not found");
+    }
+
+    // If already completed, return early (idempotent)
+    if (payment.status === "completed") {
+      return { status: "already_completed", message: "Payment was already processed" };
+    }
+
+    // Complete the payment
+    await ctx.runMutation((internal as any).payments.completePayment, {
+      paymentId: args.paymentId,
+      providerTransactionId: args.transactionId,
+      providerData: data,
+    });
+
+    // Record Flutterwave transaction
+    await ctx.runMutation((internal as any).payments.recordFlutterwaveTransaction, {
+      paymentId: args.paymentId,
+      transactionId: args.transactionId,
+      flwRef: args.flwRef,
+      status: data.status,
+      amount: data.amount || 0,
+      currency: data.currency || "NGN",
+      chargedAmount: data.charged_amount || 0,
+      processorResponse: data.processor_response || "",
+      customerEmail: data.customer?.email || "",
+      customerName: data.customer?.name,
+      paymentType: data.payment_type || "card",
+    });
+
+    // Create user challenge if payment was for a challenge
+    if (payment.templateId && payment.accountSizeId) {
+      await ctx.runMutation((internal as any).challenges.createUserChallenge, {
+        templateId: payment.templateId as any,
+        accountSizeId: payment.accountSizeId as any,
+        paymentId: args.paymentId,
+      });
+    }
+
+    return {
+      status: "completed",
+      message: "Payment verified and challenge created successfully",
+    };
+  },
+});
+
+export const getPaymentByIdAction = query({
+  args: { paymentId: v.id("payments") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.paymentId);
+  },
+});
