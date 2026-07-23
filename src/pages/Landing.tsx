@@ -6,6 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
   Carousel,
   CarouselContent,
   CarouselItem,
@@ -689,6 +695,85 @@ export default function Landing() {
             <p className="text-xs text-muted-foreground">
               All account sizes available for One Step, Two Step, and Instant Funding challenges
             </p>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ─── FAQ ─── */}
+      <section id="faq" className="py-28 px-4">
+        <div className="container-page max-w-3xl">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="text-center mb-16"
+          >
+            <Badge variant="outline" className="rounded-full px-4 py-1 text-xs font-normal mb-6 border-border/60">
+              FAQ
+            </Badge>
+            <h2 className="text-2xl sm:text-3xl font-light tracking-tight mb-3">
+              Frequently Asked Questions
+            </h2>
+            <p className="text-sm text-muted-foreground max-w-lg mx-auto">
+              Everything you need to know about getting funded with AfriFundedCapital
+            </p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
+            <Accordion type="single" collapsible className="w-full">
+              {[
+                {
+                  q: "How does the challenge process work?",
+                  a: "You select an account size and challenge type (one-step, two-step, or instant funding), pay the entry fee, and trade the evaluation account. If you meet the profit target while respecting the drawdown limits within the required trading days, you pass and receive a funded account.",
+                },
+                {
+                  q: "What happens if I violate a challenge rule?",
+                  a: "If you exceed the maximum drawdown or daily drawdown limits, the challenge is marked as violated. You can purchase a reset at a reduced fee to restart. Minor violations without critical impact may result in a warning instead.",
+                },
+                {
+                  q: "How much of the profits do I keep?",
+                  a: "You keep 90% of all profits generated on your funded account. There are no performance gates or hidden fees. We take a 10% share, and you can request payouts at any time.",
+                },
+                {
+                  q: "How are payouts processed?",
+                  a: "Payouts are processed through your preferred payment method. You can request a payout at any time from your dashboard. Our finance team processes requests within 2-5 business days.",
+                },
+                {
+                  q: "What trading platforms do you support?",
+                  a: "We integrate with MetaTrader 5 (MT5) with raw ECN spreads. This gives you access to real-time market data, advanced charting tools, automated trading via Expert Advisors, and fast execution.",
+                },
+                {
+                  q: "Is there a scaling plan?",
+                  a: "Yes. After becoming funded, you can grow your account through our scaling plan. Every profitable quarter demonstrates your consistency and unlocks additional capital, allowing you to scale up to $5M.",
+                },
+                {
+                  q: "Can I trade news or hold positions over weekends?",
+                  a: "Holding over weekends and trading during news events depends on the challenge type. Our standard challenges restrict news trading and weekend holding. Instant funding accounts offer more flexibility with these rules.",
+                },
+                {
+                  q: "What payment methods do you accept?",
+                  a: "We accept payments via Flutterwave for Nigerian Naira (NGN) transactions. We also support Paystack and are expanding to include Stripe, cryptocurrency, and direct bank transfers for international traders.",
+                },
+              ].map((faq, i) => (
+                <AccordionItem
+                  key={i}
+                  value={`item-${i}`}
+                  className="border-border/60 group"
+                >
+                  <AccordionTrigger className="text-xs font-medium hover:no-underline hover:text-foreground/80 transition-colors py-5">
+                    {faq.q}
+                  </AccordionTrigger>
+                  <AccordionContent className="text-xs text-muted-foreground leading-relaxed pb-5">
+                    {faq.a}
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
           </motion.div>
         </div>
       </section>
