@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { useNavigate, Outlet } from "react-router";
+import { useEffect, useRef } from "react";
+import { useNavigate, Outlet, useLocation } from "react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { Sidebar } from "./Sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -11,13 +11,27 @@ import { api } from "@/convex/_generated/api";
 export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boolean; children?: React.ReactNode }) {
   const { isLoading, isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const unreadCount = useQuery(api.notifications.getUnreadCount, {});
 
+  // Track whether auth has ever resolved to true on THIS component instance.
+  // Prevents redirect loops when @convex-dev/auth/react briefly resets its
+  // internal state during Suspense / lazy-load route transitions.
+  const hasSeenAuth = useRef(false);
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      navigate("/auth");
+    if (isAuthenticated) hasSeenAuth.current = true;
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    // Never redirect if we're already at /auth (prevents loops)
+    if (location.pathname.startsWith("/auth")) return;
+    // Only redirect when auth has truly NEVER resolved to true on this mount.
+    // Once we've seen an authenticated state, brief flips are treated as
+    // race conditions rather than real sign-outs.
+    if (!isLoading && !isAuthenticated && !hasSeenAuth.current) {
+      navigate("/auth", { replace: true });
     }
-  }, [isLoading, isAuthenticated, navigate]);
+  }, [isLoading, isAuthenticated, navigate, location.pathname]);
 
   // No need to redirect — the index Route in Dashboard.tsx / AdminDashboard.tsx
   // already matches and renders the overview component at these exact paths.
