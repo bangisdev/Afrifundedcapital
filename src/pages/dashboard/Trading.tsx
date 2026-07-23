@@ -33,7 +33,7 @@ import {
   CartesianGrid,
   ResponsiveContainer,
 } from "recharts";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -105,6 +105,7 @@ export default function Trading() {
   const [resettingId, setResettingId] = useState<string | null>(null);
   const [autoSeeding, setAutoSeeding] = useState(false);
   const [seedResult, setSeedResult] = useState<string | null>(null);
+  const autoSeedingRef = useRef(false);
 
   const isLoading = !challenges || !metrics || !metricsHistory || !mt5Accounts;
 
@@ -115,10 +116,12 @@ export default function Trading() {
       !user?.isDemoSeeded &&
       challenges.length > 0 &&
       mt5Accounts.length > 0 &&
-      metricsHistory.length === 0
+      metricsHistory.length === 0 &&
+      !autoSeedingRef.current
     ) {
-      setAutoSeeding(true);
+      autoSeedingRef.current = true;
 
+      setAutoSeeding(true);
       seedDemoData()
         .then((result: any) => {
           const msg = result.message || `Seeded ${result.seeded} data points across ${challenges.length} challenge(s)`;
@@ -138,7 +141,7 @@ export default function Trading() {
           setAutoSeeding(false);
         });
     }
-  }, [isLoading, challenges, mt5Accounts, metricsHistory, seedDemoData]);
+  }, [isLoading, user?.isDemoSeeded, challenges, mt5Accounts, metricsHistory, seedDemoData]);
 
   const handleSeedDemoData = async () => {
     if (autoSeeding) return;

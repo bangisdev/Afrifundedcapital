@@ -69,8 +69,6 @@ export const resetChallengeDemoData = action({
     }
 
     // Seed 60 days of metrics (same logic as the bulk seeder)
-    const now = Date.now();
-    const dayMs = 24 * 60 * 60 * 1000;
     const totalDays = 60;
 
     let currentBalance = accountSize;
@@ -255,8 +253,6 @@ export const seedDemoTradingData = action({
       }
 
       // Generate 60 days of historical trading metrics (back to front for realistic progression)
-      const now = Date.now();
-      const dayMs = 24 * 60 * 60 * 1000;
       const totalDays = 60;
 
       // Simulate a realistic equity curve starting from accountSize
