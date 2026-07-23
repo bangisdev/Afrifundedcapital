@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
-import { requireAuth } from "./users";
+import { requireAuth, getCurrentUser } from "./users";
 
 // ═══════════════════════════════════════════════
 //  QUERIES
@@ -31,11 +31,12 @@ export const getMyNotifications = query({
 
 export const getUnreadCount = query({
   handler: async (ctx) => {
-    const userId = await requireAuth(ctx);
+    const user = await getCurrentUser(ctx);
+    if (!user) return 0;
 
     const notifications = await ctx.db
       .query("notifications")
-      .withIndex("userId", (q) => q.eq("userId", userId).eq("read", false))
+      .withIndex("userId", (q) => q.eq("userId", user._id).eq("read", false))
       .collect();
 
     return notifications.length;
