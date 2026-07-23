@@ -34,6 +34,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { useMemo, useState, useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 
 const chartConfig = {
@@ -120,13 +121,18 @@ export default function Trading() {
 
       seedDemoData()
         .then((result: any) => {
-          setSeedResult(
-            result.message ||
-              `Seeded ${result.seeded} data points across ${challenges.length} challenge(s)`,
-          );
+          const msg = result.message || `Seeded ${result.seeded} data points across ${challenges.length} challenge(s)`;
+          setSeedResult(msg);
+          toast.success("Demo data generated", {
+            description: msg,
+          });
         })
         .catch((e: any) => {
-          setSeedResult(`Error: ${e.message || "Failed to generate demo data"}`);
+          const msg = e.message || "Failed to generate demo data";
+          setSeedResult(`Error: ${msg}`);
+          toast.error("Demo data generation failed", {
+            description: msg,
+          });
         })
         .finally(() => {
           setAutoSeeding(false);
@@ -141,12 +147,18 @@ export default function Trading() {
     setSeedResult(null);
     try {
       const result = await seedDemoData();
-      setSeedResult(
-        (result as any).message ||
-          `Seeded ${(result as any).seeded} data points across ${challenges?.length || 0} challenge(s)`,
-      );
+      const msg = (result as any).message ||
+        `Seeded ${(result as any).seeded} data points across ${challenges?.length || 0} challenge(s)`;
+      setSeedResult(msg);
+      toast.success("Demo data generated", {
+        description: msg,
+      });
     } catch (e: any) {
-      setSeedResult(`Error: ${e.message || "Failed to generate demo data"}`);
+      const msg = e.message || "Failed to generate demo data";
+      setSeedResult(`Error: ${msg}`);
+      toast.error("Demo data generation failed", {
+        description: msg,
+      });
     } finally {
       setSeeding(false);
     }
