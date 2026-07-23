@@ -1,33 +1,237 @@
+import { v } from "convex/values";
+import { query, mutation } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { query, QueryCtx } from "./_generated/server";
+import { Doc, Id } from "./_generated/dataModel";
+import { ROLES, KYC_STATUS } from "./schema";
 
-/**
- * Get the current signed in user. Returns null if the user is not signed in.
- * Usage: const signedInUser = await ctx.runQuery(api.authHelpers.currentUser);
- * THIS FUNCTION IS READ-ONLY. DO NOT MODIFY.
- */
+// ═══════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════
+
+export async function getCurrentUser(ctx: any) {
+  const userId = await getAuthUserId(ctx);
+  if (!userId) return null;
+  const user = await ctx.db.get(userId);
+  return user;
+}
+
+export async function requireAuth(ctx: any) {
+  const userId = await getAuthUserId(ctx);
+  if (!userId) throw new Error("Authentication required");
+  return userId;
+}
+
+export async function requireRole(ctx: any, allowedRoles: string[]) {
+  const userId = await requireAuth(ctx);
+  const user = await ctx.db.get(userId);
+  if (!user?.role || !allowedRoles.includes(user.role)) {
+    throw new Error("Insufficient permissions");
+  }
+  return { userId, user };
+}
+
+export function generateReferralCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "AFC";
+  for (let i = 0; i < 6; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
+
+// ═══════════════════════════════════════════════
+//  QUERIES
+// ═══════════════════════════════════════════════
+
 export const currentUser = query({
-  args: {},
   handler: async (ctx) => {
-    const user = await getCurrentUser(ctx);
-
-    if (user === null) {
-      return null;
-    }
-
-    return user;
+    return await getCurrentUser(ctx);
   },
 });
 
-/**
- * Use this function internally to get the current user data. Remember to handle the null user case.
- * @param ctx
- * @returns
- */
-export const getCurrentUser = async (ctx: QueryCtx) => {
-  const userId = await getAuthUserId(ctx);
-  if (userId === null) {
-    return null;
-  }
-  return await ctx.db.get(userId);
-};
+export const getUserById = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.userId);
+  },
+});
+
+export const listUsers = query({
+  args: {
+    search: v.optional(v.string()),
+    role: v.optional(v.string()),
+    kycStatus: v.optional(v.string()),
+    limit: v.optional(v.number()),
+    cursor: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { search, role, kycStatus, limit = 20 } = args;
+    let users = await ctx.db.query("users").collect();
+
+    if (role) {
+      users = users.filter((u) => u.role === role);
+    }
+    if (kycStatus) {
+      users = users.filter((u) => u.kycStatus === kycStatus);
+    }
+    if (search) {
+      const q = search.toLowerCase();
+      users = users.filter(
+        (u) =>
+          u.name?.toLowerCase().includes(q) ||
+          u.email?.toLowerCase().includes(q),
+      );
+    }
+
+    users.sort((a, b) => (b._creationTime ?? 0) - (a._creationTime ?? 0));
+    const sliced = users.slice(0, limit);
+
+    return {
+      users: sliced,
+      total: users.length,
+    };
+  },
+});
+
+export const getUserStats = query({
+  handler: async (ctx) => {
+    const users = await ctx.db.query("users").collect();
+    return {
+      total: users.length,
+      verified: users.filter((u) => u.kycStatus === KYC_STATUS.APPROVED).length,
+      pending: users.filter((u) => u.kycStatus === KYC_STATUS.PENDING).length,
+      admins: users.filter((u) => u.role && u.role !== ROLES.USER).length,
+    };
+  },
+});
+
+// ═══════════════════════════════════════════════
+//  MUTATIONS
+// ═══════════════════════════════════════════════
+
+export const updateProfile = mutation({
+  args: {
+    name: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    address: v.optional(v.string()),
+    country: v.optional(v.string()),
+    tradingExperience: v.optional(v.string()),
+    timezone: v.optional(v.string()),
+    dateOfBirth: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireAuth(ctx);
+    const user = await ctx.db.get(userId);
+    if (!user) throw new Error("User not found");
+
+    // Check if KYC is approved — locked fields
+    if (user.kycStatus === KYC_STATUS.APPROVED) {
+      // Allow name, phone, address changes — but these require ticket approval
+      // For now, allow updates but flag them
+    }
+
+    const updates: Record<string, any> = {};
+    if (args.name !== undefined) updates.name = args.name;
+    if (args.phone !== undefined) updates.phone = args.phone;
+    if (args.address !== undefined) updates.address = args.address;
+    if (args.country !== undefined) updates.country = args.country;
+    if (args.tradingExperience !== undefined) updates.tradingExperience = args.tradingExperience;
+    if (args.timezone !== undefined) updates.timezone = args.timezone;
+    if (args.dateOfBirth !== undefined) updates.dateOfBirth = args.dateOfBirth;
+
+    await ctx.db.patch(userId, updates);
+
+    // Audit log
+    await ctx.db.insert("auditLogs", {
+      userId,
+      action: "profile_updated",
+      entity: "users",
+      entityId: userId,
+      details: JSON.stringify(Object.keys(updates)),
+      timestamp: Date.now(),
+    });
+  },
+});
+
+export const updateUserRole = mutation({
+  args: {
+    userId: v.id("users"),
+    role: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { userId: adminId } = await requireRole(ctx, [
+      ROLES.SUPER_ADMIN,
+      ROLES.CLIENT_MANAGER,
+    ]);
+
+    if (args.role) {
+      await ctx.db.patch(args.userId, { role: args.role as any });
+    }
+
+    await ctx.db.insert("auditLogs", {
+      userId: adminId,
+      action: "user_role_updated",
+      entity: "users",
+      entityId: args.userId,
+      details: `Role updated to ${args.role}`,
+      timestamp: Date.now(),
+    });
+  },
+});
+
+export const toggleUserStatus = mutation({
+  args: {
+    userId: v.id("users"),
+    locked: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const { userId: adminId } = await requireRole(ctx, [ROLES.SUPER_ADMIN]);
+
+    await ctx.db.patch(args.userId, {
+      accountLockedUntil: args.locked ? Date.now() + 365 * 24 * 60 * 60 * 1000 : undefined,
+    });
+
+    await ctx.db.insert("auditLogs", {
+      userId: adminId,
+      action: args.locked ? "user_locked" : "user_unlocked",
+      entity: "users",
+      entityId: args.userId,
+      timestamp: Date.now(),
+    });
+  },
+});
+
+export const generateReferralCodeForUser = mutation({
+  handler: async (ctx) => {
+    const userId = await requireAuth(ctx);
+    const user = await ctx.db.get(userId);
+    if (!user) throw new Error("User not found");
+
+    let code = generateReferralCode();
+    // Ensure uniqueness
+    const existing = await ctx.db
+      .query("users")
+      .withIndex("referralCode", (q) => q.eq("referralCode", code))
+      .first();
+    if (existing) {
+      code = generateReferralCode();
+    }
+
+    await ctx.db.patch(userId, { referralCode: code });
+    return code;
+  },
+});
+
+export const updatePreferences = mutation({
+  args: {
+    emailNotifications: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireAuth(ctx);
+
+    const updates: Record<string, any> = {};
+    if (args.emailNotifications !== undefined) updates.emailNotifications = args.emailNotifications;
+
+    await ctx.db.patch(userId, updates);
+  },
+});

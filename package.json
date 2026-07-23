@@ -1,6 +1,7 @@
 {
-  "name": "vite-template",
+  "name": "afrifundedcapital",
   "private": true,
+  "description": "AfriFundedCapital — Enterprise-grade CFD Prop Trading Platform",
   "version": "0.0.0",
   "type": "module",
   "scripts": {

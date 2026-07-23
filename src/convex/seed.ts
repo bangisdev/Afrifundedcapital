@@ -1,0 +1,103 @@
+import { v } from "convex/values";
+import { query, mutation, action } from "./_generated/server";
+import { internal } from "./_generated/api";
+
+// ═══════════════════════════════════════════════
+//  SETTINGS QUERIES
+// ═══════════════════════════════════════════════
+
+export const getSettingByKey = query({
+  args: { key: v.string() },
+  handler: async (ctx, args) => {
+    const settings = await ctx.db
+      .query("settings")
+      .withIndex("key", (q) => q.eq("key", args.key))
+      .first();
+    return settings || null;
+  },
+});
+
+export const listSettings = query({
+  args: { group: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    let settings = await ctx.db.query("settings").collect();
+    if (args.group) {
+      settings = settings.filter((s) => s.group === args.group);
+    }
+    return settings.sort((a, b) => a.key.localeCompare(b.key));
+  },
+});
+
+// ═══════════════════════════════════════════════
+//  SETTINGS MUTATIONS
+// ═══════════════════════════════════════════════
+
+export const insertSetting = mutation({
+  args: {
+    key: v.string(),
+    value: v.any(),
+    group: v.string(),
+    description: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.insert("settings", {
+      key: args.key,
+      value: args.value,
+      group: args.group,
+      description: args.description,
+    });
+  },
+});
+
+export const updateSetting = mutation({
+  args: {
+    key: v.string(),
+    value: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const setting = await ctx.db
+      .query("settings")
+      .withIndex("key", (q) => q.eq("key", args.key))
+      .first();
+
+    if (setting) {
+      await ctx.db.patch(setting._id, { value: args.value });
+    }
+  },
+});
+
+// ═══════════════════════════════════════════════
+//  SEED ACTION
+// ═══════════════════════════════════════════════
+
+export const seed = action({
+  handler: async (ctx) => {
+    // Seed default roles
+    await ctx.runMutation(internal.roles.seedDefaultRoles);
+
+    // Seed challenge templates
+    await ctx.runMutation(internal.challenges.seedChallengeTemplates);
+
+    // Seed default settings
+    const defaultSettings = [
+      { key: "platform_name", value: "AfriFundedCapital", group: "general", description: "Platform display name" },
+      { key: "platform_currency", value: "NGN", group: "general", description: "Default platform currency" },
+      { key: "min_withdrawal", value: 5000, group: "finance", description: "Minimum withdrawal amount" },
+      { key: "profit_share_percent", value: 90, group: "challenges", description: "Trader profit share percentage" },
+      { key: "affiliate_commission_percent", value: 10, group: "affiliates", description: "Default affiliate commission percentage" },
+      { key: "max_affiliate_levels", value: 3, group: "affiliates", description: "Maximum multi-level affiliate depth" },
+      { key: "require_kyc_for_challenge", value: true, group: "kyc", description: "Require KYC approval before purchasing challenges" },
+      { key: "mt5_server", value: "AfriFundedCapital-Demo", group: "mt5", description: "Default MT5 server name" },
+      { key: "mt5_group", value: "AFC-Demo", group: "mt5", description: "Default MT5 trading group" },
+      { key: "default_leverage", value: 100, group: "mt5", description: "Default account leverage" },
+      { key: "support_email", value: "support@afrifundedcapital.com", group: "general", description: "Support email address" },
+    ];
+
+    for (const setting of defaultSettings) {
+      const existing = await ctx.runQuery(internal.seed.getSettingByKey, { key: setting.key });
+      if (!existing) {
+        await ctx.runMutation(internal.seed.insertSetting, setting);
+      }
+    }
+  },
+});
