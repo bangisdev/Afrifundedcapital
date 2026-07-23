@@ -283,12 +283,14 @@ export const generateReferralCodeForUser = mutation({
 export const updatePreferences = mutation({
   args: {
     emailNotifications: v.optional(v.boolean()),
+    notificationPreferences: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
     const userId = await requireAuth(ctx);
 
     const updates: Record<string, any> = {};
     if (args.emailNotifications !== undefined) updates.emailNotifications = args.emailNotifications;
+    if (args.notificationPreferences !== undefined) updates.notificationPreferences = args.notificationPreferences;
 
     await ctx.db.patch(userId, updates);
   },

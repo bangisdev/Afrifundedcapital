@@ -25,10 +25,9 @@ import {
   AlertTriangle,
   Settings,
   BarChart3,
-  X,
-  ChevronRight,
   Clock,
   ExternalLink,
+  SlidersHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -225,6 +224,15 @@ export default function Notifications() {
               Mark all read
             </Button>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs h-8"
+            onClick={() => navigate("/dashboard/notifications/preferences")}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5 mr-1.5" />
+            Preferences
+          </Button>
           <Badge variant="outline" className="text-xs font-normal">
             {unreadCount > 0 ? `${unreadCount} unread` : "All clear"}
           </Badge>

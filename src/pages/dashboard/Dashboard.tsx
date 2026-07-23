@@ -9,6 +9,7 @@ import Certificates from "./Certificates";
 import Support from "./Support";
 import Profile from "./Profile";
 import Notifications from "./Notifications";
+import NotificationPreferences from "./NotificationPreferences";
 
 export default function Dashboard() {
   return (
@@ -23,6 +24,7 @@ export default function Dashboard() {
         <Route path="support" element={<Support />} />
         <Route path="profile" element={<Profile />} />
         <Route path="notifications" element={<Notifications />} />
+        <Route path="notifications/preferences" element={<NotificationPreferences />} />
       </Routes>
     </DashboardLayout>
   );

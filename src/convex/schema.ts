@@ -220,6 +220,7 @@ const schema = defineSchema(
 
       // Preferences
       emailNotifications: v.optional(v.boolean()),
+      notificationPreferences: v.optional(v.any()),
     })
       .index("email", ["email"])
       .index("referralCode", ["referralCode"])
