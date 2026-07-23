@@ -27,6 +27,7 @@ export default function Challenges() {
   const { user } = useAuth();
   const templates = useQuery(api.challenges.listChallengeTemplates, {});
   const myChallenges = useQuery(api.challenges.getMyChallenges);
+  const paymentProviders = useQuery(api.seed.getEnabledPaymentProviders);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [couponCode, setCouponCode] = useState("");
@@ -38,6 +39,10 @@ export default function Challenges() {
     api.challenges.getAccountSizesForTemplate,
     selectedTemplate ? { templateId: selectedTemplate as any } : "skip",
   );
+
+  // Payment provider config — reads from admin settings
+  const activeProvider = paymentProviders?.providers?.[0] || "flutterwave";
+  const providerLabel = activeProvider === "flutterwave" ? "Flutterwave" : "Paystack";
 
   if (!templates || !myChallenges) {
     return (
@@ -353,7 +358,7 @@ export default function Challenges() {
               </Button>
 
               <p className="text-[10px] text-muted-foreground text-center">
-                Secure payment powered by Flutterwave. Your payment data is encrypted.
+                Secure payment powered by {providerLabel}. Your payment data is encrypted.
               </p>
             </div>
           ) : null}

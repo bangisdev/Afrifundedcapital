@@ -67,6 +67,37 @@ export const updateSetting = mutation({
 });
 
 // ═══════════════════════════════════════════════
+//  PAYMENT PROVIDER QUERIES
+// ═══════════════════════════════════════════════
+
+/**
+ * Returns the list of enabled payment providers.
+ * Admin can toggle these from the Settings page.
+ */
+export const getEnabledPaymentProviders = query({
+  handler: async (ctx) => {
+    const providersSetting = await ctx.db
+      .query("settings")
+      .withIndex("key", (q) => q.eq("key", "payment_providers"))
+      .first();
+
+    const defaultSetting = await ctx.db
+      .query("settings")
+      .withIndex("key", (q) => q.eq("key", "default_payment_provider"))
+      .first();
+
+    const rawProviders = (providersSetting?.value as string) || "flutterwave";
+    const providers = rawProviders.split(",").map((p: string) => p.trim().toLowerCase()).filter(Boolean);
+    const defaultProvider = (defaultSetting?.value as string) || "flutterwave";
+
+    return {
+      providers,
+      defaultProvider,
+    };
+  },
+});
+
+// ═══════════════════════════════════════════════
 //  SEED ACTION
 // ═══════════════════════════════════════════════
 
@@ -91,6 +122,10 @@ export const seed = action({
       { key: "mt5_group", value: "AFC-Demo", group: "mt5", description: "Default MT5 trading group" },
       { key: "default_leverage", value: 100, group: "mt5", description: "Default account leverage" },
       { key: "support_email", value: "support@afrifundedcapital.com", group: "general", description: "Support email address" },
+
+      // Payment provider settings — enables admin to toggle providers later
+      { key: "payment_providers", value: "flutterwave", group: "payments", description: "Enabled payment providers (comma-separated: flutterwave,paystack)" },
+      { key: "default_payment_provider", value: "flutterwave", group: "payments", description: "Default payment provider shown at checkout" },
     ];
 
     for (const setting of defaultSettings) {
