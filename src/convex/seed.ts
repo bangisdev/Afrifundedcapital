@@ -109,14 +109,27 @@ export const getEnabledPaymentProviders = query({
 export const listChallengesForDemo = query({
   handler: async (ctx) => {
     const challenges = await ctx.db.query("userChallenges").collect();
-    // Only seed data for active, funded, or recently started challenges
-    return challenges.filter(
+    const eligible = challenges.filter(
       (c) =>
         c.status === "active" ||
         c.status === "funded" ||
         c.status === "phase_1_passed" ||
         c.status === "phase_2_passed",
     );
+
+    // Only return challenges that don't already have any trading metrics
+    // (per-challenge guard so already-seeded challenges are never re-seeded)
+    const result = [];
+    for (const challenge of eligible) {
+      const existingMetrics = await ctx.db
+        .query("tradingMetrics")
+        .withIndex("challengeId", (q) => q.eq("challengeId", challenge._id))
+        .first();
+      if (!existingMetrics) {
+        result.push(challenge);
+      }
+    }
+    return result;
   },
 });
 
