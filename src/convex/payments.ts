@@ -79,6 +79,36 @@ export const getPaymentStats = query({
   },
 });
 
+export const getRevenueGrowth = query({
+  handler: async (ctx) => {
+    await requireRole(ctx, [ROLES.SUPER_ADMIN, ROLES.FINANCE_ADMIN]);
+    const payments = await ctx.db.query("payments").collect();
+    const completed = payments.filter((p) => p.status === PAYMENT_STATUS.COMPLETED);
+
+    // Group by month (last 6 months)
+    const months: Record<string, number> = {};
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      months[key] = 0;
+    }
+
+    for (const p of completed) {
+      const d = new Date(p.createdAt);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (months[key] !== undefined) {
+        months[key] += p.amount;
+      }
+    }
+
+    return Object.entries(months).map(([month, revenue]) => ({
+      month,
+      revenue,
+    }));
+  },
+});
+
 // ═══════════════════════════════════════════════
 //  MUTATIONS
 // ═══════════════════════════════════════════════

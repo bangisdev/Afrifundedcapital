@@ -105,6 +105,34 @@ export const getUserStats = query({
   },
 });
 
+export const getUserGrowth = query({
+  handler: async (ctx) => {
+    const users = await ctx.db.query("users").collect();
+
+    // Group by month (last 6 months)
+    const months: Record<string, number> = {};
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      months[key] = 0;
+    }
+
+    for (const user of users) {
+      const d = new Date(user._creationTime ?? 0);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (months[key] !== undefined) {
+        months[key]++;
+      }
+    }
+
+    return Object.entries(months).map(([month, count]) => ({
+      month,
+      count,
+    }));
+  },
+});
+
 // ═══════════════════════════════════════════════
 //  MUTATIONS
 // ═══════════════════════════════════════════════

@@ -509,9 +509,7 @@ export const updateChallengeStatus = mutation({
     await ctx.db.patch(args.challengeId, {
       status: args.status as any,
       updatedAt: now,
-    });
-
-    // If funded, create funded account
+    });      // If funded, create funded account
     if (args.status === CHALLENGE_STATUS.FUNDED && challenge.mt5AccountId) {
       await ctx.db.insert("fundedAccounts", {
         userId: challenge.userId,
@@ -534,6 +532,41 @@ export const updateChallengeStatus = mutation({
         link: `/dashboard/challenges/${args.challengeId}`,
         createdAt: now,
       });
+
+      // Auto-issue funded certificate
+      try {
+        // Generate certificate number and verification code
+        const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        let certNum = "AFC-CERT-";
+        for (let i = 0; i < 8; i++) certNum += chars[Math.floor(Math.random() * chars.length)];
+
+        let verCode = "";
+        for (let i = 0; i < 16; i++) {
+          verCode += chars[Math.floor(Math.random() * chars.length)];
+          if (i === 3 || i === 7 || i === 11) verCode += "-";
+        }
+
+        await ctx.db.insert("certificates", {
+          userId: challenge.userId,
+          challengeId: args.challengeId,
+          type: "funded",
+          certificateNumber: certNum,
+          verificationCode: verCode,
+          issuedAt: Date.now(),
+        });
+
+        await ctx.db.insert("notifications", {
+          userId: challenge.userId,
+          type: "certificate_issued",
+          title: "Funded Certificate Issued",
+          message: "Your funded trader certificate is ready! View and share it in your dashboard.",
+          read: false,
+          link: "/dashboard/certificates",
+          createdAt: Date.now(),
+        });
+      } catch (e: any) {
+        console.error("Failed to auto-issue certificate:", e.message);
+      }
 
       // Send funded confirmation email with certificate verification link if available
       try {
