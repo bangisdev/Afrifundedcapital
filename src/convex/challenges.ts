@@ -204,6 +204,52 @@ export const getUserChallengeStats = query({
   },
 });
 
+export const getMyMetricsHistory = query({
+  handler: async (ctx) => {
+    const userId = await requireAuth(ctx);
+    const challenges = await ctx.db
+      .query("userChallenges")
+      .withIndex("userId", (q) => q.eq("userId", userId))
+      .collect();
+
+    const ids = challenges.map((c) => c._id);
+    const allMetrics: Array<{
+      balance: number;
+      equity: number;
+      currentDrawdown: number;
+      dailyDrawdown: number;
+      totalProfit: number;
+      profitTargetProgress: number;
+      tradingDaysCount: number;
+      recordedAt: number;
+      challengeId: string;
+    }> = [];
+
+    for (const id of ids) {
+      const metrics = await ctx.db
+        .query("tradingMetrics")
+        .withIndex("challengeId", (q) => q.eq("challengeId", id))
+        .collect();
+
+      for (const m of metrics) {
+        allMetrics.push({
+          balance: m.balance,
+          equity: m.equity,
+          currentDrawdown: m.currentDrawdown,
+          dailyDrawdown: m.dailyDrawdown,
+          totalProfit: m.totalProfit,
+          profitTargetProgress: m.profitTargetProgress,
+          tradingDaysCount: m.tradingDaysCount,
+          recordedAt: m.recordedAt,
+          challengeId: m.challengeId,
+        });
+      }
+    }
+
+    return allMetrics.sort((a, b) => a.recordedAt - b.recordedAt);
+  },
+});
+
 export const getDashboardMetrics = query({
   handler: async (ctx) => {
     const userId = await requireAuth(ctx);
@@ -238,7 +284,6 @@ export const getDashboardMetrics = query({
     };
   },
 });
-
 // ═══════════════════════════════════════════════
 //  MUTATIONS — TEMPLATES
 // ═══════════════════════════════════════════════

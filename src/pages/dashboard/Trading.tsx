@@ -1,13 +1,131 @@
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { Card } from "@/components/ui/card";
-import { Loader2, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
+import {
+  Loader2,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Server,
+  Key,
+  SlidersHorizontal,
+  DollarSign,
+  Activity,
+  BarChart3,
+  PieChart,
+  AlertCircle,
+} from "lucide-react";
+import {
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  ResponsiveContainer,
+} from "recharts";
+import { useMemo } from "react";
+import { useAuth } from "@/hooks/use-auth";
+
+const chartConfig = {
+  balance: {
+    label: "Balance",
+    color: "var(--chart-1)",
+  },
+  equity: {
+    label: "Equity",
+    color: "var(--chart-2)",
+  },
+  drawdown: {
+    label: "Drawdown",
+    color: "var(--destructive)",
+  },
+};
+
+function formatDate(ts: number) {
+  const d = new Date(ts);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function formatTime(ts: number) {
+  const d = new Date(ts);
+  return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+}
+
+function MetricCard({
+  label,
+  value,
+  trend,
+  subtitle,
+  destructive,
+}: {
+  label: string;
+  value: string;
+  trend?: "up" | "down" | "neutral";
+  subtitle?: string;
+  destructive?: boolean;
+}) {
+  return (
+    <div className="card-subtle p-4 space-y-1.5">
+      <div className="stat-label">{label}</div>
+      <div className={`stat-value ${destructive ? "text-destructive" : ""}`}>
+        {value}
+      </div>
+      {(trend || subtitle) && (
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          {trend === "up" && <TrendingUp className="h-3 w-3 text-foreground" />}
+          {trend === "down" && <TrendingDown className="h-3 w-3 text-destructive" />}
+          {trend === "neutral" && <Minus className="h-3 w-3 text-muted-foreground" />}
+          {subtitle && <span>{subtitle}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Trading() {
+  const { user } = useAuth();
   const challenges = useQuery(api.challenges.getMyChallenges);
   const metrics = useQuery(api.challenges.getDashboardMetrics);
+  const metricsHistory = useQuery(api.challenges.getMyMetricsHistory);
+  const mt5Accounts = useQuery(api.mt5.getMyMt5Accounts);
 
-  if (!challenges || !metrics) {
+  const isLoading = !challenges || !metrics || !metricsHistory || !mt5Accounts;
+
+  const chartData = useMemo(() => {
+    if (!metricsHistory || metricsHistory.length === 0) return [];
+    // Sample down to max 50 data points for chart readability
+    const step = Math.max(1, Math.floor(metricsHistory.length / 50));
+    return metricsHistory
+      .filter((_, i) => i % step === 0)
+      .map((m) => ({
+        time: formatDate(m.recordedAt),
+        balance: m.balance,
+        equity: m.equity,
+        drawdown: m.currentDrawdown,
+      }));
+  }, [metricsHistory]);
+
+  const drawdownData = useMemo(() => {
+    if (!metricsHistory || metricsHistory.length === 0) return [];
+    const step = Math.max(1, Math.floor(metricsHistory.length / 50));
+    return metricsHistory
+      .filter((_, i) => i % step === 0)
+      .map((m) => ({
+        time: formatDate(m.recordedAt),
+        drawdown: m.currentDrawdown,
+        dailyDrawdown: m.dailyDrawdown,
+      }));
+  }, [metricsHistory]);
+
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -15,152 +133,461 @@ export default function Trading() {
     );
   }
 
-  // Find funded challenges
-  const fundedChallenges = challenges.filter((c) => c.status === "funded");
   const activeChallenges = challenges.filter((c) => c.status === "active");
-
+  const fundedChallenges = challenges.filter((c) => c.status === "funded");
   const latestMetrics = metrics.latestMetrics;
+  const hasCharts = chartData.length > 0;
+
+  // Compute aggregate stats
+  const totalBalance = mt5Accounts.reduce((sum, a) => sum + a.balance, 0);
+  const totalEquity = mt5Accounts.reduce((sum, a) => sum + a.equity, 0);
+  const floatingPL = totalEquity - totalBalance;
 
   return (
     <div className="space-y-8">
+      {/* Header */}
       <div>
         <h1 className="text-lg font-medium tracking-tight">Trading</h1>
         <p className="text-xs text-muted-foreground mt-1">
-          Monitor your trading performance and account metrics
+          Monitor your trading performance, account details, and real-time metrics
         </p>
       </div>
 
-      {/* Performance metrics */}
-      {latestMetrics ? (
+      {/* Summary Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <MetricCard
+          label="Total Balance"
+          value={`$${totalBalance.toLocaleString()}`}
+        />
+        <MetricCard
+          label="Total Equity"
+          value={`$${totalEquity.toLocaleString()}`}
+          trend={floatingPL >= 0 ? "up" : "down"}
+          subtitle={`Floating: ${floatingPL >= 0 ? "+" : ""}$${floatingPL.toFixed(2)}`}
+          destructive={floatingPL < 0}
+        />
+        <MetricCard
+          label="Active Challenges"
+          value={String(activeChallenges.length)}
+          subtitle={fundedChallenges.length > 0 ? `${fundedChallenges.length} funded` : undefined}
+        />
+        <MetricCard
+          label="MT5 Accounts"
+          value={String(mt5Accounts.length)}
+          subtitle={mt5Accounts.filter((a) => a.isActive).length + " active"}
+        />
+      </div>
+
+      {/* MT5 Accounts Section */}
+      {mt5Accounts.length > 0 && (
         <div className="space-y-4">
-          <h2 className="text-sm font-medium">Current Metrics</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="card-subtle p-4">
-              <div className="stat-label">Balance</div>
-              <div className="stat-value mt-1">${latestMetrics.balance.toLocaleString()}</div>
-            </div>
-            <div className="card-subtle p-4">
-              <div className="stat-label">Equity</div>
-              <div className="stat-value mt-1">${latestMetrics.equity.toLocaleString()}</div>
-            </div>
-            <div className="card-subtle p-4">
-              <div className="stat-label">Floating P/L</div>
-              <div className={`stat-value mt-1 ${latestMetrics.floatingPL >= 0 ? "text-foreground" : "text-destructive"}`}>
-                ${latestMetrics.floatingPL.toFixed(2)}
-              </div>
-            </div>
-            <div className="card-subtle p-4">
-              <div className="stat-label">Total Profit</div>
-              <div className={`stat-value mt-1 ${latestMetrics.totalProfit >= 0 ? "text-foreground" : "text-destructive"}`}>
-                ${latestMetrics.totalProfit.toFixed(2)}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="card-subtle p-4">
-              <div className="stat-label">Win Rate</div>
-              <div className="stat-value mt-1">{latestMetrics.winRate?.toFixed(1) || 0}%</div>
-            </div>
-            <div className="card-subtle p-4">
-              <div className="stat-label">Profit Factor</div>
-              <div className="stat-value mt-1">{latestMetrics.profitFactor?.toFixed(2) || 0}</div>
-            </div>
-            <div className="card-subtle p-4">
-              <div className="stat-label">Risk Score</div>
-              <div className="stat-value mt-1">{latestMetrics.riskScore || 0}/100</div>
-            </div>
-            <div className="card-subtle p-4">
-              <div className="stat-label">Health Score</div>
-              <div className="stat-value mt-1">{latestMetrics.healthScore || 0}/100</div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="card-subtle p-4">
-              <div className="stat-label">Open Positions</div>
-              <div className="stat-value mt-1">{latestMetrics.openPositions}</div>
-            </div>
-            <div className="card-subtle p-4">
-              <div className="stat-label">Closed Trades</div>
-              <div className="stat-value mt-1">{latestMetrics.closedTrades}</div>
-            </div>
-            <div className="card-subtle p-4">
-              <div className="stat-label">Drawdown</div>
-              <div className={`stat-value mt-1 ${latestMetrics.currentDrawdown > 5 ? "text-destructive" : ""}`}>
-                {latestMetrics.currentDrawdown.toFixed(2)}%
-              </div>
-            </div>
-            <div className="card-subtle p-4">
-              <div className="stat-label">Daily Drawdown</div>
-              <div className={`stat-value mt-1 ${latestMetrics.dailyDrawdown > 3 ? "text-destructive" : ""}`}>
-                {latestMetrics.dailyDrawdown.toFixed(2)}%
-              </div>
-            </div>
+          <h2 className="text-sm font-medium">MT5 Accounts</h2>
+          <div className="grid md:grid-cols-2 gap-4">
+            {mt5Accounts.map((acc) => {
+              const hasMetrics = metricsHistory?.some(
+                (m) => m.challengeId === activeChallenges.find((c) => c.mt5AccountId === acc._id)?._id
+              );
+              return (
+                <Card key={acc._id} className="gap-0">
+                  <CardHeader className="pb-3 flex-row items-center justify-between gap-0">
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center">
+                        <Server className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-sm font-medium">
+                          Account #{acc.login}
+                        </CardTitle>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {acc.server} · {acc.currency}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge
+                      variant={acc.isSuspended ? "destructive" : acc.isActive ? "default" : "secondary"}
+                      className="text-[10px]"
+                    >
+                      {acc.isSuspended ? "Suspended" : acc.isActive ? "Active" : "Inactive"}
+                    </Badge>
+                  </CardHeader>
+                  <CardContent className="space-y-3 pt-0">
+                    {/* Key details */}
+                    <div className="grid grid-cols-3 gap-3 text-xs">
+                      <div>
+                        <div className="text-muted-foreground mb-0.5">Balance</div>
+                        <div className="font-medium">${acc.balance.toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground mb-0.5">Equity</div>
+                        <div className="font-medium">${acc.equity.toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground mb-0.5">Leverage</div>
+                        <div className="font-medium">1:{acc.leverage}</div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <div className="text-muted-foreground mb-0.5">Login</div>
+                        <div className="font-mono text-[11px]">{acc.login}</div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground mb-0.5">Group</div>
+                        <div className="font-medium truncate">{acc.group}</div>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <SlidersHorizontal className="h-3 w-3" />
+                        <span>Password: ••••••••</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Key className="h-3 w-3" />
+                        <span>Investor: ••••••••</span>
+                      </div>
+                    </div>
+                    {acc.lastSyncAt && (
+                      <p className="text-[10px] text-muted-foreground">
+                        Last synced: {formatDate(acc.lastSyncAt)} at {formatTime(acc.lastSyncAt)}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
-      ) : (
-        <div className="card-subtle p-8 text-center">
+      )}
+
+      {/* Empty state for no MT5 accounts */}
+      {mt5Accounts.length === 0 && !isLoading && (
+        <div className="card-subtle p-8 text-center space-y-2">
+          <Server className="h-8 w-8 mx-auto text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
-            No trading data available yet. Start an active challenge to see metrics.
+            No MT5 accounts yet. Purchase and start a challenge to get one.
           </p>
         </div>
       )}
 
+      {/* Charts Section */}
+      {hasCharts ? (
+        <div className="space-y-6">
+          <h2 className="text-sm font-medium">Performance Charts</h2>
+
+          {/* Equity / Balance Line Chart */}
+          <Card className="gap-0">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Activity className="h-4 w-4 text-muted-foreground" />
+                Balance & Equity
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ChartContainer config={chartConfig} className="aspect-[2/1] w-full">
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                  <XAxis
+                    dataKey="time"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                    domain={["auto", "auto"]}
+                    tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+                  />
+                  <ChartTooltip
+                    cursor={false}
+                    content={<ChartTooltipContent />}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="balance"
+                    stroke="var(--color-balance)"
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{ r: 4, strokeWidth: 0 }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="equity"
+                    stroke="var(--color-equity)"
+                    strokeWidth={2}
+                    strokeDasharray="4 4"
+                    dot={false}
+                    activeDot={{ r: 4, strokeWidth: 0 }}
+                  />
+                </LineChart>
+              </ChartContainer>
+              <p className="text-[10px] text-muted-foreground mt-2">
+                Solid line: Balance · Dashed line: Equity
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Drawdown Area Chart */}
+          <Card className="gap-0">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                Drawdown Tracker
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ChartContainer config={chartConfig} className="aspect-[2/1] w-full">
+                <AreaChart data={drawdownData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                  <XAxis
+                    dataKey="time"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                    domain={[0, "auto"]}
+                    tickFormatter={(v) => `${v.toFixed(1)}%`}
+                  />
+                  <ChartTooltip
+                    cursor={false}
+                    content={<ChartTooltipContent />}
+                  />
+                  <defs>
+                    <linearGradient id="drawdownFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="var(--color-drawdown)" stopOpacity={0.2} />
+                      <stop offset="100%" stopColor="var(--color-drawdown)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <Area
+                    type="monotone"
+                    dataKey="drawdown"
+                    stroke="var(--color-drawdown)"
+                    fill="url(#drawdownFill)"
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{ r: 4, strokeWidth: 0 }}
+                  />
+                </AreaChart>
+              </ChartContainer>
+              <p className="text-[10px] text-muted-foreground mt-2">
+                Current drawdown over time
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        mt5Accounts.length > 0 && (
+          <div className="card-subtle p-8 text-center space-y-2">
+            <BarChart3 className="h-8 w-8 mx-auto text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">
+              No trading metrics recorded yet. Charts will appear once trading data is synced.
+            </p>
+          </div>
+        )
+      )}
+
+      {/* Latest Metrics */}
+      {latestMetrics ? (
+        <div className="space-y-4">
+          <h2 className="text-sm font-medium">Current Metrics</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <MetricCard
+              label="Balance"
+              value={`$${latestMetrics.balance.toLocaleString()}`}
+            />
+            <MetricCard
+              label="Equity"
+              value={`$${latestMetrics.equity.toLocaleString()}`}
+            />
+            <MetricCard
+              label="Floating P/L"
+              value={`${latestMetrics.floatingPL >= 0 ? "+" : ""}$${latestMetrics.floatingPL.toFixed(2)}`}
+              destructive={latestMetrics.floatingPL < 0}
+            />
+            <MetricCard
+              label="Total Profit"
+              value={`${latestMetrics.totalProfit >= 0 ? "+" : ""}$${latestMetrics.totalProfit.toFixed(2)}`}
+              destructive={latestMetrics.totalProfit < 0}
+            />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <MetricCard
+              label="Win Rate"
+              value={`${latestMetrics.winRate?.toFixed(1) || 0}%`}
+            />
+            <MetricCard
+              label="Profit Factor"
+              value={latestMetrics.profitFactor?.toFixed(2) || "0.00"}
+              trend={latestMetrics.profitFactor && latestMetrics.profitFactor > 1 ? "up" : "down"}
+            />
+            <MetricCard
+              label="Risk Score"
+              value={`${latestMetrics.riskScore || 0}/100`}
+              destructive={(latestMetrics.riskScore || 0) > 50}
+            />
+            <MetricCard
+              label="Health Score"
+              value={`${latestMetrics.healthScore || 0}/100`}
+              trend={(latestMetrics.healthScore || 0) > 50 ? "up" : "down"}
+            />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <MetricCard
+              label="Open Positions"
+              value={String(latestMetrics.openPositions)}
+            />
+            <MetricCard
+              label="Closed Trades"
+              value={String(latestMetrics.closedTrades)}
+            />
+            <MetricCard
+              label="Drawdown"
+              value={`${latestMetrics.currentDrawdown.toFixed(2)}%`}
+              destructive={latestMetrics.currentDrawdown > 5}
+              subtitle={`Max: ${challenges.find((c) => c.status === "active")?.maxDrawdown || 0}%`}
+            />
+            <MetricCard
+              label="Daily Drawdown"
+              value={`${latestMetrics.dailyDrawdown.toFixed(2)}%`}
+              destructive={latestMetrics.dailyDrawdown > 3}
+              subtitle={`Max: ${challenges.find((c) => c.status === "active")?.dailyDrawdown || 0}%`}
+            />
+          </div>
+        </div>
+      ) : mt5Accounts.length > 0 ? (
+        <div className="card-subtle p-8 text-center space-y-2">
+          <Activity className="h-8 w-8 mx-auto text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">
+            No trading metrics available yet. Metrics appear once your MT5 account receives trading data.
+          </p>
+        </div>
+      ) : null}
+
       {/* Active Challenges */}
       {activeChallenges.length > 0 && (
-        <div className="space-y-3">
+        <div className="space-y-4">
           <h2 className="text-sm font-medium">Active Challenges</h2>
-          {activeChallenges.map((ch) => (
-            <div key={ch._id} className="card-subtle p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <div className="text-sm font-medium">${ch.accountSize.toLocaleString()} Account</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    Target: {ch.profitTarget}% | Max DD: {ch.maxDrawdown}%
-                  </div>
-                </div>
-                <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded bg-foreground text-background">
-                  Active
-                </span>
-              </div>
-              <div className="space-y-2">
-                <div>
-                  <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                    <span>Profit Target Progress</span>
-                    <span>0%</span>
-                  </div>
-                  <div className="progress-bar">
-                    <div className="progress-bar-fill" style={{ width: "0%" }} />
-                  </div>
-                </div>
-                <div className="flex gap-4 text-xs text-muted-foreground">
-                  <span>{ch.minTradingDays} min trading days</span>
-                  <span>{ch.maxLeverage}:1 leverage</span>
-                </div>
-              </div>
-            </div>
-          ))}
+          <div className="grid gap-4">
+            {activeChallenges.map((ch) => {
+              const chMetrics = metricsHistory
+                ?.filter((m) => m.challengeId === ch._id)
+                .sort((a, b) => b.recordedAt - a.recordedAt);
+              const latest = chMetrics?.[0];
+
+              return (
+                <Card key={ch._id} className="gap-0">
+                  <CardHeader className="pb-3 flex-row items-center justify-between gap-0">
+                    <div>
+                      <CardTitle className="text-sm font-medium">
+                        ${ch.accountSize.toLocaleString()} — {(ch as any).templateName || "Challenge"}
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Target: {ch.profitTarget}% · Max DD: {ch.maxDrawdown}% · Leverage: 1:{ch.maxLeverage}
+                      </p>
+                    </div>
+                    <Badge variant="default" className="text-[10px]">
+                      Active
+                    </Badge>
+                  </CardHeader>
+                  <CardContent className="space-y-3 pt-0">
+                    {/* Profit target progress */}
+                    <div>
+                      <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
+                        <span>Profit Target Progress</span>
+                        <span>{latest ? `${latest.profitTargetProgress.toFixed(1)}%` : "0%"}</span>
+                      </div>
+                      <div className="progress-bar">
+                        <div
+                          className="progress-bar-fill"
+                          style={{ width: `${Math.min(latest?.profitTargetProgress || 0, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Mini metrics row */}
+                    <div className="grid grid-cols-4 gap-3 text-xs">
+                      <div>
+                        <div className="text-muted-foreground mb-0.5">Balance</div>
+                        <div className="font-medium">${latest?.balance.toLocaleString() || ch.accountSize.toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground mb-0.5">Equity</div>
+                        <div className="font-medium">${latest?.equity.toLocaleString() || ch.accountSize.toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground mb-0.5">Drawdown</div>
+                        <div className={`font-medium ${latest && latest.currentDrawdown > ch.dailyDrawdown * 0.8 ? "text-destructive" : ""}`}>
+                          {latest ? `${latest.currentDrawdown.toFixed(1)}%` : "0%"}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground mb-0.5">Days</div>
+                        <div className="font-medium">{latest?.tradingDaysCount || 0}/{ch.minTradingDays}</div>
+                      </div>
+                    </div>
+
+                    {/* Violation warnings */}
+                    {ch.violations && ch.violations.length > 0 && (
+                      <div className="flex items-start gap-2 p-2 rounded bg-destructive/5 text-xs text-destructive">
+                        <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />
+                        <span>
+                          {ch.violations.length} violation{ch.violations.length > 1 ? "s" : ""} — {ch.violations[ch.violations.length - 1].description}
+                        </span>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
         </div>
       )}
 
       {/* Funded Accounts */}
       {fundedChallenges.length > 0 && (
-        <div className="space-y-3">
+        <div className="space-y-4">
           <h2 className="text-sm font-medium">Funded Accounts</h2>
-          {fundedChallenges.map((ch) => (
-            <div key={ch._id} className="card-subtle p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-medium">${ch.accountSize.toLocaleString()} Funded Account</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">90% Profit Share</div>
-                </div>
-                <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded bg-foreground text-background">
-                  Funded
-                </span>
-              </div>
-            </div>
-          ))}
+          <div className="grid gap-4">
+            {fundedChallenges.map((ch) => (
+              <Card key={ch._id} className="gap-0">
+                <CardHeader className="pb-3 flex-row items-center justify-between gap-0">
+                  <div>
+                    <CardTitle className="text-sm font-medium">
+                      ${ch.accountSize.toLocaleString()} Funded Account
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {(ch as any).templateName || "Funded"} · 90% Profit Share
+                    </p>
+                  </div>
+                  <Badge variant="default" className="text-[10px] bg-foreground text-background">
+                    Funded
+                  </Badge>
+                </CardHeader>
+                <CardContent className="pt-0 text-xs text-muted-foreground">
+                  {ch.mt5AccountId ? (
+                    <div className="flex items-center gap-1.5">
+                      <DollarSign className="h-3 w-3" />
+                      <span>MT5 account linked</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <AlertCircle className="h-3 w-3" />
+                      <span>Awaiting MT5 provisioning</span>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       )}
     </div>
