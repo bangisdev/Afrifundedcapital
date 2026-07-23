@@ -100,7 +100,9 @@ export default function Trading() {
   const metricsHistory = useQuery(api.challenges.getMyMetricsHistory);
   const mt5Accounts = useQuery(api.mt5.getMyMt5Accounts);
   const seedDemoData = useAction(api.demoSeeder.seedDemoTradingData);
+  const resetChallenge = useAction(api.demoSeeder.resetChallengeDemoData);
   const [seeding, setSeeding] = useState(false);
+  const [resettingId, setResettingId] = useState<string | null>(null);
   const [autoSeeding, setAutoSeeding] = useState(false);
   const [seedResult, setSeedResult] = useState<string | null>(null);
 
@@ -622,6 +624,26 @@ export default function Trading() {
           <h2 className="text-sm font-medium">Active Challenges</h2>
           <div className="grid gap-4">
             {activeChallenges.map((ch) => {
+              const chHasMetrics = metricsHistory?.some((m) => m.challengeId === ch._id);
+              const isResetting = resettingId === ch._id;
+
+              const handleResetChallenge = async () => {
+                if (isResetting) return;
+                setResettingId(ch._id);
+                try {
+                  const result: any = await resetChallenge({ challengeId: ch._id });
+                  toast.success("Demo data reset", {
+                    description: result.message || "Challenge re-seeded successfully.",
+                  });
+                } catch (e: any) {
+                  toast.error("Reset failed", {
+                    description: e.message || "Could not reset demo data.",
+                  });
+                } finally {
+                  setResettingId(null);
+                }
+              };
+
               const chMetrics = metricsHistory
                 ?.filter((m) => m.challengeId === ch._id)
                 .sort((a, b) => b.recordedAt - a.recordedAt);
@@ -680,6 +702,25 @@ export default function Trading() {
                     </div>
 
                     {/* Violation warnings */}
+                    {chHasMetrics && (
+                      <div className="flex justify-end">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleResetChallenge}
+                          disabled={isResetting}
+                          className="gap-1.5 text-[10px] h-7 px-2 text-muted-foreground hover:text-foreground"
+                        >
+                          {isResetting ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Sparkles className="h-3 w-3" />
+                          )}
+                          {isResetting ? "Reseeding…" : "Reset Demo"}
+                        </Button>
+                      </div>
+                    )}
+
                     {ch.violations && ch.violations.length > 0 && (
                       <div className="flex items-start gap-2 p-2 rounded bg-destructive/5 text-xs text-destructive">
                         <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />

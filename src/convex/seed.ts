@@ -188,6 +188,74 @@ export const markUserAsDemoSeeded = mutation({
   },
 });
 
+export const getChallengeForReset = query({
+  args: {
+    challengeId: v.id("userChallenges"),
+  },
+  handler: async (ctx, args) => {
+    const challenge = await ctx.db.get(args.challengeId);
+    if (
+      !challenge ||
+      (challenge.status !== "active" &&
+        challenge.status !== "funded" &&
+        challenge.status !== "phase_1_passed" &&
+        challenge.status !== "phase_2_passed")
+    ) {
+      return null;
+    }
+    return challenge;
+  },
+});
+
+export const clearDemoDataForChallenge = mutation({
+  args: {
+    challengeId: v.id("userChallenges"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    // Delete all trading metrics for this challenge
+    const metrics = await ctx.db
+      .query("tradingMetrics")
+      .withIndex("challengeId", (q) => q.eq("challengeId", args.challengeId))
+      .collect();
+    for (const m of metrics) {
+      await ctx.db.delete(m._id);
+    }
+
+    // Delete all drawdown history for this challenge
+    const drawdowns = await ctx.db
+      .query("drawdownHistory")
+      .withIndex("challengeId", (q) => q.eq("challengeId", args.challengeId))
+      .collect();
+    for (const d of drawdowns) {
+      await ctx.db.delete(d._id);
+    }
+
+    // Check if user has any other challenges with metrics — if none left, reset isDemoSeeded
+    const userChallenges = await ctx.db
+      .query("userChallenges")
+      .withIndex("userId", (q) => q.eq("userId", args.userId))
+      .collect();
+    let anyRemainingMetrics = false;
+    for (const ch of userChallenges) {
+      if (ch._id === args.challengeId) continue;
+      const existing = await ctx.db
+        .query("tradingMetrics")
+        .withIndex("challengeId", (q) => q.eq("challengeId", ch._id))
+        .first();
+      if (existing) {
+        anyRemainingMetrics = true;
+        break;
+      }
+    }
+    if (!anyRemainingMetrics) {
+      await ctx.db.patch(args.userId, {
+        isDemoSeeded: false,
+      });
+    }
+  },
+});
+
 // ═══════════════════════════════════════════════
 //  MAIN SEED ACTION
 // ═══════════════════════════════════════════════
