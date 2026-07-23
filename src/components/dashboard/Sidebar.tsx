@@ -49,6 +49,7 @@ const adminNavItems: NavItem[] = [
   { label: "Users", icon: <Users className="h-4 w-4" />, path: "/admin/users" },
   { label: "Challenges", icon: <BarChart3 className="h-4 w-4" />, path: "/admin/challenges" },
   { label: "Payments", icon: <Wallet className="h-4 w-4" />, path: "/admin/payments" },
+  { label: "Payouts", icon: <DollarSign className="h-4 w-4" />, path: "/admin/payouts" },
   { label: "KYC", icon: <Shield className="h-4 w-4" />, path: "/admin/kyc" },
   { label: "Affiliates", icon: <Percent className="h-4 w-4" />, path: "/admin/affiliates" },
   { label: "Coupons", icon: <Gift className="h-4 w-4" />, path: "/admin/coupons" },

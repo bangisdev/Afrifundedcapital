@@ -14,6 +14,7 @@ import AdminAuditLogs from "./AdminAuditLogs";
 import AdminMT5 from "./AdminMT5";
 import AdminNotifications from "./AdminNotifications";
 import AdminReports from "./AdminReports";
+import AdminPayouts from "./AdminPayouts";
 
 export default function AdminDashboard() {
   return (
@@ -23,6 +24,7 @@ export default function AdminDashboard() {
         <Route path="users" element={<AdminUsers />} />
         <Route path="challenges" element={<AdminChallenges />} />
         <Route path="payments" element={<AdminPayments />} />
+        <Route path="payouts" element={<AdminPayouts />} />
         <Route path="kyc" element={<AdminKyc />} />
         <Route path="affiliates" element={<AdminAffiliates />} />
         <Route path="coupons" element={<AdminCoupons />} />
