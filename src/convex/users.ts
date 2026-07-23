@@ -178,6 +178,36 @@ export const getUserGrowth = query({
   },
 });
 
+export const listUsersBrief = query({
+  args: {
+    search: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, [ROLES.SUPER_ADMIN]);
+
+    const { search, limit = 20 } = args;
+    let users = await ctx.db.query("users").collect();
+
+    if (search) {
+      const q = search.toLowerCase();
+      users = users.filter(
+        (u) =>
+          u.name?.toLowerCase().includes(q) ||
+          u.email?.toLowerCase().includes(q),
+      );
+    }
+
+    users.sort((a, b) => (b._creationTime ?? 0) - (a._creationTime ?? 0));
+
+    return users.slice(0, limit).map((u) => ({
+      _id: u._id,
+      name: u.name,
+      email: u.email,
+    }));
+  },
+});
+
 export const listAuditLogs = query({
   args: {
     limit: v.optional(v.number()),

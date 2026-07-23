@@ -191,6 +191,35 @@ export const processMt5SyncQueue = mutation({
   },
 });
 
+export const purgeMt5SyncQueue = mutation({
+  args: {
+    status: v.string(),
+    olderThanHours: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, [ROLES.SUPER_ADMIN]);
+
+    let queue = await ctx.db.query("mt5SyncQueue").collect();
+
+    const cutoff = args.olderThanHours
+      ? Date.now() - args.olderThanHours * 60 * 60 * 1000
+      : 0;
+
+    let removed = 0;
+    for (const item of queue) {
+      if (item.status === args.status && (!cutoff || item.createdAt < cutoff)) {
+        await ctx.db.delete(item._id);
+        removed++;
+      }
+    }
+
+    return removed;
+  },
+});
+
+// ═══════════════════════════════════════════════
+//  ACTIONS
+
 // ═══════════════════════════════════════════════
 //  ACTIONS — External API calls
 // ═══════════════════════════════════════════════
