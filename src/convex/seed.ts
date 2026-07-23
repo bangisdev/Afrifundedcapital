@@ -73,10 +73,10 @@ export const updateSetting = mutation({
 export const seed = action({
   handler: async (ctx) => {
     // Seed default roles
-    await ctx.runMutation(internal.roles.seedDefaultRoles);
+    await ctx.runMutation((internal as any).roles.seedDefaultRoles);
 
     // Seed challenge templates
-    await ctx.runMutation(internal.challenges.seedChallengeTemplates);
+    await ctx.runMutation((internal as any).challenges.seedChallengeTemplates);
 
     // Seed default settings
     const defaultSettings = [
@@ -94,9 +94,9 @@ export const seed = action({
     ];
 
     for (const setting of defaultSettings) {
-      const existing = await ctx.runQuery(internal.seed.getSettingByKey, { key: setting.key });
+      const existing = await ctx.runQuery((internal as any).seed.getSettingByKey, { key: setting.key });
       if (!existing) {
-        await ctx.runMutation(internal.seed.insertSetting, setting);
+        await ctx.runMutation((internal as any).seed.insertSetting, setting);
       }
     }
   },

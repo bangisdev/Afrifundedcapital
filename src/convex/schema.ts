@@ -867,9 +867,6 @@ const schema = defineSchema(
       .index("mt5AccountId", ["mt5AccountId"])
       .index("status", ["status"]),
   },
-  {
-    schemaValidation: false,
-  },
 );
 
 export default schema;

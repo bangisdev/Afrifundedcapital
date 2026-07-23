@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { requireAuth, requireRole } from "./users";
-import { ROLES, WALLET_TRANSACTION_TYPES } from "./schema";
+import { ROLES } from "./schema";
 
 // ═══════════════════════════════════════════════
 //  QUERIES
@@ -11,26 +11,12 @@ export const getMyWallet = query({
   handler: async (ctx) => {
     const userId = await requireAuth(ctx);
 
-    let wallet = await ctx.db
+    const wallet = await ctx.db
       .query("wallets")
       .withIndex("userId", (q) => q.eq("userId", userId))
       .first();
 
-    // Create wallet if it doesn't exist
-    if (!wallet) {
-      const id = await ctx.db.insert("wallets", {
-        userId,
-        balance: 0,
-        referralBalance: 0,
-        bonusBalance: 0,
-        currency: "NGN",
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      });
-      wallet = await ctx.db.get(id);
-    }
-
-    return wallet;
+    return wallet || null;
   },
 });
 
@@ -76,6 +62,31 @@ export const listAllWallets = query({
 // ═══════════════════════════════════════════════
 //  MUTATIONS
 // ═══════════════════════════════════════════════
+
+export const ensureWallet = mutation({
+  handler: async (ctx) => {
+    const userId = await requireAuth(ctx);
+
+    const existing = await ctx.db
+      .query("wallets")
+      .withIndex("userId", (q) => q.eq("userId", userId))
+      .first();
+
+    if (existing) return existing._id;
+
+    const id = await ctx.db.insert("wallets", {
+      userId,
+      balance: 0,
+      referralBalance: 0,
+      bonusBalance: 0,
+      currency: "NGN",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    return id;
+  },
+});
 
 export const creditWallet = mutation({
   args: {
@@ -218,7 +229,7 @@ export const processPayout = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, [ROLES.SUPER_ADMIN, ROLES.FINANCE_ADMIN, ROLES.AFFILIATE_MANAGER as string]);
+    await requireRole(ctx, [ROLES.SUPER_ADMIN, ROLES.FINANCE_ADMIN, ROLES.AFFILIATE_MANAGER]);
 
     const payout = await ctx.db.get(args.payoutId);
     if (!payout) throw new Error("Payout not found");

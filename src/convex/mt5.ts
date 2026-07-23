@@ -202,7 +202,7 @@ export const syncMt5Account = action({
     equity: v.number(),
   },
   handler: async (ctx, args) => {
-    await ctx.runMutation(internal.mt5.updateMt5Account, {
+    await ctx.runMutation((internal as any).mt5.updateMt5Account, {
       accountId: args.mt5AccountId,
       balance: args.balance,
       equity: args.equity,

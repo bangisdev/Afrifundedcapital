@@ -11,31 +11,12 @@ export const getMyAffiliate = query({
   handler: async (ctx) => {
     const userId = await requireAuth(ctx);
 
-    let affiliate = await ctx.db
+    const affiliate = await ctx.db
       .query("affiliates")
       .withIndex("userId", (q) => q.eq("userId", userId))
       .first();
 
-    // Auto-create if not exists
-    if (!affiliate) {
-      const user = await ctx.db.get(userId);
-      const code = user?.referralCode || `AFC${userId.slice(0, 6).toUpperCase()}`;
-
-      const id = await ctx.db.insert("affiliates", {
-        userId,
-        referralCode: code,
-        totalReferrals: 0,
-        activeReferrals: 0,
-        totalCommissions: 0,
-        pendingCommissions: 0,
-        paidCommissions: 0,
-        commissionRate: 10,
-        commissionLevels: 1,
-        isActive: true,
-        joinedAt: Date.now(),
-      });
-      affiliate = await ctx.db.get(id);
-    }
+    if (!affiliate) return null;
 
     // Get referrals
     const referrals = await ctx.db
@@ -62,7 +43,7 @@ export const getMyAffiliate = query({
 export const listAffiliates = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    await requireRole(ctx, [ROLES.SUPER_ADMIN, ROLES.AFFILIATE_MANAGER as string, ROLES.MARKETING_ADMIN as string]);
+    await requireRole(ctx, [ROLES.SUPER_ADMIN, ROLES.AFFILIATE_MANAGER, ROLES.MARKETING_ADMIN]);
 
     const affiliates = await ctx.db.query("affiliates").collect();
     const enriched = await Promise.all(
@@ -78,7 +59,7 @@ export const listAffiliates = query({
 
 export const getAffiliateStats = query({
   handler: async (ctx) => {
-    await requireRole(ctx, [ROLES.SUPER_ADMIN, ROLES.AFFILIATE_MANAGER as string]);
+    await requireRole(ctx, [ROLES.SUPER_ADMIN, ROLES.AFFILIATE_MANAGER]);
 
     const affiliates = await ctx.db.query("affiliates").collect();
     const commissions = await ctx.db.query("commissions").collect();
@@ -99,6 +80,38 @@ export const getAffiliateStats = query({
 // ═══════════════════════════════════════════════
 //  MUTATIONS
 // ═══════════════════════════════════════════════
+
+export const ensureAffiliate = mutation({
+  handler: async (ctx) => {
+    const userId = await requireAuth(ctx);
+
+    const existing = await ctx.db
+      .query("affiliates")
+      .withIndex("userId", (q) => q.eq("userId", userId))
+      .first();
+
+    if (existing) return existing._id;
+
+    const user = await ctx.db.get(userId);
+    const code = user?.referralCode || `AFC${userId.slice(0, 6).toUpperCase()}`;
+
+    const id = await ctx.db.insert("affiliates", {
+      userId,
+      referralCode: code,
+      totalReferrals: 0,
+      activeReferrals: 0,
+      totalCommissions: 0,
+      pendingCommissions: 0,
+      paidCommissions: 0,
+      commissionRate: 10,
+      commissionLevels: 1,
+      isActive: true,
+      joinedAt: Date.now(),
+    });
+
+    return id;
+  },
+});
 
 export const trackReferral = mutation({
   args: {
@@ -121,7 +134,7 @@ export const trackReferral = mutation({
       .first();
 
     if (!affiliate) {
-      await ctx.db.insert("affiliates", {
+      const affId = await ctx.db.insert("affiliates", {
         userId: referrer._id,
         referralCode: args.referralCode,
         totalReferrals: 0,
@@ -134,10 +147,7 @@ export const trackReferral = mutation({
         isActive: true,
         joinedAt: Date.now(),
       });
-      affiliate = await ctx.db
-        .query("affiliates")
-        .withIndex("userId", (q) => q.eq("userId", referrer._id))
-        .first();
+      affiliate = await ctx.db.get(affId);
     }
 
     if (!affiliate) return;
@@ -182,7 +192,7 @@ export const createCommission = mutation({
     description: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, [ROLES.SUPER_ADMIN, ROLES.AFFILIATE_MANAGER as string]);
+    await requireRole(ctx, [ROLES.SUPER_ADMIN, ROLES.AFFILIATE_MANAGER]);
 
     const commissionId = await ctx.db.insert("commissions", {
       affiliateId: args.affiliateId,
@@ -225,7 +235,7 @@ export const approveCommission = mutation({
     commissionId: v.id("commissions"),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, [ROLES.SUPER_ADMIN, ROLES.AFFILIATE_MANAGER as string]);
+    await requireRole(ctx, [ROLES.SUPER_ADMIN, ROLES.AFFILIATE_MANAGER]);
 
     const commission = await ctx.db.get(args.commissionId);
     if (!commission) throw new Error("Commission not found");

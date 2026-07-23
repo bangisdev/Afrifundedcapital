@@ -8,7 +8,7 @@ import { Bell, ChevronRight } from "lucide-react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
-export function DashboardLayout({ isAdmin = false }: { isAdmin?: boolean }) {
+export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boolean; children?: React.ReactNode }) {
   const { isLoading, isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -74,7 +74,7 @@ export function DashboardLayout({ isAdmin = false }: { isAdmin?: boolean }) {
 
         {/* Content */}
         <main className="flex-1 overflow-y-auto p-6">
-          <Outlet />
+          {children || <Outlet />}
         </main>
       </div>
     </div>

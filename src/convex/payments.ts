@@ -331,7 +331,7 @@ export const handleFlutterwaveWebhook = action({
     const data = payload.data;
 
     // Find payment by reference
-    const payment = await ctx.runQuery(internal.payments.getPaymentByReference, {
+    const payment = await ctx.runQuery((internal as any).payments.getPaymentByReference, {
       reference: data.tx_ref,
     });
 
@@ -342,14 +342,14 @@ export const handleFlutterwaveWebhook = action({
 
     // Record Flutterwave transaction
     if (event === "charge.completed" && data.status === "successful") {
-      await ctx.runMutation(internal.payments.completePayment, {
+      await ctx.runMutation((internal as any).payments.completePayment, {
         paymentId: payment._id,
         providerTransactionId: data.id?.toString(),
         providerData: data,
       });
 
       // Record in flutterwave_transactions
-      await ctx.runMutation(internal.payments.recordFlutterwaveTransaction, {
+      await ctx.runMutation((internal as any).payments.recordFlutterwaveTransaction, {
         paymentId: payment._id,
         transactionId: data.id?.toString(),
         flwRef: data.flw_ref,
@@ -365,14 +365,14 @@ export const handleFlutterwaveWebhook = action({
 
       // If this payment was for a challenge, create the user challenge
       if (payment.templateId && payment.accountSizeId) {
-        await ctx.runMutation(internal.challenges.createUserChallenge, {
+        await ctx.runMutation((internal as any).challenges.createUserChallenge, {
           templateId: payment.templateId,
           accountSizeId: payment.accountSizeId,
           paymentId: payment._id,
         });
       }
     } else if (event === "charge.failed") {
-      await ctx.runMutation(internal.payments.failPayment, {
+      await ctx.runMutation((internal as any).payments.failPayment, {
         paymentId: payment._id,
         reason: data.processor_response || "Transaction failed",
         providerData: data,
@@ -440,7 +440,7 @@ export const handlePaystackWebhook = action({
     const event = payload.event;
     const data = payload.data;
 
-    const payment = await ctx.runQuery(internal.payments.getPaymentByReference, {
+    const payment = await ctx.runQuery((internal as any).payments.getPaymentByReference, {
       reference: data.reference,
     });
 
@@ -450,13 +450,13 @@ export const handlePaystackWebhook = action({
     }
 
     if (event === "charge.success") {
-      await ctx.runMutation(internal.payments.completePayment, {
+      await ctx.runMutation((internal as any).payments.completePayment, {
         paymentId: payment._id,
         providerTransactionId: data.id?.toString(),
         providerData: data,
       });
 
-      await ctx.runMutation(internal.payments.recordPaystackTransaction, {
+      await ctx.runMutation((internal as any).payments.recordPaystackTransaction, {
         paymentId: payment._id,
         reference: data.reference,
         transactionId: data.id?.toString(),
@@ -469,14 +469,14 @@ export const handlePaystackWebhook = action({
       });
 
       if (payment.templateId && payment.accountSizeId) {
-        await ctx.runMutation(internal.challenges.createUserChallenge, {
+        await ctx.runMutation((internal as any).challenges.createUserChallenge, {
           templateId: payment.templateId,
           accountSizeId: payment.accountSizeId,
           paymentId: payment._id,
         });
       }
     } else if (event === "charge.failed") {
-      await ctx.runMutation(internal.payments.failPayment, {
+      await ctx.runMutation((internal as any).payments.failPayment, {
         paymentId: payment._id,
         reason: data.gateway_response || "Transaction failed",
         providerData: data,
