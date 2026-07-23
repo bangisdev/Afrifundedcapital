@@ -10,6 +10,8 @@ import AdminCoupons from "./AdminCoupons";
 import AdminSupport from "./AdminSupport";
 import AdminCertificates from "./AdminCertificates";
 import AdminSettings from "./AdminSettings";
+import AdminAuditLogs from "./AdminAuditLogs";
+import AdminMT5 from "./AdminMT5";
 
 export default function AdminDashboard() {
   return (
@@ -25,6 +27,8 @@ export default function AdminDashboard() {
         <Route path="support" element={<AdminSupport />} />
         <Route path="certificates" element={<AdminCertificates />} />
         <Route path="settings" element={<AdminSettings />} />
+        <Route path="mt5" element={<AdminMT5 />} />
+        <Route path="audit-logs" element={<AdminAuditLogs />} />
       </Routes>
     </DashboardLayout>
   );

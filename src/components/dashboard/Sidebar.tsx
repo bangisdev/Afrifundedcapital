@@ -52,6 +52,7 @@ const adminNavItems: NavItem[] = [
   { label: "Support", icon: <Ticket className="h-4 w-4" />, path: "/admin/support" },
   { label: "Certificates", icon: <Award className="h-4 w-4" />, path: "/admin/certificates" },
   { label: "MT5", icon: <TrendingUp className="h-4 w-4" />, path: "/admin/mt5" },
+  { label: "Audit Logs", icon: <FileText className="h-4 w-4" />, path: "/admin/audit-logs" },
   { label: "Settings", icon: <Settings className="h-4 w-4" />, path: "/admin/settings" },
 ];
 

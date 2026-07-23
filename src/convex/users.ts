@@ -133,6 +133,36 @@ export const getUserGrowth = query({
   },
 });
 
+export const listAuditLogs = query({
+  args: {
+    limit: v.optional(v.number()),
+    action: v.optional(v.string()),
+    entity: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, [ROLES.SUPER_ADMIN, ROLES.COMPLIANCE_ADMIN]);
+
+    const { limit = 50, action, entity } = args;
+    let logs = await ctx.db.query("auditLogs").order("desc").take(200);
+
+    if (action) logs = logs.filter((l) => l.action === action);
+    if (entity) logs = logs.filter((l) => l.entity === entity);
+
+    const enriched = await Promise.all(
+      logs.slice(0, limit).map(async (log) => {
+        let userName: string | undefined;
+        if (log.userId) {
+          const user = await ctx.db.get(log.userId);
+          userName = user?.name || user?.email;
+        }
+        return { ...log, userName };
+      }),
+    );
+
+    return enriched;
+  },
+});
+
 // ═══════════════════════════════════════════════
 //  MUTATIONS
 // ═══════════════════════════════════════════════
