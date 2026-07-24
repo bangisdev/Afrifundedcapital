@@ -3,8 +3,8 @@ import { useNavigate, Outlet, useLocation } from "react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { Sidebar } from "./Sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { NotificationBell } from "@/components/NotificationBell";
 import { Button } from "@/components/ui/button";
-import { Bell } from "lucide-react";
 
 export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boolean; children?: React.ReactNode }) {
   const { isLoading, isAuthenticated, user } = useAuth();
@@ -62,14 +62,7 @@ export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boole
             </button>
           </div>
           <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 relative"
-              onClick={() => navigate(isAdmin ? "/admin" : "/dashboard/notifications")}
-            >
-              <Bell className="h-4 w-4" />
-            </Button>
+            <NotificationBell isAdmin={isAdmin} />
             <ThemeToggle />
             <div className="text-xs text-muted-foreground">
               {user?.name || user?.email || "Trader"}
