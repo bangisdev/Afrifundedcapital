@@ -27,6 +27,9 @@ export const auth = betterAuth({
     crossSubDomainCookies: {
       enabled: false,
     },
+    trustedOrigins: [
+      /^https?:\/\//,
+    ],
   },
   // User can optionally provide OTP via email provider integration
   // For now we use email-password; OTP can be added later
