@@ -3,6 +3,7 @@ import { getDb } from "../db";
 import { tradingMetrics, mt5Accounts, drawdownHistory, userChallenges } from "../schema";
 import { eq, desc, and, sql, count } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
+import { maybeGenerateCertificate } from "../lib/certificates";
 
 const app = new Hono();
 
@@ -202,6 +203,38 @@ function syncChallenge(db: any, challenge: any): boolean {
       equity: accountUpdate.equity,
       lastSyncAt: now,
     }).where(eq(mt5Accounts.id, challenge.mt5AccountId)).run();
+  }
+
+  // ─── Check for challenge status transitions ────────────────
+  // If profit target reached and min trading days met, advance the challenge
+  const profitTargetAmount = (challenge.profitTarget / 100) * challenge.accountSize;
+  const minDaysMet = (metrics.tradingDaysCount ?? 0) >= challenge.minTradingDays;
+  const profitReached = (metrics.totalProfit ?? 0) >= profitTargetAmount;
+
+  if (profitReached && minDaysMet && challenge.status === "active") {
+    // Determine next status based on current phase
+    let nextStatus: string | null = null;
+
+    if (challenge.currentPhase === 2) {
+      nextStatus = "phase_2_passed";
+    } else if (challenge.currentPhase === 1 || !challenge.currentPhase) {
+      nextStatus = "phase_1_passed";
+    } else {
+      nextStatus = "funded";
+    }
+
+    // Update challenge status
+    db.update(userChallenges).set({
+      status: nextStatus,
+      currentPhase: nextStatus === "phase_1_passed" ? 2 : (challenge.currentPhase || 1),
+      phase1PassedAt: nextStatus === "phase_1_passed" ? now : challenge.phase1PassedAt,
+      phase2PassedAt: nextStatus === "phase_2_passed" ? now : challenge.phase2PassedAt,
+      fundedAt: nextStatus === "funded" ? now : challenge.fundedAt,
+      updatedAt: now,
+    }).where(eq(userChallenges.id, challenge.id)).run();
+
+    // Auto-generate certificate for the completed phase
+    maybeGenerateCertificate(db, challenge.id, nextStatus);
   }
 
   return true;

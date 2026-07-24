@@ -9,6 +9,7 @@ import {
 } from "../schema";
 import { eq, desc, count, sql, and } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
+import { maybeGenerateCertificate } from "../lib/certificates";
 
 let seeded = false;
 
@@ -307,6 +308,42 @@ app.put("/admin/sizes/:id", requireAuth, requireAdmin, async (c) => {
     .run();
 
   return c.json({ success: true });
+});
+
+// Admin: Update challenge status (with automatic certificate generation)
+app.put("/admin/:id/status", requireAuth, requireAdmin, async (c) => {
+  const id = parseInt(c.req.param("id"));
+  const body = await c.req.json();
+  const db = getDb();
+  const now = Date.now();
+  const newStatus = body.status as string;
+
+  if (!newStatus) return c.json({ error: "status is required" }, 400);
+
+  const validStatuses = ["active", "phase_1_passed", "phase_2_passed", "funded", "violated", "expired", "refunded"];
+  if (!validStatuses.includes(newStatus)) return c.json({ error: `Invalid status. Must be one of: ${validStatuses.join(", ")}` }, 400);
+
+  const challenge = db.select().from(userChallenges).where(eq(userChallenges.id, id)).get();
+  if (!challenge) return c.json({ error: "Challenge not found" }, 404);
+
+  // Build update object with timestamp fields
+  const updateFields: any = { status: newStatus, updatedAt: now };
+  if (newStatus === "phase_1_passed") updateFields.phase1PassedAt = now;
+  if (newStatus === "phase_2_passed") updateFields.phase2PassedAt = now;
+  if (newStatus === "funded") updateFields.fundedAt = now;
+  if (body.currentPhase !== undefined) updateFields.currentPhase = body.currentPhase;
+
+  db.update(userChallenges).set(updateFields).where(eq(userChallenges.id, id)).run();
+
+  // Auto-generate certificate if status warrants one
+  const cert = maybeGenerateCertificate(db, id, newStatus);
+
+  return c.json({
+    success: true,
+    challengeId: id,
+    newStatus,
+    certificateGenerated: cert ? { id: cert.id, number: cert.certificateNumber } : null,
+  });
 });
 
 // Seed: Get enabled payment providers
