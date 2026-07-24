@@ -3,6 +3,7 @@ import { getDb } from "../db";
 import { users, sessions, auditLogs, settings, wallets } from "../schema";
 import { eq, desc, like, count, sql, and } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
+import { createNotification } from "../lib/notifications";
 
 const app = new Hono();
 
@@ -172,6 +173,47 @@ app.get("/settings", requireAuth, requireAdmin, (c) => {
   const db = getDb();
   const allSettings = db.select().from(settings).all();
   return c.json(allSettings.map((s) => ({ ...s, value: JSON.parse(s.value) })));
+});
+
+// Security: Notify password changed
+app.post("/security/password-changed", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  const db = getDb();
+  createNotification(db, userId, {
+    type: "security",
+    title: "Password Changed",
+    message: "Your password has been changed successfully. If you did not make this change, please contact support immediately.",
+    link: "/dashboard/profile",
+  });
+  return c.json({ success: true });
+});
+
+// Security: Notify 2FA enabled
+app.post("/security/2fa-enabled", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  const db = getDb();
+  db.update(users).set({ twoFactorEnabled: true, updatedAt: Date.now() }).where(eq(users.id, userId)).run();
+  createNotification(db, userId, {
+    type: "security",
+    title: "Two-Factor Authentication Enabled",
+    message: "Two-factor authentication has been enabled on your account. Your account is now more secure.",
+    link: "/dashboard/profile",
+  });
+  return c.json({ success: true });
+});
+
+// Security: Notify 2FA disabled
+app.post("/security/2fa-disabled", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  const db = getDb();
+  db.update(users).set({ twoFactorEnabled: false, updatedAt: Date.now() }).where(eq(users.id, userId)).run();
+  createNotification(db, userId, {
+    type: "security",
+    title: "Two-Factor Authentication Disabled",
+    message: "Two-factor authentication has been disabled on your account. Your account security has been reduced.",
+    link: "/dashboard/profile",
+  });
+  return c.json({ success: true });
 });
 
 export default app;

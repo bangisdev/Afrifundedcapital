@@ -4,6 +4,7 @@ import { tradingMetrics, mt5Accounts, drawdownHistory, userChallenges } from "..
 import { eq, desc, and, sql, count } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { maybeGenerateCertificate } from "../lib/certificates";
+import { createNotification } from "../lib/notifications";
 
 const app = new Hono();
 
@@ -235,6 +236,38 @@ function syncChallenge(db: any, challenge: any): boolean {
 
     // Auto-generate certificate for the completed phase
     maybeGenerateCertificate(db, challenge.id, nextStatus);
+  }
+
+  // ─── Check for challenge violation (max drawdown exceeded) ──
+  const maxDrawdownAmount = (challenge.maxDrawdown / 100) * challenge.accountSize;
+  if ((metrics.currentDrawdown ?? 0) >= maxDrawdownAmount && challenge.status === "active") {
+    db.update(userChallenges).set({
+      status: "violated",
+      violations: JSON.stringify([{ type: "max_drawdown", date: now, drawdown: metrics.currentDrawdown }]),
+      updatedAt: now,
+    }).where(eq(userChallenges.id, challenge.id)).run();
+
+    createNotification(db, challenge.userId, {
+      type: "challenge_violation",
+      title: "Challenge Violation",
+      message: `Your challenge has been violated due to exceeding the maximum drawdown limit (${challenge.maxDrawdown}%). Your account has been suspended.`,
+      link: "/dashboard/challenges",
+    });
+  }
+
+  // ─── Check for challenge expiry ──────────────────────────
+  if (challenge.expiresAt && challenge.expiresAt < now && challenge.status === "active") {
+    db.update(userChallenges).set({
+      status: "expired",
+      updatedAt: now,
+    }).where(eq(userChallenges.id, challenge.id)).run();
+
+    createNotification(db, challenge.userId, {
+      type: "challenge_expired",
+      title: "Challenge Expired",
+      message: `Your challenge (Account Size: $${challenge.accountSize.toLocaleString()}) has expired. You can purchase a new challenge from the dashboard.`,
+      link: "/dashboard/challenges",
+    });
   }
 
   return true;

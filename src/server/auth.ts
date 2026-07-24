@@ -3,6 +3,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { getDb } from "./db";
 import * as schema from "./schema";
 
+
 export const auth = betterAuth({
   database: drizzleAdapter(getDb(), {
     provider: "sqlite",
@@ -28,7 +29,8 @@ export const auth = betterAuth({
       enabled: false,
     },
     trustedOrigins: [
-      /^https?:\/\//,
+      "http://localhost:5173",
+      "http://localhost:3000",
     ],
   },
   // User can optionally provide OTP via email provider integration
