@@ -48,14 +48,15 @@ export function honoPlugin(): Plugin {
             if (v) headers.set(k, Array.isArray(v) ? v.join(", ") : v);
           }
 
-          let body: BodyInit | null = null;
+          let body: Uint8Array | null = null;
           if (req.method !== "GET" && req.method !== "HEAD") {
-            body = await new Promise<Buffer>((resolve, reject) => {
+            const raw = await new Promise<Buffer>((resolve, reject) => {
               const chunks: Buffer[] = [];
               req.on("data", (chunk: Buffer) => chunks.push(chunk));
               req.on("end", () => resolve(Buffer.concat(chunks)));
               req.on("error", reject);
             });
+            body = new Uint8Array(raw);
           }
 
           const webReq = new Request(url.toString(), {

@@ -1,12 +1,11 @@
 import '@vly-ai/integrations';
 import { Toaster } from "@/components/ui/sonner";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
-import { ConvexAuthProvider } from "@convex-dev/auth/react";
-import { ConvexReactClient } from "convex/react";
 import React, { StrictMode, useEffect, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router";
 import { ThemeProvider } from "@/components/theme-provider";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "./index.css";
 
 // Lazy load route components
@@ -16,6 +15,15 @@ const Dashboard = lazy(() => import("./pages/dashboard/Dashboard.tsx"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard.tsx"));
 const VerifyCertificate = lazy(() => import("./pages/VerifyCertificate.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      retry: 1,
+    },
+  },
+});
 
 function RouteLoading() {
   return (
@@ -78,19 +86,6 @@ class RootErrorBoundary extends React.Component<
   }
 }
 
-const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
-
-// Determine auth token storage based on the "remember me" preference.
-// - Checked → localStorage (persists across browser restarts)
-// - Unchecked → sessionStorage (cleared when tab/browser closes)
-// The flag itself is set by the Auth page checkbox and persisted in localStorage
-// so it survives page reloads and is available before the React tree mounts.
-const REMEMBER_KEY = "_afc_remember";
-const remembered =
-  typeof window !== "undefined" &&
-  window.localStorage.getItem(REMEMBER_KEY) === "true";
-const authStorage: Storage = remembered ? localStorage : sessionStorage;
-
 function RouteSyncer() {
   const location = useLocation();
   useEffect(() => {
@@ -121,7 +116,7 @@ createRoot(document.getElementById("root")!).render(
         <VlyToolbar />
       </ToolbarErrorBoundary>
       <ThemeProvider defaultTheme="dark" storageKey="afc-theme">
-        <ConvexAuthProvider client={convex} storage={authStorage}>
+        <QueryClientProvider client={queryClient}>
           <BrowserRouter>
             <RouteSyncer />
             <Suspense fallback={<RouteLoading />}>
@@ -146,7 +141,7 @@ createRoot(document.getElementById("root")!).render(
               },
             }}
           />
-        </ConvexAuthProvider>
+        </QueryClientProvider>
       </ThemeProvider>
     </RootErrorBoundary>
   </StrictMode>,

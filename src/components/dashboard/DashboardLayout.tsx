@@ -5,18 +5,13 @@ import { Sidebar } from "./Sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Bell } from "lucide-react";
-import { useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
 
 export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boolean; children?: React.ReactNode }) {
   const { isLoading, isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const unreadCount = useQuery(api.notifications.getUnreadCount, {});
 
   // Track whether auth has ever resolved to true on THIS component instance.
-  // Prevents redirect loops when @convex-dev/auth/react briefly resets its
-  // internal state during Suspense / lazy-load route transitions.
   const hasSeenAuth = useRef(false);
   const hasCheckedOnboarding = useRef(false);
   useEffect(() => {
@@ -24,19 +19,13 @@ export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boole
   }, [isAuthenticated]);
 
   useEffect(() => {
-    // Never redirect if we're already at /auth (prevents loops)
     if (location.pathname.startsWith("/auth")) return;
-    // Only redirect when auth has truly NEVER resolved to true on this mount.
-    // Once we've seen an authenticated state, brief flips are treated as
-    // race conditions rather than real sign-outs.
     if (!isLoading && !isAuthenticated && !hasSeenAuth.current) {
       navigate("/auth", { replace: true });
     }
   }, [isLoading, isAuthenticated, navigate, location.pathname]);
 
-  // Onboarding redirect: if user is authenticated, not loading, hasn't
-  // completed onboarding, and isn't already on the onboarding page, redirect.
-  // Only runs once per mount to avoid loops.
+  // Onboarding redirect
   useEffect(() => {
     if (isLoading) return;
     if (!isAuthenticated) return;
@@ -44,16 +33,12 @@ export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boole
     if (hasCheckedOnboarding.current) return;
     hasCheckedOnboarding.current = true;
 
-    // Skip if we're already on the onboarding page
     if (location.pathname === "/dashboard/onboarding") return;
 
     if (!user.onboardingComplete) {
       navigate("/dashboard/onboarding", { replace: true });
     }
   }, [isLoading, isAuthenticated, user, navigate, location.pathname]);
-
-  // No need to redirect — the index Route in Dashboard.tsx / AdminDashboard.tsx
-  // already matches and renders the overview component at these exact paths.
 
   if (isLoading) {
     return (
@@ -84,11 +69,6 @@ export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boole
               onClick={() => navigate(isAdmin ? "/admin" : "/dashboard/notifications")}
             >
               <Bell className="h-4 w-4" />
-              {unreadCount && unreadCount > 0 ? (
-                <span className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-foreground text-[8px] font-medium text-background flex items-center justify-center">
-                  {unreadCount > 9 ? "9+" : unreadCount}
-                </span>
-              ) : null}
             </Button>
             <ThemeToggle />
             <div className="text-xs text-muted-foreground">
@@ -96,9 +76,8 @@ export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boole
             </div>
           </div>
         </header>
-
-        {/* Content */}
-        <main className="flex-1 overflow-y-auto p-6">
+        {/* Main content */}
+        <main className="flex-1 overflow-auto">
           {children || <Outlet />}
         </main>
       </div>
