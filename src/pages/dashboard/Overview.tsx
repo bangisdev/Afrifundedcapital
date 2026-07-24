@@ -2,15 +2,31 @@
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useNavigate } from "react-router";
+import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ArrowRight, BarChart3, TrendingUp, Wallet, Award, Loader2, ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ArrowRight, BarChart3, TrendingUp, Wallet, Award, Loader2, ChevronRight, Sparkles, X } from "lucide-react";
+
+const SKIP_BANNER_KEY = "_afc_onboarding_banner_dismissed";
+
+function needsOnboarding(user: { name?: string | null; tradingExperience?: string | null; phone?: string | null }): boolean {
+  // User skipped if onboardingComplete is true but key fields are missing
+  return !user.name || !user.tradingExperience || !user.phone;
+}
 
 export default function Overview() {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const metrics = useQuery(api.challenges.getDashboardMetrics);
   const challenges = useQuery(api.challenges.getMyChallenges);
   const wallet = useQuery(api.wallets.getMyWallet);
+  const [bannerDismissed, setBannerDismissed] = useState(
+    () => localStorage.getItem(SKIP_BANNER_KEY) === "true",
+  );
+
+  const showBanner = user && needsOnboarding(user) && !bannerDismissed;
 
   if (!metrics || !challenges || !wallet) {
     return (
@@ -52,6 +68,61 @@ export default function Overview() {
 
   return (
     <div className="space-y-8">
+      {/* ── Onboarding reminder banner ── */}
+      <AnimatePresence>
+        {showBanner && (
+          <motion.div
+            initial={{ opacity: 0, y: -8, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: "auto" }}
+            exit={{ opacity: 0, y: -8, height: 0 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+            className="overflow-hidden"
+          >
+            <div className="relative flex items-start gap-4 rounded-lg border border-border bg-card p-4">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground/5">
+                <Sparkles className="h-4 w-4 text-foreground/70" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium">Finish setting up your profile</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Add your trading experience and contact details to get personalized challenge recommendations.
+                </p>
+                <div className="flex items-center gap-3 mt-3">
+                  <Button
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => navigate("/dashboard/onboarding")}
+                  >
+                    Complete Setup
+                    <ArrowRight className="ml-1.5 h-3 w-3" />
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBannerDismissed(true);
+                      localStorage.setItem(SKIP_BANNER_KEY, "true");
+                    }}
+                    className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 decoration-dotted transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setBannerDismissed(true);
+                  localStorage.setItem(SKIP_BANNER_KEY, "true");
+                }}
+                className="shrink-0 h-6 w-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
