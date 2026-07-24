@@ -29,7 +29,7 @@ interface AuthProps {
 }
 
 function Auth({ redirectAfterAuth }: AuthProps = {}) {
-  const { isLoading: authLoading, isAuthenticated, signIn, signOut } = useAuth();
+  const { isLoading: authLoading, isAuthenticated, signIn } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState<"signIn" | { email: string }>("signIn");
   const [otp, setOtp] = useState("");
@@ -39,19 +39,15 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     () => localStorage.getItem(REMEMBER_KEY) === "true",
   );
 
-  // ── Mount-side check: sign out returning users without "remember me" ──
+  // ── Mount-side: if already authenticated, redirect immediately ──
+  // Always redirect, never sign out. The "remember me" flag controls
+  // session persistence, not whether the user is allowed to stay signed in.
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      const remembered = localStorage.getItem(REMEMBER_KEY) === "true";
-      if (!remembered) {
-        signOut();
-        return;
-      }
-      // Remembered and authenticated — proceed to redirect
-      const redirect = redirectAfterAuth || "/";
+      const redirect = redirectAfterAuth || "/dashboard";
       navigate(redirect, { replace: true });
     }
-  }, [authLoading, isAuthenticated, navigate, redirectAfterAuth, signOut]);
+  }, [authLoading, isAuthenticated, navigate, redirectAfterAuth]);
   const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoading(true);
@@ -82,8 +78,13 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
 
       console.log("signed in");
 
-      const redirect = redirectAfterAuth || "/";
-      navigate(redirect);
+      // Brief delay allows Convex auth state to propagate before navigating,
+      // preventing the DashboardLayout from seeing a false "unauthenticated"
+      // state and bouncing the user back to /auth.
+      await new Promise((r) => setTimeout(r, 600));
+
+      const redirect = redirectAfterAuth || "/dashboard";
+      navigate(redirect, { replace: true });
     } catch (error) {
       console.error("OTP verification error:", error);
 
@@ -101,8 +102,9 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       console.log("Attempting anonymous sign in...");
       await signIn("anonymous");
       console.log("Anonymous sign in successful");
-      const redirect = redirectAfterAuth || "/";
-      navigate(redirect);
+      await new Promise((r) => setTimeout(r, 600));
+      const redirect = redirectAfterAuth || "/dashboard";
+      navigate(redirect, { replace: true });
     } catch (error) {
       console.error("Guest login error:", error);
       console.error("Error details:", JSON.stringify(error, null, 2));
