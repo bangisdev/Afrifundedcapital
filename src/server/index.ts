@@ -48,7 +48,7 @@ export function honoPlugin(): Plugin {
             if (v) headers.set(k, Array.isArray(v) ? v.join(", ") : v);
           }
 
-          let body: Uint8Array | null = null;
+          let body: BodyInit | undefined;
           if (req.method !== "GET" && req.method !== "HEAD") {
             const raw = await new Promise<Buffer>((resolve, reject) => {
               const chunks: Buffer[] = [];
@@ -62,7 +62,7 @@ export function honoPlugin(): Plugin {
           const webReq = new Request(url.toString(), {
             method: req.method,
             headers,
-            body: req.method !== "GET" && req.method !== "HEAD" ? body : undefined,
+            body,
           });
 
           const webRes = await app.fetch(webReq);

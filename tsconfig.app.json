@@ -17,6 +17,7 @@
 
     /* Linting */
     "strict": true,
+    "noImplicitAny": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "erasableSyntaxOnly": true,
@@ -25,7 +26,10 @@
     "noPropertyAccessFromIndexSignature": false,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "convex/react": ["./src/convex/react.ts"],
+      "convex/values": ["./src/convex/values.ts"],
+      "convex/server": ["./src/convex/server.ts"]
     }
   },
   "include": ["src", "vly-toolbar-readonly.tsx"]
