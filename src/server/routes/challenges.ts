@@ -10,11 +10,52 @@ import {
 import { eq, desc, count, sql, and } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 
+let seeded = false;
+
+function autoSeed(db: any) {
+  if (seeded) return;
+  const existing = db.select({ cnt: count() }).from(challengeTemplates).get();
+  if (existing && (existing.cnt ?? 0) > 0) { seeded = true; return; }
+
+  const now = Date.now();
+  const templates = [
+    { name: "Two-Step Evaluation", type: "two_step", description: "Classic two-phase evaluation with 8% profit target, 5% daily and 10% max drawdown. Prove your skills in two steps.", profitTarget: 8, dailyDrawdown: 5, maxDrawdown: 10, maxLeverage: 100, minTradingDays: 5, price: 50000, durationDays: 30 },
+    { name: "One-Step Challenge", type: "one_step", description: "Single-phase challenge with 10% profit target. Fast track to funding with a 4% daily drawdown limit.", profitTarget: 10, dailyDrawdown: 4, maxDrawdown: 8, maxLeverage: 50, minTradingDays: 3, price: 40000, durationDays: 30 },
+    { name: "Instant Funding", type: "instant_funding", description: "Get funded immediately with no evaluation. Higher leverage and flexible rules for experienced traders.", profitTarget: 10, dailyDrawdown: 5, maxDrawdown: 10, maxLeverage: 100, minTradingDays: 0, price: 80000, durationDays: 30 },
+  ];
+
+  for (const t of templates) {
+    const result = db.insert(challengeTemplates).values({
+      ...t, currency: "NGN", isActive: true, createdBy: 1, createdAt: now, updatedAt: now,
+    }).returning().get();
+
+    const sizes = [
+      { label: "$5,000", size: 5000, price: t.price * 0.5 },
+      { label: "$10,000", size: 10000, price: t.price * 0.8 },
+      { label: "$25,000", size: 25000, price: t.price },
+      { label: "$50,000", size: 50000, price: t.price * 1.5 },
+      { label: "$100,000", size: 100000, price: t.price * 2.5 },
+      { label: "$200,000", size: 200000, price: t.price * 4 },
+    ];
+
+    sizes.forEach((s, i) => {
+      db.insert(accountSizes).values({
+        label: s.label, size: s.size, currency: "NGN", templateId: result.id,
+        price: s.price, sortOrder: i, isActive: true,
+      }).run();
+    });
+  }
+
+  seeded = true;
+  console.log("[Seed] Auto-seeded 3 challenge templates with account sizes");
+}
+
 const app = new Hono();
 
-// List all challenge templates (public + auth)
+// List all challenge templates (public + auth) — auto-seeds on first access
 app.get("/templates", (c) => {
   const db = getDb();
+  autoSeed(db);
   const templates = db
     .select()
     .from(challengeTemplates)
