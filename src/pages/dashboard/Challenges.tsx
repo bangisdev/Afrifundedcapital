@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useQuery, useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
+import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useFlutterwavePayment } from "@/hooks/use-flutterwave";
@@ -28,9 +27,8 @@ type Doc = Record<string, any>;
 export default function Challenges() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const templates = useQuery(api.challenges.listChallengeTemplates, {});
-  const myChallenges = useQuery(api.challenges.getMyChallenges);
-  const paymentProviders = useQuery(api.seed.getEnabledPaymentProviders);
+  const { data: templates, isLoading: templatesLoading } = useApiQuery<any[]>(["templates"], "/api/challenges/templates");
+  const { data: myChallenges, isLoading: myLoading } = useApiQuery<any[]>(["challenges", "my"], "/api/challenges/my");
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [couponCode, setCouponCode] = useState("");
@@ -38,16 +36,15 @@ export default function Challenges() {
 
   const { state: paymentState, startCheckout, reset: resetPayment } = useFlutterwavePayment();
 
-  const sizes = useQuery(
-    api.challenges.getAccountSizesForTemplate,
-    selectedTemplate ? { templateId: selectedTemplate as any } : "skip",
+  const { data: sizes } = useApiQuery<any[]>(
+    ["sizes", selectedTemplate || "none"],
+    `/api/challenges/templates/${selectedTemplate || 0}/sizes`,
+    { enabled: !!selectedTemplate },
   );
 
-  // Payment provider config — reads from admin settings
-  const activeProvider = paymentProviders?.providers?.[0] || "flutterwave";
-  const providerLabel = activeProvider === "flutterwave" ? "Flutterwave" : "Paystack";
+  const isLoading = templatesLoading || myLoading;
 
-  if (!templates || !myChallenges) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -75,7 +72,7 @@ export default function Challenges() {
       return;
     }
 
-    const selectedAccountSize = sizes?.find((s: Doc) => s._id === selectedSize);
+    const selectedAccountSize = sizes?.find((s: Doc) => String(s.id) === selectedSize);
     if (!selectedAccountSize) {
       toast.error("Selected account size not found");
       return;
@@ -87,8 +84,8 @@ export default function Challenges() {
       email: user.email,
       name: user.name || "Trader",
       phoneNumber: user.phone || "",
-      templateId: selectedTemplate as any,
-      accountSizeId: selectedSize as any,
+      templateId: selectedTemplate,
+      accountSizeId: selectedSize,
       couponCode: couponCode || undefined,
       description: `${selectedAccountSize.label} Challenge`,
     });
@@ -97,26 +94,11 @@ export default function Challenges() {
   const getPaymentButtonContent = () => {
     switch (paymentState.status) {
       case "initiating":
-        return (
-          <div className="flex items-center justify-center gap-2">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            <span>Preparing payment...</span>
-          </div>
-        );
+        return <div className="flex items-center justify-center gap-2"><Loader2 className="h-3 w-3 animate-spin" /><span>Preparing payment...</span></div>;
       case "verifying":
-        return (
-          <div className="flex items-center justify-center gap-2">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            <span>Verifying payment...</span>
-          </div>
-        );
+        return <div className="flex items-center justify-center gap-2"><Loader2 className="h-3 w-3 animate-spin" /><span>Verifying payment...</span></div>;
       case "success":
-        return (
-          <div className="flex items-center justify-center gap-2 text-emerald-600 dark:text-emerald-400">
-            <CheckCircle className="h-3 w-3" />
-            <span>Challenge Created!</span>
-          </div>
-        );
+        return <div className="flex items-center justify-center gap-2 text-emerald-600 dark:text-emerald-400"><CheckCircle className="h-3 w-3" /><span>Challenge Created!</span></div>;
       case "error":
         return "Try Again";
       default:
@@ -126,9 +108,7 @@ export default function Challenges() {
 
   const handleDialogClose = (open: boolean) => {
     if (!open) {
-      if (paymentState.status === "success") {
-        resetPayment();
-      }
+      if (paymentState.status === "success") resetPayment();
       setShowPurchase(false);
     }
   };
@@ -150,53 +130,26 @@ export default function Challenges() {
 
         <TabsContent value="browse" className="space-y-6">
           <div className="grid md:grid-cols-3 gap-4">
-            {templates.map((template: Doc) => (
+            {(templates || []).map((template: Doc) => (
               <div
-                key={template._id}
+                key={template.id}
                 className={`card-subtle p-6 cursor-pointer transition-all hover:bg-secondary/30 ${
-                  selectedTemplate === template._id ? "ring-1 ring-foreground" : ""
+                  selectedTemplate === String(template.id) ? "ring-1 ring-foreground" : ""
                 }`}
-                onClick={() => {
-                  setSelectedTemplate(template._id);
-                  setSelectedSize(null);
-                }}
+                onClick={() => { setSelectedTemplate(String(template.id)); setSelectedSize(null); }}
               >
                 <h3 className="text-sm font-medium mb-1">{template.name}</h3>
-                <p className="text-xs text-muted-foreground mb-4">
-                  {template.description}
-                </p>
+                <p className="text-xs text-muted-foreground mb-4">{template.description}</p>
                 <div className="space-y-1.5 text-xs text-muted-foreground">
-                  <div className="flex justify-between">
-                    <span>Profit Target</span>
-                    <span className="text-foreground">{template.profitTarget}%</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Max Drawdown</span>
-                    <span className="text-foreground">{template.maxDrawdown}%</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Daily Drawdown</span>
-                    <span className="text-foreground">{template.dailyDrawdown}%</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Min Trading Days</span>
-                    <span className="text-foreground">{template.minTradingDays}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Duration</span>
-                    <span className="text-foreground">{template.durationDays ? `${template.durationDays} days` : "Unlimited"}</span>
-                  </div>
+                  <div className="flex justify-between"><span>Profit Target</span><span className="text-foreground">{template.profitTarget}%</span></div>
+                  <div className="flex justify-between"><span>Max Drawdown</span><span className="text-foreground">{template.maxDrawdown}%</span></div>
+                  <div className="flex justify-between"><span>Daily Drawdown</span><span className="text-foreground">{template.dailyDrawdown}%</span></div>
+                  <div className="flex justify-between"><span>Min Trading Days</span><span className="text-foreground">{template.minTradingDays}</span></div>
+                  <div className="flex justify-between"><span>Duration</span><span className="text-foreground">{template.durationDays ? `${template.durationDays} days` : "Unlimited"}</span></div>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full mt-4 text-xs"
+                <Button variant="outline" size="sm" className="w-full mt-4 text-xs"
                   disabled={paymentState.status === "initiating" || paymentState.status === "verifying"}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedTemplate(template._id);
-                    setShowPurchase(true);
-                  }}
+                  onClick={(e) => { e.stopPropagation(); setSelectedTemplate(String(template.id)); setShowPurchase(true); }}
                 >
                   Select
                 </Button>
@@ -206,22 +159,22 @@ export default function Challenges() {
         </TabsContent>
 
         <TabsContent value="my-challenges" className="space-y-3">
-          {myChallenges.length === 0 ? (
+          {!myChallenges || myChallenges.length === 0 ? (
             <div className="card-subtle p-8 text-center">
               <p className="text-sm text-muted-foreground">No challenges yet. Start your journey!</p>
             </div>
           ) : (
             myChallenges.map((ch: Doc) => (
               <button
-                key={ch._id}
-                onClick={() => navigate(`/dashboard/challenges/${ch._id}`)}
+                key={ch.id}
+                onClick={() => navigate(`/dashboard/challenges/${ch.id}`)}
                 className="w-full card-subtle p-4 text-left hover:bg-secondary/30 transition-colors"
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-sm font-medium">{ch.templateName}</div>
+                    <div className="text-sm font-medium">Challenge #{ch.id}</div>
                     <div className="text-xs text-muted-foreground mt-0.5">
-                      ${ch.accountSize.toLocaleString()} — Started {new Date(ch.createdAt).toLocaleDateString()}
+                      ${ch.accountSize?.toLocaleString()} — Started {ch.createdAt ? new Date(ch.createdAt).toLocaleDateString() : "N/A"}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -229,17 +182,6 @@ export default function Challenges() {
                     <ChevronRight className="h-4 w-4 text-muted-foreground" />
                   </div>
                 </div>
-                {ch.status === "active" && (
-                  <div className="mt-3">
-                    <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                      <span>Profit Target: {ch.profitTarget}%</span>
-                      <span>Drawdown: {ch.maxDrawdown}%</span>
-                    </div>
-                    <div className="progress-bar">
-                      <div className="progress-bar-fill" style={{ width: "0%" }} />
-                    </div>
-                  </div>
-                )}
               </button>
             ))
           )}
@@ -273,14 +215,7 @@ export default function Challenges() {
                   </p>
                 </div>
               </div>
-              <Button
-                className="w-full text-xs"
-                size="sm"
-                onClick={() => {
-                  resetPayment();
-                  setShowPurchase(false);
-                }}
-              >
+              <Button className="w-full text-xs" size="sm" onClick={() => { resetPayment(); setShowPurchase(false); }}>
                 View My Challenges
               </Button>
             </div>
@@ -292,81 +227,50 @@ export default function Challenges() {
                 </div>
                 <div>
                   <p className="text-sm font-medium">Payment Failed</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {paymentState.message || "Something went wrong. Please try again."}
-                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">{paymentState.message || "Something went wrong. Please try again."}</p>
                 </div>
               </div>
-              <Button
-                variant="outline"
-                className="w-full text-xs"
-                size="sm"
-                onClick={() => resetPayment()}
-              >
-                Try Again
-              </Button>
+              <Button variant="outline" className="w-full text-xs" size="sm" onClick={() => resetPayment()}>Try Again</Button>
             </div>
           ) : selectedTemplate && sizes ? (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-2">
                 {sizes.map((size: Doc) => (
-                  <button
-                    key={size._id}
-                    className={`p-3 border rounded-lg text-left transition-colors ${
-                      selectedSize === size._id
-                        ? "border-foreground bg-secondary"
-                        : "border-border hover:bg-secondary/30"
-                    }`}
-                    onClick={() => setSelectedSize(size._id)}
+                  <button key={size.id}
+                    className={`p-3 border rounded-lg text-left transition-colors ${String(size.id) === selectedSize ? "border-foreground bg-secondary" : "border-border hover:bg-secondary/30"}`}
+                    onClick={() => setSelectedSize(String(size.id))}
                     disabled={paymentState.status === "initiating" || paymentState.status === "verifying"}
                   >
                     <div className="text-sm font-medium">{size.label}</div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {size.currency} {size.price.toLocaleString()}
-                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">{size.currency} {size.price?.toLocaleString()}</div>
                   </button>
                 ))}
               </div>
 
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">
-                  Coupon Code (optional)
-                </label>
-                <Input
-                  placeholder="Enter coupon code"
-                  value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                  className="text-xs h-9"
-                  disabled={paymentState.status === "initiating" || paymentState.status === "verifying"}
-                />
+                <label className="text-xs text-muted-foreground block mb-1">Coupon Code (optional)</label>
+                <Input placeholder="Enter coupon code" value={couponCode} onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                  className="text-xs h-9" disabled={paymentState.status === "initiating" || paymentState.status === "verifying"} />
               </div>
 
               {selectedSize && (
                 <div className="border-t border-border pt-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Total</span>
-                    <span className="font-medium">
-                      ₦{(sizes as Doc[]).find((s: Doc) => s._id === selectedSize)?.price.toLocaleString()}
-                    </span>
+                    <span className="font-medium">₦{sizes.find((s: Doc) => String(s.id) === selectedSize)?.price?.toLocaleString()}</span>
                   </div>
                 </div>
               )}
 
-              <Button
-                className="w-full text-xs"
-                size="sm"
-                disabled={
-                  !selectedSize ||
-                  paymentState.status === "initiating" ||
-                  paymentState.status === "verifying"
-                }
+              <Button className="w-full text-xs" size="sm"
+                disabled={!selectedSize || paymentState.status === "initiating" || paymentState.status === "verifying"}
                 onClick={handleProceedToPayment}
               >
                 {getPaymentButtonContent()}
               </Button>
 
               <p className="text-[10px] text-muted-foreground text-center">
-                Secure payment powered by {providerLabel}. Your payment data is encrypted.
+                Secure payment powered by Flutterwave. Your payment data is encrypted.
               </p>
             </div>
           ) : null}

@@ -1,10 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
+import { useApiQuery } from "@/hooks/use-api";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, BarChart3, TrendingUp, Wallet, Award, Loader2, ChevronRight, Sparkles, X } from "lucide-react";
@@ -12,23 +10,23 @@ import { ArrowRight, BarChart3, TrendingUp, Wallet, Award, Loader2, ChevronRight
 const SKIP_BANNER_KEY = "_afc_onboarding_banner_dismissed";
 
 function needsOnboarding(user: { name?: string | null; tradingExperience?: string | null; phone?: string | null }): boolean {
-  // User skipped if onboardingComplete is true but key fields are missing
   return !user.name || !user.tradingExperience || !user.phone;
 }
 
 export default function Overview() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const metrics = useQuery(api.challenges.getDashboardMetrics);
-  const challenges = useQuery(api.challenges.getMyChallenges);
-  const wallet = useQuery(api.wallets.getMyWallet);
+  const { data: metrics, isLoading: metricsLoading } = useApiQuery<any>(["metrics", "dashboard"], "/api/challenges/metrics");
+  const { data: challenges, isLoading: challengesLoading } = useApiQuery<any[]>(["challenges", "my"], "/api/challenges/my");
+  const { data: wallet, isLoading: walletLoading } = useApiQuery<any>(["wallet", "my"], "/api/wallets/my");
   const [bannerDismissed, setBannerDismissed] = useState(
     () => localStorage.getItem(SKIP_BANNER_KEY) === "true",
   );
 
   const showBanner = user && needsOnboarding(user) && !bannerDismissed;
+  const isLoading = metricsLoading || challengesLoading || walletLoading;
 
-  if (!metrics || !challenges || !wallet) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -39,36 +37,33 @@ export default function Overview() {
   const statCards = [
     {
       label: "Active Challenges",
-      value: metrics.activeChallenges,
+      value: metrics?.activeChallenges || 0,
       icon: <BarChart3 className="h-4 w-4" />,
       path: "/dashboard/challenges",
     },
     {
       label: "Funded Accounts",
-      value: metrics.fundedAccounts,
+      value: metrics?.fundedAccounts || 0,
       icon: <Award className="h-4 w-4" />,
       path: "/dashboard/trading",
     },
     {
       label: "Wallet Balance",
-      value: `${wallet.balance.toLocaleString()} ${wallet.currency}`,
+      value: `${(wallet?.balance || 0).toLocaleString()} ${wallet?.currency || "NGN"}`,
       icon: <Wallet className="h-4 w-4" />,
       path: "/dashboard/wallet",
     },
     {
       label: "Total Challenges",
-      value: metrics.totalChallenges,
+      value: metrics?.totalChallenges || 0,
       icon: <TrendingUp className="h-4 w-4" />,
       path: "/dashboard/challenges",
     },
   ];
 
-  // Latest metrics
-  const latestMetrics = metrics.latestMetrics;
-
   return (
     <div className="space-y-8">
-      {/* ── Onboarding reminder banner ── */}
+      {/* Onboarding reminder banner */}
       <AnimatePresence>
         {showBanner && (
           <motion.div
@@ -156,41 +151,21 @@ export default function Overview() {
         ))}
       </div>
 
-      {/* Latest metrics */}
-      {latestMetrics && (
-        <div>
-          <h2 className="text-sm font-medium mb-4">Latest Trading Metrics</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { label: "Balance", value: `$${latestMetrics.balance.toLocaleString()}` },
-              { label: "Equity", value: `$${latestMetrics.equity.toLocaleString()}` },
-              { label: "Profit Target", value: `${latestMetrics.profitTargetProgress.toFixed(1)}%` },
-              { label: "Health Score", value: `${latestMetrics.healthScore || 0}/100` },
-            ].map((m) => (
-              <div key={m.label} className="card-subtle p-4">
-                <div className="stat-label">{m.label}</div>
-                <div className="stat-value mt-1">{m.value}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Active challenges */}
-      {challenges.length > 0 ? (
+      {challenges && challenges.length > 0 ? (
         <div>
           <h2 className="text-sm font-medium mb-4">Your Challenges</h2>
           <div className="space-y-2">
-            {challenges.slice(0, 5).map((ch) => (
+            {challenges.slice(0, 5).map((ch: any) => (
               <button
-                key={ch._id}
+                key={ch.id}
                 onClick={() => navigate("/dashboard/challenges")}
                 className="w-full card-subtle p-4 flex items-center justify-between text-left hover:bg-secondary/30 transition-colors"
               >
                 <div>
-                  <div className="text-sm">{ch.templateName || "Challenge"}</div>
+                  <div className="text-sm">Challenge #{ch.id}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">
-                    ${ch.accountSize.toLocaleString()} — {ch.status.replace(/_/g, " ")}
+                    ${ch.accountSize?.toLocaleString()} — {ch.status?.replace(/_/g, " ")}
                   </div>
                 </div>
                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
