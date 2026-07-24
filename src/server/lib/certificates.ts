@@ -1,5 +1,5 @@
 import { getDb } from "../db";
-import { certificates, userChallenges } from "../schema";
+import { certificates, userChallenges, notifications, users } from "../schema";
 import { eq, and } from "drizzle-orm";
 import { randomBytes } from "crypto";
 
@@ -73,6 +73,7 @@ export function maybeGenerateCertificate(
   const certNumber = generateCertNumber(certType);
   const verificationCode = generateCode(12);
 
+  const now = Date.now();
   const result = db
     .insert(certificates)
     .values({
@@ -81,10 +82,38 @@ export function maybeGenerateCertificate(
       type: certType,
       certificateNumber: certNumber,
       verificationCode,
-      issuedAt: Date.now(),
+      issuedAt: now,
     })
     .returning()
     .get();
+
+  // ─── Dashboard notification ─────────────────────────────
+  const typeLabel = certType === "phase_1" ? "Phase 1" : certType === "phase_2" ? "Phase 2" : "Funded Trader";
+  try {
+    db.insert(notifications).values({
+      userId: challenge.userId,
+      type: "certificate",
+      title: `Certificate Earned: ${typeLabel}`,
+      message: `Congratulations! You have earned a ${typeLabel} certificate (#${certNumber}). Download your PDF from the Certificates page.`,
+      link: "/dashboard/certificates",
+      createdAt: now,
+    }).run();
+  } catch (e) {
+    // Non-critical — don't fail cert generation if notification insert fails
+  }
+
+  // ─── Email notification (when email service is connected) ──
+  // Check user email notification preferences
+  try {
+    const user = db.select().from(users).where(eq(users.id, challenge.userId)).get();
+    if (user?.email && user.emailNotifications !== false) {
+      console.log(`[EMAIL] Certificate earned notification for ${user.email}: ${typeLabel} cert #${certNumber}`);
+      // When email service is integrated, send here:
+      // await sendEmail({ to: user.email, subject: `Certificate Earned: ${typeLabel}`, template: 'certificate-earned', data: { certNumber, typeLabel, verificationCode } });
+    }
+  } catch (e) {
+    // Non-critical
+  }
 
   return result;
 }
