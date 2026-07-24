@@ -153,7 +153,7 @@ export default function Profile() {
                 Upload documents to verify your identity
               </p>
             </div>
-            {kycStatusBadge(user.kycStatus)}
+            {kycStatusBadge(user.kycStatus as any)}
           </div>
 
           <div className="grid md:grid-cols-2 gap-3">
@@ -179,7 +179,7 @@ export default function Profile() {
                     variant="outline"
                     size="sm"
                     className="w-full text-xs"
-                    onClick={() => handleKycUpload(doc.type)}
+                    onClick={() => handleKycUpload(doc.type as any)}
                     disabled={user.kycStatus === "approved"}
                   >
                     <Upload className="h-3 w-3 mr-1" />

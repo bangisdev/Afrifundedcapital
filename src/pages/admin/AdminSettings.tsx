@@ -61,9 +61,9 @@ export default function AdminSettings() {
           ))}
         </TabsList>
 
-        {Object.entries(groupedSettings).map(([group, groupSettings]) => (
+        {Object.entries(groupedSettings).map(([group, groupSettings]: [string, any]) => (
           <TabsContent key={group} value={group} className="space-y-2">
-            {groupSettings.map((s) => (
+            {(groupSettings as any[]).map((s: any) => (
               <div key={s._id} className="card-subtle p-4 flex items-center justify-between">
                 <div className="flex-1">
                   <div className="text-sm font-medium">

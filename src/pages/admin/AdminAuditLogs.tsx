@@ -43,10 +43,10 @@ export default function AdminAuditLogs() {
     );
   }
 
-  const actions = [...new Set(logs.map((l) => l.action))].sort();
-  const entities = [...new Set(logs.map((l) => l.entity))].sort();
+  const actions = [...new Set((logs as any[]).map((l: any) => l.action))].sort();
+  const entities = [...new Set((logs as any[]).map((l: any) => l.entity))].sort();
 
-  const filtered = logs.filter((log) => {
+  const filtered = (logs as any[]).filter((log: any) => {
     if (filterAction && log.action !== filterAction) return false;
     if (search) {
       const q = search.toLowerCase();
@@ -91,7 +91,7 @@ export default function AdminAuditLogs() {
           onChange={(e) => setFilterAction(e.target.value || null)}
         >
           <option value="">All actions</option>
-          {actions.map((a) => (
+          {(actions as any[]).map((a: any) => (
             <option key={a} value={a}>{a.replace(/_/g, " ")}</option>
           ))}
         </select>
@@ -105,7 +105,7 @@ export default function AdminAuditLogs() {
             <p className="text-sm text-muted-foreground">No audit logs found matching your filters.</p>
           </div>
         ) : (
-          filtered.map((log) => (
+          (filtered as any[]).map((log: any) => (
             <div key={log._id} className="card-subtle p-3 flex items-start gap-3">
               <div className="shrink-0 pt-0.5">
                 {getActionBadge(log.action)}

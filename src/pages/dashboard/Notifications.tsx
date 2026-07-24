@@ -201,7 +201,7 @@ export default function Notifications() {
     }
   };
 
-  const uniqueTypes = notifications ? [...new Set(notifications.map((n) => n.type))].sort() : [];
+  const uniqueTypes = notifications ? [...new Set((notifications as any[]).map((n: any) => n.type))].sort() as string[] : [];
 
   return (
     <div className="space-y-6">
@@ -257,7 +257,7 @@ export default function Notifications() {
           onChange={(e) => setFilterType(e.target.value || null)}
         >
           <option value="">All types</option>
-          {uniqueTypes.map((t) => (
+          {(uniqueTypes as string[]).map((t: string) => (
             <option key={t} value={t}>
               {t.replace(/_/g, " ")} ({typeCounts[t] || 0})
             </option>
