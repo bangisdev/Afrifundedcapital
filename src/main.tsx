@@ -80,6 +80,17 @@ class RootErrorBoundary extends React.Component<
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
+// Determine auth token storage based on the "remember me" preference.
+// - Checked → localStorage (persists across browser restarts)
+// - Unchecked → sessionStorage (cleared when tab/browser closes)
+// The flag itself is set by the Auth page checkbox and persisted in localStorage
+// so it survives page reloads and is available before the React tree mounts.
+const REMEMBER_KEY = "_afc_remember";
+const remembered =
+  typeof window !== "undefined" &&
+  window.localStorage.getItem(REMEMBER_KEY) === "true";
+const authStorage: Storage = remembered ? localStorage : sessionStorage;
+
 function RouteSyncer() {
   const location = useLocation();
   useEffect(() => {
@@ -110,7 +121,7 @@ createRoot(document.getElementById("root")!).render(
         <VlyToolbar />
       </ToolbarErrorBoundary>
       <ThemeProvider defaultTheme="dark" storageKey="afc-theme">
-        <ConvexAuthProvider client={convex}>
+        <ConvexAuthProvider client={convex} storage={authStorage}>
           <BrowserRouter>
             <RouteSyncer />
             <Suspense fallback={<RouteLoading />}>
