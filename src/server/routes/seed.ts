@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
 import { settings, challengeTemplates, accountSizes, users } from "../schema";
-import { eq } from "drizzle-orm";
+import { eq, count } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 
 const app = new Hono();
@@ -34,8 +34,8 @@ app.post("/seed", requireAuth, requireAdmin, (c) => {
   const userId = c.get("userId");
 
   // Seed challenge templates if none exist
-  const existingTemplates = db.select({ count: { value: "count(*)" } }).from(challengeTemplates).all();
-  if (existingTemplates.length === 0 || !existingTemplates[0]) {
+  const existingTemplates = db.select({ cnt: count() }).from(challengeTemplates).all();
+  if (existingTemplates.length === 0 || !existingTemplates[0] || (existingTemplates[0]?.cnt ?? 0) === 0) {
     const templates = [
       { name: "Two-Step Evaluation", type: "two_step", profitTarget: 8, dailyDrawdown: 5, maxDrawdown: 10, maxLeverage: 100, minTradingDays: 5, price: 50000, durationDays: 30 },
       { name: "One-Step Challenge", type: "one_step", profitTarget: 10, dailyDrawdown: 4, maxDrawdown: 8, maxLeverage: 50, minTradingDays: 3, price: 40000, durationDays: 30 },

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
-import { notifications } from "../schema";
+import { notifications, users } from "../schema";
 import { eq, desc, count, and } from "drizzle-orm";
 import { requireAuth } from "../middleware";
 

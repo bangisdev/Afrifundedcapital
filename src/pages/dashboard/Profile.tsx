@@ -18,10 +18,10 @@ export default function Profile() {
   const uploadKyc = useMutation(api.kyc.uploadKycDocument);
   const [saving, setSaving] = useState(false);
 
-  const [name, setName] = useState(user?.name || "");
-  const [phone, setPhone] = useState(user?.phone || "");
-  const [address, setAddress] = useState(user?.address || "");
-  const [country, setCountry] = useState(user?.country || "");
+  const [name, setName] = useState(String(user?.name || ""));
+  const [phone, setPhone] = useState(String(user?.phone || ""));
+  const [address, setAddress] = useState(String(user?.address || ""));
+  const [country, setCountry] = useState(String(user?.country || ""));
 
   const handleSaveProfile = async () => {
     setSaving(true);
@@ -164,7 +164,7 @@ export default function Profile() {
               { type: "proof_of_address", label: "Proof of Address" },
               { type: "selfie", label: "Selfie Verification" },
             ].map((doc) => {
-              const existing = kycDocs?.find((d) => d.documentType === doc.type);
+              const existing = kycDocs?.find((d: any) => d.documentType === doc.type) as any;
               return (
                 <div key={doc.type} className="card-subtle p-4">
                   <div className="flex items-center justify-between mb-3">
