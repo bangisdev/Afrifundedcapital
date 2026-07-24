@@ -1,9 +1,5 @@
 import { useCallback, useState } from "react";
-import { useAction, useQuery, useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
-import { useFlutterwave, closePaymentModal } from "flutterwave-react-v3";
 import { toast } from "sonner";
-import type { Id } from "@/convex/_generated/dataModel";
 
 export interface FlutterwaveCheckoutParams {
   amount: number;
@@ -11,8 +7,8 @@ export interface FlutterwaveCheckoutParams {
   email: string;
   name: string;
   phoneNumber?: string;
-  templateId: Id<"challengeTemplates">;
-  accountSizeId: Id<"accountSizes">;
+  templateId: string;
+  accountSizeId: string;
   couponCode?: string;
   description?: string;
 }
@@ -26,17 +22,14 @@ export interface CheckoutState {
 export function useFlutterwavePayment() {
   const [state, setState] = useState<CheckoutState>({ status: "idle" });
 
-  const initiatePayment = useMutation(api.payments.initiatePayment);
-  const verifyTransaction = useAction(api.payments.verifyFlutterwaveTransaction);
-  const getConfig = useAction(api.payments.getFlutterwaveConfig);
-
   const startCheckout = useCallback(
     async (params: FlutterwaveCheckoutParams) => {
       try {
         setState({ status: "initiating" });
 
         // Step 1: Get Flutterwave public key from backend
-        const config = await getConfig();
+        const configRes = await fetch("/api/payments/flutterwave-config", { credentials: "include" });
+        const config = await configRes.json();
         if (!config.publicKey) {
           setState({ status: "error", message: "Flutterwave is not configured. Please add your API key." });
           toast.error("Flutterwave public key not configured");
@@ -44,22 +37,32 @@ export function useFlutterwavePayment() {
         }
 
         // Step 2: Initiate payment with backend (creates payment record)
-        const result = await initiatePayment({
-          amount: params.amount,
-          currency: params.currency || "NGN",
-          provider: "flutterwave",
-          templateId: params.templateId,
-          accountSizeId: params.accountSizeId,
-          couponCode: params.couponCode,
-          description: params.description || "Challenge Purchase",
+        const initRes = await fetch("/api/payments/initiate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            amount: params.amount,
+            currency: params.currency || "NGN",
+            templateId: params.templateId,
+            accountSizeId: params.accountSizeId,
+            couponCode: params.couponCode,
+            description: params.description || "Challenge Purchase",
+          }),
         });
 
-        setState({ status: "checkout_open", reference: result.reference });
+        if (!initRes.ok) {
+          const err = await initRes.json();
+          throw new Error(err.error || "Failed to initiate payment");
+        }
+
+        const { paymentId, reference } = await initRes.json();
+        setState({ status: "checkout_open", reference });
 
         // Step 3: Build Flutterwave inline config
         const flutterwaveConfig = {
           public_key: config.publicKey,
-          tx_ref: result.reference,
+          tx_ref: reference,
           amount: params.amount,
           currency: params.currency || "NGN",
           payment_options: "card,ussd,banktransfer,mobilemoney",
@@ -74,33 +77,36 @@ export function useFlutterwavePayment() {
             logo: "https://afrifundedcapital.com/logo.png",
           },
           meta: {
-            paymentId: result.paymentId,
+            paymentId: String(paymentId),
           },
         };
 
         // Step 4: Open Flutterwave checkout modal
-        // We use the inline script approach since we need to dynamically create the config
-        // The flutterwave-react-v3 useFlutterwave hook can't be called conditionally,
-        // so we'll use the window.FlutterwaveCheckout API directly via script injection
-
         await openFlutterwaveInline({
           ...flutterwaveConfig,
           callback: async (response: any) => {
             setState({ status: "verifying" });
             try {
-              const verification = await verifyTransaction({
-                paymentId: result.paymentId as Id<"payments">,
-                transactionId: String(response.transaction_id || ""),
-                flwRef: response.flw_ref || "",
+              const verifyRes = await fetch("/api/payments/verify", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({
+                  paymentId,
+                  transactionId: String(response.transaction_id || ""),
+                  flwRef: response.flw_ref || "",
+                }),
               });
+
+              const verification = await verifyRes.json();
 
               closePaymentModal();
 
               if (verification.status === "completed") {
-                setState({ status: "success", message: "Payment successful! Challenge created.", reference: result.reference });
+                setState({ status: "success", message: "Payment successful! Challenge created.", reference });
                 toast.success("Challenge purchased successfully!");
               } else {
-                setState({ status: "success", message: "Payment already processed.", reference: result.reference });
+                setState({ status: "success", message: "Payment already processed.", reference });
                 toast.success("Challenge purchased successfully!");
               }
             } catch (error: unknown) {
@@ -122,7 +128,7 @@ export function useFlutterwavePayment() {
         toast.error(emsg);
       }
     },
-    [getConfig, initiatePayment, verifyTransaction, state.status],
+    [state.status],
   );
 
   const reset = useCallback(() => {
@@ -133,8 +139,7 @@ export function useFlutterwavePayment() {
 }
 
 /**
- * Opens the Flutterwave Inline checkout modal by dynamically loading the SDK script
- * and initializing it with the provided configuration.
+ * Opens the Flutterwave Inline checkout modal by dynamically loading the SDK script.
  */
 interface FlutterwaveCheckoutInstance {
   (config: {
@@ -156,7 +161,6 @@ type FlutterwaveWindow = Window & typeof globalThis & {
 };
 
 async function openFlutterwaveInline(config: Parameters<NonNullable<FlutterwaveWindow["FlutterwaveCheckout"]>>[0]): Promise<void> {
-  // Dynamically load Flutterwave inline script if not already loaded
   const fwWindow = window as FlutterwaveWindow;
   if (!fwWindow.FlutterwaveCheckout) {
     await new Promise<void>((resolve, reject) => {
@@ -169,8 +173,12 @@ async function openFlutterwaveInline(config: Parameters<NonNullable<FlutterwaveW
     });
   }
 
-  // Open the checkout modal
   if (fwWindow.FlutterwaveCheckout) {
     fwWindow.FlutterwaveCheckout(config);
   }
+}
+
+function closePaymentModal() {
+  // Flutterwave inline doesn't have a close method — the modal closes on callback
+  // This is a no-op placeholder
 }

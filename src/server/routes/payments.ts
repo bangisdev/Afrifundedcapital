@@ -1,10 +1,267 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
-import { payments, paymentLogs } from "../schema";
+import { payments, paymentLogs, flutterwaveTransactions, challengeTemplates, accountSizes, userChallenges, mt5Accounts } from "../schema";
 import { eq, desc, count, and, sql } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 
 const app = new Hono();
+
+// ─── Flutterwave Config ────────────────────────────────
+app.get("/flutterwave-config", requireAuth, (c) => {
+  const publicKey = process.env.FLW_PUBLIC_KEY || "";
+  return c.json({ publicKey });
+});
+
+// ─── Initiate Payment ──────────────────────────────────
+app.post("/initiate", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  const body = await c.req.json();
+  const db = getDb();
+  const now = Date.now();
+
+  // Generate unique reference
+  const reference = `AFC-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+  // Create payment record
+  const payment = db.insert(payments).values({
+    userId,
+    amount: body.amount,
+    currency: body.currency || "NGN",
+    provider: "flutterwave",
+    status: "pending",
+    reference,
+    description: body.description || "Challenge Purchase",
+    templateId: body.templateId ? parseInt(body.templateId) : null,
+    accountSizeId: body.accountSizeId ? parseInt(body.accountSizeId) : null,
+    metadata: body.couponCode ? JSON.stringify({ couponCode: body.couponCode }) : null,
+    createdAt: now,
+  }).returning().get();
+
+  return c.json({ paymentId: payment.id, reference });
+});
+
+// ─── Verify Transaction (client-side callback) ─────────
+app.post("/verify", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  const body = await c.req.json();
+  const db = getDb();
+  const now = Date.now();
+
+  const { paymentId, transactionId, flwRef } = body;
+
+  // Find the payment record
+  const payment = db.select().from(payments).where(eq(payments.id, paymentId)).get();
+  if (!payment) return c.json({ error: "Payment not found" }, 404);
+  if (payment.userId !== userId) return c.json({ error: "Unauthorized" }, 403);
+  if (payment.status === "completed") return c.json({ status: "completed", message: "Already processed" });
+
+  // Verify with Flutterwave API
+  const secretKey = process.env.FLW_SECRET_KEY || "";
+  let verificationResult: any;
+
+  try {
+    const response = await fetch(`https://api.flutterwave.com/v3/transactions/${transactionId}/verify`, {
+      headers: { Authorization: `Bearer ${secretKey}` },
+    });
+    verificationResult = await response.json();
+  } catch (err) {
+    return c.json({ error: "Failed to verify with Flutterwave" }, 500);
+  }
+
+  // Log the verification
+  db.insert(paymentLogs).values({
+    paymentId: payment.id,
+    provider: "flutterwave",
+    event: "verification",
+    data: JSON.stringify(verificationResult),
+    createdAt: now,
+  }).run();
+
+  // Check verification result
+  if (verificationResult.status === "success" && verificationResult.data?.status === "successful") {
+    // Mark payment as completed
+    db.update(payments).set({ status: "completed", completedAt: now }).where(eq(payments.id, payment.id)).run();
+
+    // Store Flutterwave transaction
+    db.insert(flutterwaveTransactions).values({
+      paymentId: payment.id,
+      transactionId: String(transactionId),
+      flwRef: flwRef || verificationResult.data?.flw_ref || "",
+      status: "successful",
+      amount: verificationResult.data?.amount || payment.amount,
+      currency: verificationResult.data?.currency || payment.currency,
+      chargedAmount: verificationResult.data?.charged_amount || payment.amount,
+      processorResponse: verificationResult.data?.processor_response || " successful",
+      customerEmail: verificationResult.data?.customer?.email || "",
+      customerName: verificationResult.data?.customer?.name || "",
+      paymentType: verificationResult.data?.payment_type || "card",
+      createdAt: now,
+      verifiedAt: now,
+    }).run();
+
+    // Create challenge if template + account size provided
+    if (payment.templateId && payment.accountSizeId) {
+      const template = db.select().from(challengeTemplates).where(eq(challengeTemplates.id, payment.templateId)).get();
+      const size = db.select().from(accountSizes).where(eq(accountSizes.id, payment.accountSizeId)).get();
+
+      if (template && size) {
+        const challenge = db.insert(userChallenges).values({
+          userId,
+          templateId: payment.templateId,
+          accountSizeId: payment.accountSizeId,
+          status: "active",
+          accountSize: size.size,
+          currency: "NGN",
+          profitTarget: template.profitTarget,
+          dailyDrawdown: template.dailyDrawdown,
+          maxDrawdown: template.maxDrawdown,
+          maxLeverage: template.maxLeverage,
+          minTradingDays: template.minTradingDays,
+          maxTradingDays: template.maxTradingDays || null,
+          paymentId: payment.id,
+          amountPaid: payment.amount,
+          startedAt: now,
+          expiresAt: now + (template.durationDays || 30) * 86400000,
+          createdAt: now,
+          updatedAt: now,
+        }).returning().get();
+
+        // Create MT5 account for the challenge
+        const login = "AFC" + Math.floor(100000 + Math.random() * 900000);
+        const mt5Account = db.insert(mt5Accounts).values({
+          userId,
+          login,
+          password: "Afc@" + Math.random().toString(36).substring(2, 10),
+          investorPassword: "Afc@" + Math.random().toString(36).substring(2, 10),
+          server: "AfriFundedCapital-Demo",
+          group: "DEMO\\AFC",
+          leverage: template.maxLeverage || 100,
+          balance: size.size,
+          equity: size.size,
+          currency: "NGN",
+          createdAt: now,
+        }).returning().get();
+
+        // Link MT5 account to challenge
+        db.update(userChallenges).set({ mt5AccountId: mt5Account.id, updatedAt: now }).where(eq(userChallenges.id, challenge.id)).run();
+      }
+    }
+
+    return c.json({ status: "completed", message: "Payment verified and challenge created" });
+  }
+
+  // Payment failed verification
+  db.update(payments).set({ status: "failed" }).where(eq(payments.id, payment.id)).run();
+  return c.json({ status: "failed", message: "Payment verification failed" });
+});
+
+// ─── Flutterwave Webhook ───────────────────────────────
+app.post("/webhook/flutterwave", async (c) => {
+  const body = await c.req.json();
+  const db = getDb();
+  const now = Date.now();
+
+  // Verify webhook signature (verif-hash)
+  const secretHash = process.env.FLW_SECRET_HASH || "";
+  const signature = c.req.header("verif-hash") || "";
+  if (secretHash && signature !== secretHash) {
+    return c.json({ error: "Invalid signature" }, 401);
+  }
+
+  const event = body?.event;
+  const data = body?.data;
+
+  if (!data?.id) return c.json({ status: "ignored" });
+
+  // Find payment by tx_ref
+  const payment = db.select().from(payments).where(eq(payments.reference, data.tx_ref)).get();
+  if (!payment) return c.json({ status: "ignored" });
+
+  // Log webhook
+  db.insert(paymentLogs).values({
+    paymentId: payment.id,
+    provider: "flutterwave",
+    event: event || "webhook",
+    data: JSON.stringify(body),
+    ipAddress: c.req.header("x-forwarded-for") || "unknown",
+    createdAt: now,
+  }).run();
+
+  // If already completed, skip
+  if (payment.status === "completed") return c.json({ status: "already_processed" });
+
+  if (event === "charge.completed" && data.status === "successful") {
+    // Mark payment completed
+    db.update(payments).set({ status: "completed", completedAt: now }).where(eq(payments.id, payment.id)).run();
+
+    // Store Flutterwave transaction
+    db.insert(flutterwaveTransactions).values({
+      paymentId: payment.id,
+      transactionId: String(data.id),
+      flwRef: data.flw_ref || "",
+      status: "successful",
+      amount: data.amount || payment.amount,
+      currency: data.currency || payment.currency,
+      chargedAmount: data.charged_amount || payment.amount,
+      processorResponse: data.processor_response || "successful",
+      customerEmail: data.customer?.email || "",
+      customerName: data.customer?.name || "",
+      paymentType: data.payment_type || "card",
+      createdAt: now,
+      verifiedAt: now,
+    }).run();
+
+    // Create challenge if template + account size provided
+    if (payment.templateId && payment.accountSizeId) {
+      const template = db.select().from(challengeTemplates).where(eq(challengeTemplates.id, payment.templateId)).get();
+      const size = db.select().from(accountSizes).where(eq(accountSizes.id, payment.accountSizeId)).get();
+
+      if (template && size) {
+        const challenge = db.insert(userChallenges).values({
+          userId: payment.userId,
+          templateId: payment.templateId,
+          accountSizeId: payment.accountSizeId,
+          status: "active",
+          accountSize: size.size,
+          currency: "NGN",
+          profitTarget: template.profitTarget,
+          dailyDrawdown: template.dailyDrawdown,
+          maxDrawdown: template.maxDrawdown,
+          maxLeverage: template.maxLeverage,
+          minTradingDays: template.minTradingDays,
+          maxTradingDays: template.maxTradingDays || null,
+          paymentId: payment.id,
+          amountPaid: payment.amount,
+          startedAt: now,
+          expiresAt: now + (template.durationDays || 30) * 86400000,
+          createdAt: now,
+          updatedAt: now,
+        }).returning().get();
+
+        const login = "AFC" + Math.floor(100000 + Math.random() * 900000);
+        const mt5Account = db.insert(mt5Accounts).values({
+          userId: payment.userId,
+          login,
+          password: "Afc@" + Math.random().toString(36).substring(2, 10),
+          investorPassword: "Afc@" + Math.random().toString(36).substring(2, 10),
+          server: "AfriFundedCapital-Demo",
+          group: "DEMO\\AFC",
+          leverage: template.maxLeverage || 100,
+          balance: size.size,
+          equity: size.size,
+          currency: "NGN",
+          createdAt: now,
+        }).returning().get();
+
+        db.update(userChallenges).set({ mt5AccountId: mt5Account.id, updatedAt: now }).where(eq(userChallenges.id, challenge.id)).run();
+      }
+    }
+  }
+
+  return c.json({ status: "ok" });
+});
+
+// ─── Existing routes ───────────────────────────────────
 
 // Get my payments
 app.get("/my", requireAuth, (c) => {
@@ -38,12 +295,10 @@ app.get("/admin/revenue-growth", requireAuth, requireAdmin, (c) => {
   const now = Date.now();
   const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
   const sixtyDaysAgo = now - 60 * 24 * 60 * 60 * 1000;
-
   const thisMonth = db.select({ total: sql<number>`coalesce(sum(amount), 0)` }).from(payments)
     .where(and(eq(payments.status, "completed"), sql`created_at > ${thirtyDaysAgo}`)).get();
   const lastMonth = db.select({ total: sql<number>`coalesce(sum(amount), 0)` }).from(payments)
     .where(and(eq(payments.status, "completed"), sql`created_at > ${sixtyDaysAgo} AND created_at <= ${thirtyDaysAgo}`)).get();
-
   return c.json({ thisMonth: thisMonth?.total || 0, lastMonth: lastMonth?.total || 0 });
 });
 
