@@ -1,14 +1,14 @@
 import { Hono } from "hono";
-import { getDb } from "./db";
+import { getDb } from "../db";
 import {
   challengeTemplates,
   accountSizes,
   userChallenges,
   tradingMetrics,
   users,
-} from "./schema";
+} from "../schema";
 import { eq, desc, count, sql, and } from "drizzle-orm";
-import { requireAuth, requireAdmin } from "./middleware";
+import { requireAuth, requireAdmin } from "../middleware";
 
 const app = new Hono();
 

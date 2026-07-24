@@ -1,8 +1,8 @@
 import { Hono } from "hono";
-import { getDb } from "./db";
-import { payments, paymentLogs } from "./schema";
+import { getDb } from "../db";
+import { payments, paymentLogs } from "../schema";
 import { eq, desc, count, and, sql } from "drizzle-orm";
-import { requireAuth, requireAdmin } from "./middleware";
+import { requireAuth, requireAdmin } from "../middleware";
 
 const app = new Hono();
 

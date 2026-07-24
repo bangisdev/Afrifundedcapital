@@ -4,6 +4,21 @@ import { auth } from "./auth";
 import { initDatabase } from "./db";
 import type { Plugin, ViteDevServer } from "vite";
 
+// Import route modules
+import usersRouter from "./routes/users";
+import challengesRouter from "./routes/challenges";
+import notificationsRouter from "./routes/notifications";
+import walletsRouter from "./routes/wallets";
+import paymentsRouter from "./routes/payments";
+import tradingRouter from "./routes/trading";
+import kycRouter from "./routes/kyc";
+import supportRouter from "./routes/support";
+import affiliatesRouter from "./routes/affiliates";
+import couponsRouter from "./routes/coupons";
+import certificatesRouter from "./routes/certificates";
+import payoutsRouter from "./routes/payouts";
+import seedRouter from "./routes/seed";
+
 // Initialize database
 initDatabase();
 
@@ -11,7 +26,7 @@ const app = new Hono();
 
 // CORS
 app.use("*", cors({
-  origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
+  origin: ["http://localhost:5173", "http://127.0.0.1:5173", "https://*.freebuff.dev", "https://*.vly.sh"],
   credentials: true,
 }));
 
@@ -20,6 +35,21 @@ app.get("/api/health", (c) => c.json({ status: "ok", timestamp: Date.now() }));
 
 // Better Auth handler
 app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+
+// Mount route modules
+app.route("/api/users", usersRouter);
+app.route("/api/challenges", challengesRouter);
+app.route("/api/notifications", notificationsRouter);
+app.route("/api/wallets", walletsRouter);
+app.route("/api/payments", paymentsRouter);
+app.route("/api/trading", tradingRouter);
+app.route("/api/kyc", kycRouter);
+app.route("/api/support", supportRouter);
+app.route("/api/affiliates", affiliatesRouter);
+app.route("/api/coupons", couponsRouter);
+app.route("/api/certificates", certificatesRouter);
+app.route("/api/payouts", payoutsRouter);
+app.route("/api/seed", seedRouter);
 
 // ═══════════════════════════════════════════════
 //  VITE PLUGIN — mounts Hono into dev server
@@ -56,7 +86,7 @@ export function honoPlugin(): Plugin {
               req.on("end", () => resolve(Buffer.concat(chunks)));
               req.on("error", reject);
             });
-            body = new Uint8Array(raw);
+            body = new Uint8Array(raw) as unknown as BodyInit;
           }
 
           const webReq = new Request(url.toString(), {

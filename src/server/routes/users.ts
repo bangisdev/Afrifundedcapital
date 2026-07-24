@@ -1,8 +1,8 @@
 import { Hono } from "hono";
-import { getDb } from "./db";
-import { users, sessions, auditLogs, settings, wallets } from "./schema";
+import { getDb } from "../db";
+import { users, sessions, auditLogs, settings, wallets } from "../schema";
 import { eq, desc, like, count, sql, and } from "drizzle-orm";
-import { requireAuth, requireAdmin } from "./middleware";
+import { requireAuth, requireAdmin } from "../middleware";
 
 const app = new Hono();
 

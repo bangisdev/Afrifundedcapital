@@ -1,8 +1,8 @@
 import { Hono } from "hono";
-import { getDb } from "./db";
-import { wallets, walletTransactions } from "./schema";
+import { getDb } from "../db";
+import { wallets, walletTransactions } from "../schema";
 import { eq, desc, and } from "drizzle-orm";
-import { requireAuth } from "./middleware";
+import { requireAuth } from "../middleware";
 
 const app = new Hono();
 
