@@ -6,7 +6,8 @@ import { requireAuth, requireAdmin } from "../middleware";
 
 const app = new Hono();
 
-// Get my MT5 accounts
+// ─── MT5 Accounts ──────────────────────────────────────
+
 app.get("/mt5", requireAuth, (c) => {
   const userId = c.get("userId");
   const db = getDb();
@@ -14,7 +15,8 @@ app.get("/mt5", requireAuth, (c) => {
   return c.json(accounts);
 });
 
-// Get challenge metrics (latest)
+// ─── Challenge Metrics ─────────────────────────────────
+
 app.get("/challenge/:id/metrics", requireAuth, (c) => {
   const id = parseInt(c.req.param("id"));
   const db = getDb();
@@ -25,7 +27,6 @@ app.get("/challenge/:id/metrics", requireAuth, (c) => {
   return c.json(latest || null);
 });
 
-// Get challenge metrics history
 app.get("/challenge/:id/history", requireAuth, (c) => {
   const id = parseInt(c.req.param("id"));
   const db = getDb();
@@ -35,7 +36,6 @@ app.get("/challenge/:id/history", requireAuth, (c) => {
   return c.json(history);
 });
 
-// Get drawdown history
 app.get("/challenge/:id/drawdown", requireAuth, (c) => {
   const id = parseInt(c.req.param("id"));
   const db = getDb();
@@ -45,7 +45,237 @@ app.get("/challenge/:id/drawdown", requireAuth, (c) => {
   return c.json(history);
 });
 
-// Seed demo trading data
+// ─── Daily Sync (simulated MT5 pull) ──────────────────
+
+/**
+ * Simulates pulling the latest daily metrics from MT5 server.
+ * In production, this would call the MT5 Manager API to get:
+ * - Balance, Equity, Floating P/L
+ * - Open positions, closed trades
+ * - Win/loss rates, profit factor, etc.
+ *
+ * For now, we simulate realistic daily changes based on the
+ * challenge's current state and random market behavior.
+ */
+function simulateDailySync(
+  challenge: any,
+  previousMetrics: any | null,
+): {
+  metrics: Record<string, number>;
+  accountUpdate: { balance: number; equity: number };
+} {
+  const baseBalance = challenge.accountSize;
+  const prev = previousMetrics;
+
+  // Use previous day's balance as starting point
+  const prevBalance = prev?.balance ?? baseBalance;
+  const prevEquity = prev?.equity ?? baseBalance;
+
+  // Simulate daily P/L with realistic variance (slight upward bias)
+  const dailyVariance = (Math.random() - 0.47) * baseBalance * 0.015; // ~1.5% max daily swing
+  const newBalance = Math.max(baseBalance * 0.5, prevBalance + dailyVariance); // Floor at 50% of initial
+  const floatingPL = (Math.random() - 0.5) * baseBalance * 0.008;
+  const newEquity = newBalance + floatingPL;
+
+  const totalProfit = newBalance - baseBalance;
+  const currentDrawdown = Math.max(0, baseBalance - newEquity);
+  const dailyDrawdown = Math.max(0, -dailyVariance);
+  const peakBalance = Math.max(prev?.balance ?? 0, newBalance);
+
+  // Calculate drawdown relative to peak
+  const trailingDrawdown = peakBalance > 0 ? ((peakBalance - newEquity) / peakBalance) * 100 : 0;
+
+  const tradingDaysCount = (prev?.tradingDaysCount ?? 0) + 1;
+  const closedTrades = (prev?.closedTrades ?? 0) + Math.floor(Math.random() * 5) + 1;
+
+  // Win rate with slight improvement over time
+  const baseWinRate = 48 + Math.min(tradingDaysCount * 0.1, 8);
+  const winRate = baseWinRate + (Math.random() - 0.5) * 6;
+
+  const openPositions = Math.floor(Math.random() * 6);
+  const wins = Math.floor(closedTrades * (winRate / 100));
+  const losses = closedTrades - wins;
+  const avgRR = 1.2 + Math.random() * 1.5;
+  const profitFactor = 1.0 + (winRate / 100) * avgRR * 0.5 + (Math.random() - 0.5) * 0.3;
+
+  const largestWin = prev?.largestWin
+    ? Math.max(prev.largestWin, Math.round(baseBalance * 0.025 * Math.random()))
+    : Math.round(baseBalance * 0.02 * Math.random());
+  const largestLoss = prev?.largestLoss
+    ? Math.min(prev.largestLoss, -Math.round(baseBalance * 0.015 * Math.random()))
+    : -Math.round(baseBalance * 0.012 * Math.random());
+
+  // Consecutive tracking
+  const isWin = dailyVariance > 0;
+  const consecutiveWins = isWin ? (prev?.consecutiveWins ?? 0) + 1 : 0;
+  const consecutiveLosses = isWin ? 0 : (prev?.consecutiveLosses ?? 0) + 1;
+
+  // Risk and health scores
+  const riskScore = Math.min(100, Math.max(0, 50 + (trailingDrawdown * 5) + (Math.random() - 0.5) * 10));
+  const healthScore = Math.min(100, Math.max(0, 80 - (trailingDrawdown * 3) + (winRate - 50) * 0.5 + (Math.random() - 0.5) * 10));
+
+  const profitTargetProgress = challenge.profitTarget > 0
+    ? Math.min(100, Math.max(0, (totalProfit / (challenge.profitTarget * baseBalance / 100)) * 100))
+    : 0;
+
+  return {
+    metrics: {
+      balance: Math.round(newBalance * 100) / 100,
+      equity: Math.round(newEquity * 100) / 100,
+      floatingPL: Math.round(floatingPL * 100) / 100,
+      dailyPL: Math.round(dailyVariance * 100) / 100,
+      totalProfit: Math.round(totalProfit * 100) / 100,
+      currentDrawdown: Math.round(currentDrawdown * 100) / 100,
+      dailyDrawdown: Math.round(dailyDrawdown * 100) / 100,
+      trailingDrawdown: Math.round(trailingDrawdown * 100) / 100,
+      relativeDrawdown: Math.round((currentDrawdown / baseBalance) * 10000) / 100,
+      absoluteDrawdown: Math.round(Math.max(0, baseBalance - newEquity) * 100) / 100,
+      remainingDrawdown: Math.round(Math.max(0, challenge.maxDrawdown * baseBalance / 100 - currentDrawdown) * 100) / 100,
+      profitTargetProgress: Math.round(profitTargetProgress * 100) / 100,
+      tradingDaysCount,
+      openPositions,
+      closedTrades,
+      winRate: Math.round(winRate * 10) / 10,
+      lossRate: Math.round((100 - winRate) * 10) / 10,
+      averageRR: Math.round(avgRR * 100) / 100,
+      profitFactor: Math.round(profitFactor * 100) / 100,
+      expectancy: Math.round(((winRate / 100) * baseBalance * 0.015 - ((100 - winRate) / 100) * baseBalance * 0.01) * 100) / 100,
+      largestWin,
+      largestLoss,
+      consecutiveWins,
+      consecutiveLosses,
+      riskScore: Math.round(riskScore),
+      healthScore: Math.round(healthScore),
+    },
+    accountUpdate: {
+      balance: Math.round(newBalance * 100) / 100,
+      equity: Math.round(newEquity * 100) / 100,
+    },
+  };
+}
+
+/**
+ * Sync a single challenge — pulls latest "MT5 data" and stores it.
+ */
+function syncChallenge(db: any, challenge: any): boolean {
+  const now = Date.now();
+  const DAY = 86400000;
+
+  // Get latest metrics for this challenge
+  const latestMetrics = db.select().from(tradingMetrics)
+    .where(eq(tradingMetrics.challengeId, challenge.id))
+    .orderBy(desc(tradingMetrics.recordedAt))
+    .limit(1).get();
+
+  // Check if we already synced today (within last 23 hours)
+  if (latestMetrics && (now - latestMetrics.recordedAt) < 23 * 60 * 60 * 1000) {
+    return false; // Already synced today
+  }
+
+  // Simulate MT5 data pull
+  const { metrics, accountUpdate } = simulateDailySync(challenge, latestMetrics);
+
+  // Insert new metrics record
+  db.insert(tradingMetrics).values({
+    mt5AccountId: challenge.mt5AccountId || 0,
+    challengeId: challenge.id,
+    ...metrics,
+    recordedAt: now,
+  }).run();
+
+  // Insert drawdown history
+  db.insert(drawdownHistory).values({
+    challengeId: challenge.id,
+    mt5AccountId: challenge.mt5AccountId || 0,
+    balance: accountUpdate.balance,
+    equity: accountUpdate.equity,
+    drawdown: metrics.currentDrawdown,
+    dailyDrawdown: metrics.dailyDrawdown,
+    peakBalance: Math.max(latestMetrics?.balance ?? challenge.accountSize, accountUpdate.balance),
+    recordedAt: now,
+  }).run();
+
+  // Update MT5 account balance/equity
+  if (challenge.mt5AccountId) {
+    db.update(mt5Accounts).set({
+      balance: accountUpdate.balance,
+      equity: accountUpdate.equity,
+      lastSyncAt: now,
+    }).where(eq(mt5Accounts.id, challenge.mt5AccountId)).run();
+  }
+
+  return true;
+}
+
+// ─── Manual Sync (user triggers for own account) ──────
+
+app.post("/sync", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  const body = await c.req.json().catch(() => ({}));
+  const db = getDb();
+
+  // Get active challenges for this user
+  const challenges = db.select().from(userChallenges)
+    .where(and(
+      eq(userChallenges.userId, userId),
+      eq(userChallenges.status, "active"),
+    )).all();
+
+  if (challenges.length === 0) {
+    return c.json({ synced: 0, message: "No active challenges to sync" });
+  }
+
+  // If specific challenge requested
+  const targetId = body.challengeId ? parseInt(body.challengeId) : null;
+  const targets = targetId
+    ? challenges.filter((ch) => ch.id === targetId)
+    : challenges;
+
+  let synced = 0;
+  for (const challenge of targets) {
+    if (syncChallenge(db, challenge)) {
+      synced++;
+    }
+  }
+
+  return c.json({
+    synced,
+    message: synced > 0
+      ? `Synced ${synced} challenge(s) with latest metrics`
+      : "All challenges already synced today",
+  });
+});
+
+// ─── Admin: Sync All Active Accounts ───────────────────
+
+app.post("/admin/sync-all", requireAuth, requireAdmin, (c) => {
+  const db = getDb();
+
+  const activeChallenges = db.select().from(userChallenges)
+    .where(eq(userChallenges.status, "active"))
+    .all();
+
+  let synced = 0;
+  let skipped = 0;
+
+  for (const challenge of activeChallenges) {
+    if (syncChallenge(db, challenge)) {
+      synced++;
+    } else {
+      skipped++;
+    }
+  }
+
+  return c.json({
+    synced,
+    skipped,
+    total: activeChallenges.length,
+    message: `Synced ${synced}, skipped ${skipped} (already synced today)`,
+  });
+});
+
+// ─── Demo Seeding ──────────────────────────────────────
+
 app.post("/seed-demo", requireAuth, async (c) => {
   const userId = c.get("userId");
   const body = await c.req.json();
@@ -58,16 +288,15 @@ app.post("/seed-demo", requireAuth, async (c) => {
 
   if (!challenge) return c.json({ error: "Challenge not found" }, 404);
 
-  // Check if metrics already exist
-  const existing = db.select({ count: count() }).from(tradingMetrics)
+  const existing = db.select({ cnt: count() }).from(tradingMetrics)
     .where(eq(tradingMetrics.challengeId, challengeId)).get();
-  if (existing && existing.count > 0) return c.json({ success: true, seeded: false });
+  if (existing && (existing.cnt ?? 0) > 0) return c.json({ success: true, seeded: false });
 
   const now = Date.now();
   const DAY = 86400000;
   const baseBalance = challenge.accountSize;
 
-  // Create 60 days of demo metrics
+  let prevMetrics: any = null;
   for (let i = 0; i < 60; i++) {
     const t = now - (60 - i) * DAY;
     const variance = (Math.random() - 0.45) * baseBalance * 0.02;
@@ -76,7 +305,7 @@ app.post("/seed-demo", requireAuth, async (c) => {
     const dailyPL = variance;
     const totalProfit = balance - baseBalance;
 
-    db.insert(tradingMetrics).values({
+    const metricsData = {
       mt5AccountId: challenge.mt5AccountId || 0,
       challengeId,
       balance: Math.round(balance * 100) / 100,
@@ -106,16 +335,17 @@ app.post("/seed-demo", requireAuth, async (c) => {
       riskScore: Math.round(Math.random() * 100),
       healthScore: 60 + Math.floor(Math.random() * 35),
       recordedAt: t,
-    }).run();
-  }
+    };
 
-  // Mark demo seeded
-  db.update(userChallenges).set({ updatedAt: now }).where(eq(userChallenges.id, challengeId)).run();
+    db.insert(tradingMetrics).values(metricsData).run();
+    prevMetrics = metricsData;
+  }
 
   return c.json({ success: true, seeded: true });
 });
 
-// Reset demo data for a challenge
+// ─── Reset Demo Data ───────────────────────────────────
+
 app.post("/reset-demo", requireAuth, async (c) => {
   const userId = c.get("userId");
   const body = await c.req.json();
@@ -128,16 +358,12 @@ app.post("/reset-demo", requireAuth, async (c) => {
   if (!challenge) return c.json({ error: "Challenge not found" }, 404);
 
   db.delete(tradingMetrics).where(eq(tradingMetrics.challengeId, body.challengeId)).run();
+  db.delete(drawdownHistory).where(eq(drawdownHistory.challengeId, body.challengeId)).run();
   return c.json({ success: true });
 });
 
-// Admin: List MT5 sync queue
-app.get("/admin/sync-queue", requireAuth, requireAdmin, (c) => {
-  const db = getDb();
-  return c.json([]);
-});
+// ─── Admin: Create MT5 Account ─────────────────────────
 
-// Admin: Create MT5 account
 app.post("/admin/mt5", requireAuth, requireAdmin, async (c) => {
   const body = await c.req.json();
   const db = getDb();
@@ -148,12 +374,30 @@ app.post("/admin/mt5", requireAuth, requireAdmin, async (c) => {
     password: body.password || "Afc@12345",
     investorPassword: body.investorPassword || "Afc@12345",
     server: "AfriFundedCapital-Demo",
+    group: "DEMO\\AFC",
     leverage: body.leverage || 100,
     balance: body.balance || 0,
     equity: body.equity || 0,
     createdAt: Date.now(),
   }).returning().get();
   return c.json(result);
+});
+
+// ─── Admin: Sync Queue Status ──────────────────────────
+
+app.get("/admin/sync-queue", requireAuth, requireAdmin, (c) => {
+  const db = getDb();
+  const activeCount = db.select({ cnt: count() }).from(userChallenges)
+    .where(eq(userChallenges.status, "active")).get();
+
+  const syncedToday = db.select({ cnt: count() }).from(tradingMetrics)
+    .where(sql`recorded_at > ${Date.now() - 24 * 60 * 60 * 1000}`).get();
+
+  return c.json({
+    activeChallenges: activeCount?.cnt || 0,
+    syncedToday: syncedToday?.cnt || 0,
+    lastSyncAt: Date.now(),
+  });
 });
 
 export default app;

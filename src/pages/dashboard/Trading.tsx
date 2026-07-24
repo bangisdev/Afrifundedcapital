@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/chart";
 import {
   Loader2, TrendingUp, TrendingDown, Minus, Server, Key, SlidersHorizontal,
-  DollarSign, Activity, BarChart3, AlertCircle, Sparkles,
+  DollarSign, Activity, BarChart3, AlertCircle, Sparkles, RefreshCw,
 } from "lucide-react";
 import {
   LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
@@ -59,6 +59,7 @@ export default function Trading() {
   const { data: mt5Accounts, isLoading: mt5Loading } = useApiQuery<any[]>(["mt5", "my"], "/api/trading/mt5");
   const seedMutation = useApiMutation<any, any>("post", "/api/trading/seed-demo");
   const resetMutation = useApiMutation<any, any>("post", "/api/trading/reset-demo");
+  const syncMutation = useApiMutation<any, any>("post", "/api/trading/sync");
   const [seeding, setSeeding] = useState(false);
   const [resettingId, setResettingId] = useState<string | null>(null);
   const [autoSeeding, setAutoSeeding] = useState(false);
@@ -99,6 +100,27 @@ export default function Trading() {
   };
 
   const isSeeding = seeding || autoSeeding;
+  const [syncing, setSyncing] = useState(false);
+
+  // Auto-sync active challenges on load (once per session)
+  useEffect(() => {
+    if (!isLoading && (challenges?.length || 0) > 0 && !syncing) {
+      syncMutation.mutateAsync({}).catch(() => {});
+    }
+  }, [isLoading, challenges]);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const result = await syncMutation.mutateAsync({});
+      if (result?.synced > 0) {
+        toast.success(`Synced ${result.synced} challenge(s) with latest metrics`);
+      }
+    } catch (e: any) {
+      // Silently ignore sync errors
+    }
+    setSyncing(false);
+  };
 
   const chartData = useMemo(() => {
     if (!metricsHistory || metricsHistory.length === 0) return [];
@@ -130,9 +152,15 @@ export default function Trading() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-lg font-medium tracking-tight">Trading</h1>
-        <p className="text-xs text-muted-foreground mt-1">Monitor your trading performance, account details, and real-time metrics</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-medium tracking-tight">Trading</h1>
+          <p className="text-xs text-muted-foreground mt-1">Monitor your trading performance, account details, and real-time metrics</p>
+        </div>
+        <Button variant="outline" size="sm" className="text-xs" onClick={handleSync} disabled={syncing}>
+          {syncing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+          {syncing ? "Syncing..." : "Sync Now"}
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
