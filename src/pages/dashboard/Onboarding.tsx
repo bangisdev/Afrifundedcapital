@@ -161,6 +161,29 @@ export default function OnboardingPage() {
     }
   };
 
+  const handleSkip = async () => {
+    setSaving(true);
+    try {
+      // Save whatever data was entered, then redirect
+      await completeOnboarding({
+        name: name.trim() || undefined,
+        phone: phone.trim() || undefined,
+        country: country.trim() || undefined,
+        timezone: timezone || undefined,
+        tradingExperience: tradingExperience || undefined,
+        emailNotifications,
+        notificationPreferences: notificationPrefs,
+      });
+      toast.success("You can finish setting up later from your profile settings.");
+      navigate("/dashboard", { replace: true });
+    } catch (err) {
+      console.error("Skip onboarding error:", err);
+      toast.error("Something went wrong. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleComplete = async () => {
     setSaving(true);
     try {
@@ -519,6 +542,18 @@ export default function OnboardingPage() {
             )}
           </motion.div>
         </AnimatePresence>
+      </div>
+
+      {/* ── Skip link ── */}
+      <div className="flex justify-center mt-4">
+        <button
+          type="button"
+          onClick={handleSkip}
+          disabled={saving}
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2 decoration-dotted decoration-muted-foreground/30 hover:decoration-foreground/50"
+        >
+          Skip for now — I&apos;ll finish later
+        </button>
       </div>
 
       {/* ── Actions ── */}
