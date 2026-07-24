@@ -222,6 +222,9 @@ const schema = defineSchema(
       emailNotifications: v.optional(v.boolean()),
       notificationPreferences: v.optional(v.any()),
 
+      // Onboarding
+      onboardingComplete: v.optional(v.boolean()),
+
       // Demo
       isDemoSeeded: v.optional(v.boolean()),
     })

@@ -391,3 +391,46 @@ export const updatePreferences = mutation({
     await ctx.db.patch(userId, updates);
   },
 });
+
+export const completeOnboarding = mutation({
+  args: {
+    name: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    country: v.optional(v.string()),
+    timezone: v.optional(v.string()),
+    tradingExperience: v.optional(v.string()),
+    emailNotifications: v.optional(v.boolean()),
+    notificationPreferences: v.optional(v.any()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireAuth(ctx);
+    const user = await ctx.db.get(userId);
+    if (!user) throw new Error("User not found");
+
+    // Build updates from provided args
+    const updates: Record<string, unknown> = {
+      onboardingComplete: true,
+    };
+    if (args.name !== undefined) updates.name = args.name;
+    if (args.phone !== undefined) updates.phone = args.phone;
+    if (args.country !== undefined) updates.country = args.country;
+    if (args.timezone !== undefined) updates.timezone = args.timezone;
+    if (args.tradingExperience !== undefined) updates.tradingExperience = args.tradingExperience;
+    if (args.emailNotifications !== undefined) updates.emailNotifications = args.emailNotifications;
+    if (args.notificationPreferences !== undefined) updates.notificationPreferences = args.notificationPreferences;
+
+    await ctx.db.patch(userId, updates);
+
+    // Audit log
+    await ctx.db.insert("auditLogs", {
+      userId,
+      action: "onboarding_completed",
+      entity: "users",
+      entityId: userId,
+      details: JSON.stringify(Object.keys(args).filter((k) => args[k as keyof typeof args] !== undefined)),
+      timestamp: Date.now(),
+    });
+
+    return { success: true };
+  },
+});

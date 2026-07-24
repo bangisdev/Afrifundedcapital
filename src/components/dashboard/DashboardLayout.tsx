@@ -18,6 +18,7 @@ export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boole
   // Prevents redirect loops when @convex-dev/auth/react briefly resets its
   // internal state during Suspense / lazy-load route transitions.
   const hasSeenAuth = useRef(false);
+  const hasCheckedOnboarding = useRef(false);
   useEffect(() => {
     if (isAuthenticated) hasSeenAuth.current = true;
   }, [isAuthenticated]);
@@ -32,6 +33,24 @@ export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boole
       navigate("/auth", { replace: true });
     }
   }, [isLoading, isAuthenticated, navigate, location.pathname]);
+
+  // Onboarding redirect: if user is authenticated, not loading, hasn't
+  // completed onboarding, and isn't already on the onboarding page, redirect.
+  // Only runs once per mount to avoid loops.
+  useEffect(() => {
+    if (isLoading) return;
+    if (!isAuthenticated) return;
+    if (!user) return;
+    if (hasCheckedOnboarding.current) return;
+    hasCheckedOnboarding.current = true;
+
+    // Skip if we're already on the onboarding page
+    if (location.pathname === "/dashboard/onboarding") return;
+
+    if (!user.onboardingComplete) {
+      navigate("/dashboard/onboarding", { replace: true });
+    }
+  }, [isLoading, isAuthenticated, user, navigate, location.pathname]);
 
   // No need to redirect — the index Route in Dashboard.tsx / AdminDashboard.tsx
   // already matches and renders the overview component at these exact paths.
