@@ -22,9 +22,10 @@ function formatDate(ts: number) {
 export default function ChallengeDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { data: challenge, isLoading: cLoading } = useApiQuery<any>(["challenge", id], `/api/challenges/my/${id}`);
-  const { data: metricsHistory, isLoading: mLoading } = useApiQuery<any[]>(["challenge", id, "metrics"], `/api/challenges/my/${id}/metrics`);
-  const { data: metrics } = useApiQuery<any>(["challenge", id, "latest"], `/api/trading/challenge/${id}/metrics`);
+  const challengeId = id || "0";
+  const { data: challenge, isLoading: cLoading } = useApiQuery<any>(["challenge", challengeId], `/api/challenges/my/${challengeId}`);
+  const { data: metricsHistory, isLoading: mLoading } = useApiQuery<any[]>(["challenge", challengeId, "metrics"], `/api/challenges/my/${challengeId}/metrics`);
+  const { data: metrics } = useApiQuery<any>(["challenge", challengeId, "latest"], `/api/trading/challenge/${challengeId}/metrics`);
 
   if (cLoading || mLoading) {
     return <div className="flex items-center justify-center h-64"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;

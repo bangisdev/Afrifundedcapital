@@ -84,8 +84,8 @@ export default function Challenges() {
       email: user.email,
       name: user.name || "Trader",
       phoneNumber: user.phone || "",
-      templateId: selectedTemplate,
-      accountSizeId: selectedSize,
+      templateId: selectedTemplate as any,
+      accountSizeId: selectedSize as any,
       couponCode: couponCode || undefined,
       description: `${selectedAccountSize.label} Challenge`,
     });
