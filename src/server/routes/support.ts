@@ -3,6 +3,7 @@ import { getDb } from "../db";
 import { supportTickets, supportTicketMessages } from "../schema";
 import { eq, desc, and } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
+import { createNotification } from "../lib/notifications";
 
 const app = new Hono();
 
@@ -58,6 +59,18 @@ app.post("/:id/messages", requireAuth, async (c) => {
     createdAt: Date.now(),
   }).returning().get();
   db.update(supportTickets).set({ updatedAt: Date.now() }).where(eq(supportTickets.id, ticketId)).run();
+
+  // Notify the ticket owner if an admin/support replied
+  const ticket = db.select().from(supportTickets).where(eq(supportTickets.id, ticketId)).get();
+  if (ticket && ticket.userId !== userId && !body.isInternal) {
+    createNotification(db, ticket.userId, {
+      type: "support",
+      title: "Support Reply",
+      message: `New reply on your ticket "${ticket.subject}".`,
+      link: "/dashboard/support",
+    });
+  }
+
   return c.json(msg);
 });
 

@@ -3,6 +3,7 @@ import { getDb } from "../db";
 import { kycDocuments, users } from "../schema";
 import { eq, desc, and } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
+import { createNotification } from "../lib/notifications";
 
 const app = new Hono();
 
@@ -46,6 +47,12 @@ app.post("/admin/:id/approve", requireAuth, requireAdmin, async (c) => {
   if (doc) {
     db.update(kycDocuments).set({ status: "approved", reviewedAt: Date.now() }).where(eq(kycDocuments.id, id)).run();
     db.update(users).set({ kycStatus: "approved", kycVerifiedAt: Date.now(), updatedAt: Date.now() }).where(eq(users.id, doc.userId)).run();
+    createNotification(db, doc.userId, {
+      type: "kyc",
+      title: "KYC Approved",
+      message: `Your ${doc.documentType.replace(/_/g, " ")} document has been approved. Your profile is now fully verified.`,
+      link: "/dashboard/profile",
+    });
   }
   return c.json({ success: true });
 });
@@ -55,7 +62,16 @@ app.post("/admin/:id/reject", requireAuth, requireAdmin, async (c) => {
   const id = parseInt(c.req.param("id"));
   const body = await c.req.json();
   const db = getDb();
+  const doc = db.select().from(kycDocuments).where(eq(kycDocuments.id, id)).get();
   db.update(kycDocuments).set({ status: "rejected", rejectionReason: body.reason, reviewedAt: Date.now() }).where(eq(kycDocuments.id, id)).run();
+  if (doc) {
+    createNotification(db, doc.userId, {
+      type: "kyc",
+      title: "KYC Rejected",
+      message: `Your ${doc.documentType.replace(/_/g, " ")} document was rejected. Reason: ${body.reason || "Not specified"}. Please re-upload with the correct documents.`,
+      link: "/dashboard/profile",
+    });
+  }
   return c.json({ success: true });
 });
 

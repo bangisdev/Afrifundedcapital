@@ -3,6 +3,7 @@ import { getDb } from "../db";
 import { profitPayouts, fundedAccounts, userChallenges, users } from "../schema";
 import { eq, desc, and, count, sql } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
+import { createNotification } from "../lib/notifications";
 
 const app = new Hono();
 
@@ -76,7 +77,16 @@ app.get("/admin/all", requireAuth, requireAdmin, (c) => {
 app.post("/admin/:id/approve", requireAuth, requireAdmin, async (c) => {
   const id = parseInt(c.req.param("id"));
   const db = getDb();
+  const payout = db.select().from(profitPayouts).where(eq(profitPayouts.id, id)).get();
   db.update(profitPayouts).set({ status: "approved", processedAt: Date.now() }).where(eq(profitPayouts.id, id)).run();
+  if (payout) {
+    createNotification(db, payout.userId, {
+      type: "payout",
+      title: "Payout Approved",
+      message: `Your payout request of ${payout.currency} ${payout.amount.toLocaleString()} has been approved and will be processed shortly.`,
+      link: "/dashboard/payouts",
+    });
+  }
   return c.json({ success: true });
 });
 
@@ -85,7 +95,16 @@ app.post("/admin/:id/reject", requireAuth, requireAdmin, async (c) => {
   const id = parseInt(c.req.param("id"));
   const body = await c.req.json();
   const db = getDb();
+  const payout = db.select().from(profitPayouts).where(eq(profitPayouts.id, id)).get();
   db.update(profitPayouts).set({ status: "rejected", rejectionReason: body.reason, processedAt: Date.now() }).where(eq(profitPayouts.id, id)).run();
+  if (payout) {
+    createNotification(db, payout.userId, {
+      type: "payout",
+      title: "Payout Rejected",
+      message: `Your payout request of ${payout.currency} ${payout.amount.toLocaleString()} was rejected. Reason: ${body.reason || "Not specified"}.`,
+      link: "/dashboard/payouts",
+    });
+  }
   return c.json({ success: true });
 });
 
