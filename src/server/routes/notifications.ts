@@ -62,12 +62,8 @@ app.post("/broadcast", requireAuth, async (c) => {
   const db = getDb();
   const now = Date.now();
 
-  // Get all users
-  const allUsers = db.select({ id: { value: "id" } }).from(notifications as any).all();
-
-  // Insert a notification for every user - use raw sqlite for this
-  const sqlite = getDb();
-  const userRows = (sqlite as any).select("id").from("users").all();
+  // Insert a notification for every user
+  const userRows = db.select({ id: users.id }).from(users).all();
   for (const row of userRows) {
     db.insert(notifications).values({
       userId: row.id,

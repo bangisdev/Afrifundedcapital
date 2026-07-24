@@ -13,7 +13,7 @@ import { toast } from "sonner";
 
 export default function Profile() {
   const { user } = useAuth();
-  const kycDocs = useQuery(api.kyc.getMyKycDocuments);
+  const kycDocs = useQuery(api.kyc.getMyKycDocuments) as any[] | undefined;
   const updateProfile = useMutation(api.users.updateProfile);
   const uploadKyc = useMutation(api.kyc.uploadKycDocument);
   const [saving, setSaving] = useState(false);
@@ -153,7 +153,7 @@ export default function Profile() {
                 Upload documents to verify your identity
               </p>
             </div>
-            {kycStatusBadge(user.kycStatus as any)}
+            {kycStatusBadge(String(user.kycStatus || ''))}
           </div>
 
           <div className="grid md:grid-cols-2 gap-3">
