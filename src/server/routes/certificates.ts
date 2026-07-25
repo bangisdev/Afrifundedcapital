@@ -12,6 +12,7 @@ import {
 import { eq, desc, and, sql } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { randomBytes } from "crypto";
+import QRCode from "qrcode";
 
 const app = new Hono();
 
@@ -384,6 +385,38 @@ app.get("/:id/pdf", requireAuth, async (c) => {
   doc.setTextColor(30, 30, 30);
   doc.text(accountSizeStr || "N/A", width - 90, detailsY + 17);
 
+  // ── QR Code ──
+  const verifyOrigin = c.req.header("x-forwarded-for")
+    ? (c.req.header("x-forwarded-proto") || "https") + "://" + (c.req.header("host") || "afrifundedcapital.com")
+    : "https://afrifundedcapital.com";
+  const verifyUrl = `${verifyOrigin}/verify/${cert.verificationCode}`;
+
+  try {
+    const qrDataUrl = await QRCode.toDataURL(verifyUrl, {
+      width: 300,
+      margin: 1,
+      color: { dark: "#1a1a1a", light: "#ffffff" },
+    });
+
+    // Extract base64 data from data URL
+    const base64Data = qrDataUrl.replace(/^data:image\/png;base64,/, "");
+
+    // Place QR code in bottom-right area of the certificate
+    const qrSize = 25; // mm
+    const qrX = width - 45;
+    const qrY = height - 62;
+    doc.addImage(base64Data, "PNG", qrX, qrY, qrSize, qrSize);
+
+    // QR code label
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6);
+    doc.setTextColor(140, 140, 140);
+    doc.text("Scan to verify", qrX + qrSize / 2, qrY + qrSize + 3, { align: "center" });
+  } catch (e) {
+    // QR generation is non-critical — continue without it
+    console.warn("[Certificate PDF] QR code generation failed:", e);
+  }
+
   // Bottom line
   doc.setDrawColor(180, 180, 180);
   doc.setLineWidth(0.3);
@@ -395,15 +428,13 @@ app.get("/:id/pdf", requireAuth, async (c) => {
   doc.setTextColor(140, 140, 140);
   doc.text(
     `Verification Code: ${cert.verificationCode}`,
-    width / 2,
-    height - 28,
-    { align: "center" }
+    50,
+    height - 28
   );
   doc.text(
-    `Verify at: ${typeof window !== "undefined" ? window.location.origin : "https://afrifundedcapital.com"}/verify/${cert.verificationCode}`,
-    width / 2,
-    height - 23,
-    { align: "center" }
+    `Verify at: ${verifyUrl}`,
+    50,
+    height - 23
   );
 
   // Footer
