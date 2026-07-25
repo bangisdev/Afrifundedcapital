@@ -3,7 +3,8 @@ import { getDb } from "../db";
 import { kycDocuments, users } from "../schema";
 import { eq, desc, and } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
-import { createNotification } from "../lib/notifications";
+import { notify } from "../lib/notifications";
+import { kycApprovedEmail, kycRejectedEmail, kycDocumentUploadedEmail } from "../lib/email";
 
 const app = new Hono();
 
@@ -195,7 +196,9 @@ app.post("/admin/:id/approve", requireAuth, requireAdmin, async (c) => {
   const hasAllRequired = requiredTypes.some((t) => approvedTypes.has(t));
 
   // Also accept proof_of_address as alternative
-  const hasAlternative = approvedTypes.has("proof_of_address") || approvedTypes.has("drivers_license");
+  const hasAlternative = approvedTypes.has("proof_of_address") || approvedTypes.has("drivers_license");  // Get user name for email
+  const userRecord = db.select().from(users).where(eq(users.id, doc.userId)).get();
+  const userName = userRecord?.name || "Trader";
 
   if (hasAllRequired || hasAlternative) {
     db.update(users).set({
@@ -204,18 +207,20 @@ app.post("/admin/:id/approve", requireAuth, requireAdmin, async (c) => {
       updatedAt: Date.now(),
     }).where(eq(users.id, doc.userId)).run();
 
-    createNotification(db, doc.userId, {
+    notify(db, doc.userId, {
       type: "kyc",
       title: "Identity Verified",
       message: "Your identity has been verified. Your profile is now fully verified and profile fields are locked.",
       link: "/dashboard/profile",
+      email: kycApprovedEmail(userName),
     });
   } else {
-    createNotification(db, doc.userId, {
+    notify(db, doc.userId, {
       type: "kyc",
       title: "Document Approved",
       message: `Your ${doc.documentType.replace(/_/g, " ")} document has been approved. ${hasAllRequired ? "" : "Please upload additional documents to complete verification."}`,
       link: "/dashboard/profile",
+      email: kycApprovedEmail(userName),
     });
   }
 
@@ -238,11 +243,16 @@ app.post("/admin/:id/reject", requireAuth, requireAdmin, async (c) => {
     reviewedAt: Date.now(),
   }).where(eq(kycDocuments.id, id)).run();
 
-  createNotification(db, doc.userId, {
+  // Get user name for email
+  const userRecord = db.select().from(users).where(eq(users.id, doc.userId)).get();
+  const userName = userRecord?.name || "Trader";
+
+  notify(db, doc.userId, {
     type: "kyc",
     title: "Document Rejected",
     message: `Your ${doc.documentType.replace(/_/g, " ")} document was rejected. Reason: ${body.reason || "Not specified"}. Please re-upload with the correct documents.`,
     link: "/dashboard/profile",
+    email: kycRejectedEmail(userName, doc.documentType, body.reason || "Document does not meet requirements"),
   });
 
   return c.json({ success: true });

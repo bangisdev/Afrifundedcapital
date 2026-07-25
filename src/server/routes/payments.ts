@@ -1,9 +1,10 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
-import { payments, paymentLogs, flutterwaveTransactions, challengeTemplates, accountSizes, userChallenges, mt5Accounts, settings, coupons, couponRedemptions } from "../schema";
+import { payments, paymentLogs, flutterwaveTransactions, challengeTemplates, accountSizes, userChallenges, mt5Accounts, settings, coupons, couponRedemptions, users } from "../schema";
 import { eq, desc, count, and, sql } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
-import { createNotification } from "../lib/notifications";
+import { notify } from "../lib/notifications";
+import { paymentConfirmationEmail } from "../lib/email";
 
 const app = new Hono();
 
@@ -276,11 +277,14 @@ app.post("/verify", requireAuth, async (c) => {
     }
 
     // Notify user of successful payment
-    createNotification(db, userId, {
+    const payer = db.select().from(users).where(eq(users.id, userId)).get();
+    const payerName = payer?.name || "Trader";
+    notify(db, userId, {
       type: "payment",
       title: "Payment Successful",
       message: `Your payment of ${payment.currency} ${payment.amount.toLocaleString()} has been confirmed. Your challenge is now active.`,
       link: "/dashboard/challenges",
+      email: paymentConfirmationEmail(payerName, payment.amount, payment.currency, payment.description || "Challenge Purchase"),
     });
 
     return c.json({ status: "completed", message: "Payment verified and challenge created" });
@@ -399,11 +403,14 @@ app.post("/webhook/flutterwave", async (c) => {
         db.update(userChallenges).set({ mt5AccountId: mt5Account.id, updatedAt: now }).where(eq(userChallenges.id, challenge.id)).run();
 
         // Notify user of successful payment via webhook
-        createNotification(db, payment.userId, {
+        const webhookPayer = db.select().from(users).where(eq(users.id, payment.userId)).get();
+        const webhookPayerName = webhookPayer?.name || "Trader";
+        notify(db, payment.userId, {
           type: "payment",
           title: "Payment Successful",
           message: `Your payment of ${payment.currency} ${payment.amount.toLocaleString()} has been confirmed. Your challenge is now active.`,
           link: "/dashboard/challenges",
+          email: paymentConfirmationEmail(webhookPayerName, payment.amount, payment.currency, payment.description || "Challenge Purchase"),
         });
       }
     }
