@@ -92,11 +92,18 @@ export default function AdminChallenges() {
   );
 
   const createTemplate = useApiMutation<any, any>("post", "/api/challenges/admin/templates");
-  const updateTemplate = useApiMutation<any, any>("put", "/api/challenges/admin/templates/${id}");
-  const deleteTemplate = useApiMutation<any, any>("delete", "/api/challenges/admin/templates/${id}");
   const createSize = useApiMutation<any, any>("post", "/api/challenges/admin/sizes");
-  const updateSize = useApiMutation<any, any>("put", "/api/challenges/admin/sizes/${id}");
-  const deleteSize = useApiMutation<any, any>("delete", "/api/challenges/admin/sizes/${id}");
+
+  const apiPut = async (path: string, body: any) => {
+    const res = await fetch(path, { method: "PUT", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(body) });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || "Request failed"); }
+    return res.json();
+  };
+  const apiDelete = async (path: string) => {
+    const res = await fetch(path, { method: "DELETE", credentials: "include" });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || "Request failed"); }
+    return res.json();
+  };
 
   const [expandedTemplate, setExpandedTemplate] = useState<number | null>(null);
   const [showCreateTemplate, setShowCreateTemplate] = useState(false);
@@ -612,7 +619,7 @@ export default function AdminChallenges() {
                 onClick={async () => {
                   try {
                     const { id: _id, ...templateData } = editingTemplate;
-                    await updateTemplate.mutateAsync({ id: _id, ...templateData });
+                    await apiPut(`/api/challenges/admin/templates/${_id}`, templateData);
                     toast.success("Template updated");
                     setEditingTemplate(null);
                   } catch (err: any) {
@@ -705,7 +712,7 @@ export default function AdminChallenges() {
                 onClick={async () => {
                   try {
                     const { id: _sid, ...sizeData } = editingSize;
-                    await updateSize.mutateAsync({ id: _sid, ...sizeData });
+                    await apiPut(`/api/challenges/admin/sizes/${_sid}`, sizeData);
                     toast.success("Size updated");
                     setEditingSize(null);
                     loadSizes(editingSize.templateId);
@@ -742,9 +749,9 @@ export default function AdminChallenges() {
                 if (!deleteTarget) return;
                 try {
                   if (deleteTarget.type === "template") {
-                    await deleteTemplate.mutateAsync({ id: deleteTarget.id });
+                    await apiDelete(`/api/challenges/admin/templates/${deleteTarget.id}`);
                   } else {
-                    await deleteSize.mutateAsync({ id: deleteTarget.id });
+                    await apiDelete(`/api/challenges/admin/sizes/${deleteTarget.id}`);
                   }
                   toast.success("Deleted successfully");
                   setDeleteTarget(null);

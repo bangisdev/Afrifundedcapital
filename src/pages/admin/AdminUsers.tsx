@@ -3,7 +3,6 @@ import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Loader2,
   Search,
@@ -17,11 +16,6 @@ import {
   UserCheck,
   UserX,
   Eye,
-  Mail,
-  Phone,
-  MapPin,
-  Calendar,
-  Globe,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -55,25 +49,15 @@ interface User {
 }
 
 const ROLES = [
-  "super_admin",
-  "support_admin",
-  "finance_admin",
-  "client_manager",
-  "compliance_admin",
-  "marketing_admin",
-  "affiliate_manager",
-  "user",
+  "super_admin", "support_admin", "finance_admin", "client_manager",
+  "compliance_admin", "marketing_admin", "affiliate_manager", "user",
 ];
 
 const ROLE_LABELS: Record<string, string> = {
-  super_admin: "Super Admin",
-  support_admin: "Support Admin",
-  finance_admin: "Finance Admin",
-  client_manager: "Client Manager",
-  compliance_admin: "Compliance Admin",
-  marketing_admin: "Marketing Admin",
-  affiliate_manager: "Affiliate Manager",
-  user: "User",
+  super_admin: "Super Admin", support_admin: "Support Admin",
+  finance_admin: "Finance Admin", client_manager: "Client Manager",
+  compliance_admin: "Compliance Admin", marketing_admin: "Marketing Admin",
+  affiliate_manager: "Affiliate Manager", user: "User",
 };
 
 const ROLE_COLORS: Record<string, string> = {
@@ -96,30 +80,16 @@ const KYC_COLORS: Record<string, string> = {
 
 function formatTimestamp(ts: number | null) {
   if (!ts) return "—";
-  return new Date(ts).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  return new Date(ts).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
 function formatDateTime(ts: number | null) {
   if (!ts) return "—";
-  return new Date(ts).toLocaleString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return new Date(ts).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 export default function AdminUsers() {
-  const { data: users, isLoading } = useApiQuery<User[]>(["admin", "users"], "/api/users/list");
-  const updateRole = useApiMutation<any, any>("put", "/api/users/${id}/role");
-  const updateProfile = useApiMutation<any, any>("put", "/api/users/${id}/profile");
-  const toggleStatus = useApiMutation<any, any>("put", "/api/users/${id}/status");
-  const deleteUser = useApiMutation<any, any>("delete", "/api/users/${id}");
+  const { data: users, isLoading, refetch } = useApiQuery<User[]>(["admin", "users"], "/api/users/list");
 
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
@@ -128,12 +98,12 @@ export default function AdminUsers() {
   const [showUserDetail, setShowUserDetail] = useState(false);
   const [editingRole, setEditingRole] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+  const [actionLoading, setActionLoading] = useState<number | null>(null);
 
   const filtered = useMemo(() => {
     if (!users) return [];
     return users.filter((u) => {
-      const matchesSearch =
-        !search ||
+      const matchesSearch = !search ||
         u.name?.toLowerCase().includes(search.toLowerCase()) ||
         u.email?.toLowerCase().includes(search.toLowerCase()) ||
         u.phone?.includes(search) ||
@@ -154,6 +124,66 @@ export default function AdminUsers() {
     };
   }, [users]);
 
+  // Direct fetch helpers for dynamic endpoints
+  const apiPut = async (path: string, body: any) => {
+    const res = await fetch(path, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || "Request failed"); }
+    return res.json();
+  };
+
+  const apiDelete = async (path: string) => {
+    const res = await fetch(path, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || "Request failed"); }
+    return res.json();
+  };
+
+  const handleUpdateRole = async (userId: number, newRole: string) => {
+    setActionLoading(userId);
+    try {
+      await apiPut(`/api/users/${userId}/role`, { role: newRole });
+      toast.success(`Role updated to ${ROLE_LABELS[newRole] || newRole}`);
+      setEditingRole(null);
+      refetch();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update role");
+    }
+    setActionLoading(null);
+  };
+
+  const handleToggleLock = async (userId: number, locked: boolean) => {
+    setActionLoading(userId);
+    try {
+      await apiPut(`/api/users/${userId}/status`, { locked });
+      toast.success(locked ? "Account locked" : "Account unlocked");
+      refetch();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to toggle status");
+    }
+    setActionLoading(null);
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deleteTarget) return;
+    setActionLoading(deleteTarget.id);
+    try {
+      await apiDelete(`/api/users/${deleteTarget.id}`);
+      toast.success(`User ${deleteTarget.email} deleted`);
+      setDeleteTarget(null);
+      refetch();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to delete user");
+    }
+    setActionLoading(null);
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -167,9 +197,7 @@ export default function AdminUsers() {
       {/* Header */}
       <div>
         <h1 className="text-lg font-medium tracking-tight">User Management</h1>
-        <p className="text-xs text-muted-foreground mt-1">
-          View, edit, and manage all platform users
-        </p>
+        <p className="text-xs text-muted-foreground mt-1">View, edit, and manage all platform users</p>
       </div>
 
       {/* Stats Cards */}
@@ -211,9 +239,7 @@ export default function AdminUsers() {
           >
             <option value="all">All Roles</option>
             {ROLES.map((r) => (
-              <option key={r} value={r}>
-                {ROLE_LABELS[r] || r}
-              </option>
+              <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>
             ))}
           </select>
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
@@ -233,18 +259,8 @@ export default function AdminUsers() {
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
         </div>
         {(search || roleFilter !== "all" || kycFilter !== "all") && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-9 text-xs"
-            onClick={() => {
-              setSearch("");
-              setRoleFilter("all");
-              setKycFilter("all");
-            }}
-          >
-            <X className="h-3 w-3 mr-1" />
-            Clear
+          <Button variant="ghost" size="sm" className="h-9 text-xs" onClick={() => { setSearch(""); setRoleFilter("all"); setKycFilter("all"); }}>
+            <X className="h-3 w-3 mr-1" /> Clear
           </Button>
         )}
       </div>
@@ -266,9 +282,7 @@ export default function AdminUsers() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                    No users found matching your criteria
-                  </td>
+                  <td colSpan={6} className="p-8 text-center text-muted-foreground">No users found</td>
                 </tr>
               ) : (
                 filtered.map((u) => {
@@ -292,19 +306,13 @@ export default function AdminUsers() {
                             <div className="flex items-center gap-1">
                               <select
                                 defaultValue={u.role || "user"}
-                                onChange={async (e) => {
-                                  await updateRole.mutateAsync({ id: u.id, role: e.target.value });
-                                  toast.success(`Role updated to ${ROLE_LABELS[e.target.value] || e.target.value}`);
-                                  setEditingRole(null);
-                                }}
+                                onChange={(e) => handleUpdateRole(u.id, e.target.value)}
                                 className="h-7 rounded border border-input bg-background px-1.5 text-[10px] w-32"
                                 autoFocus
                                 onBlur={() => setEditingRole(null)}
                               >
                                 {ROLES.map((r) => (
-                                  <option key={r} value={r}>
-                                    {ROLE_LABELS[r]}
-                                  </option>
+                                  <option key={r} value={r}>{ROLE_LABELS[r]}</option>
                                 ))}
                               </select>
                               <button onClick={() => setEditingRole(null)} className="text-muted-foreground hover:text-foreground">
@@ -329,62 +337,38 @@ export default function AdminUsers() {
                       <td className="p-3 hidden lg:table-cell">
                         {isLocked ? (
                           <span className="inline-flex items-center gap-1 text-[10px] text-red-600">
-                            <Lock className="h-3 w-3" />
-                            Locked
+                            <Lock className="h-3 w-3" /> Locked
                           </span>
                         ) : u.emailVerified ? (
                           <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600">
-                            <UserCheck className="h-3 w-3" />
-                            Active
+                            <UserCheck className="h-3 w-3" /> Active
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                            Unverified
-                          </span>
+                          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">Unverified</span>
                         )}
                       </td>
-                      <td className="p-3 hidden xl:table-cell text-muted-foreground">
-                        {formatTimestamp(u.createdAt)}
-                      </td>
+                      <td className="p-3 hidden xl:table-cell text-muted-foreground">{formatTimestamp(u.createdAt)}</td>
                       <td className="p-3">
                         <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="h-7 w-7"
-                            title="View details"
-                            onClick={() => {
-                              setSelectedUser(u);
-                              setShowUserDetail(true);
-                            }}
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="h-7 w-7"
-                            title={isLocked ? "Unlock account" : "Lock account"}
-                            onClick={async () => {
-                              await toggleStatus.mutateAsync({ id: u.id, locked: !isLocked });
-                              toast.success(isLocked ? "Account unlocked" : "Account locked for 24 hours");
-                            }}
-                          >
-                            {isLocked ? (
-                              <Unlock className="h-3.5 w-3.5 text-emerald-600" />
-                            ) : (
-                              <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-                            )}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="h-7 w-7"
-                            title="Delete user"
-                            onClick={() => setDeleteTarget(u)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                          </Button>
+                          {actionLoading === u.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          ) : (
+                            <>
+                              <Button variant="ghost" size="icon-sm" className="h-7 w-7" title="View details"
+                                onClick={() => { setSelectedUser(u); setShowUserDetail(true); }}>
+                                <Eye className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon-sm" className="h-7 w-7"
+                                title={isLocked ? "Unlock account" : "Lock account"}
+                                onClick={() => handleToggleLock(u.id, !isLocked)}>
+                                {isLocked ? <Unlock className="h-3.5 w-3.5 text-emerald-600" /> : <Lock className="h-3.5 w-3.5 text-muted-foreground" />}
+                              </Button>
+                              <Button variant="ghost" size="icon-sm" className="h-7 w-7" title="Delete user"
+                                onClick={() => setDeleteTarget(u)}>
+                                <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -403,10 +387,7 @@ export default function AdminUsers() {
       {/* User Detail Modal */}
       {showUserDetail && selectedUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowUserDetail(false)}>
-          <div
-            className="bg-background border rounded-lg shadow-lg w-full max-w-lg mx-4 max-h-[80vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="bg-background border rounded-lg shadow-lg w-full max-w-lg mx-4 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center text-sm font-medium">
@@ -444,34 +425,16 @@ export default function AdminUsers() {
                 ))}
               </div>
               <div className="border-t pt-3 flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-xs"
+                <Button variant="outline" size="sm" className="text-xs"
                   onClick={async () => {
                     const newRole = selectedUser.role === "user" ? "super_admin" : "user";
-                    await updateRole.mutateAsync({ id: selectedUser.id, role: newRole });
+                    await handleUpdateRole(selectedUser.id, newRole);
                     setSelectedUser({ ...selectedUser, role: newRole });
-                    toast.success(`Role changed to ${ROLE_LABELS[newRole]}`);
-                  }}
-                >
-                  <Shield className="h-3 w-3 mr-1" />
-                  Toggle Admin
+                  }}>
+                  <Shield className="h-3 w-3 mr-1" /> Toggle Admin
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-xs"
-                  onClick={async () => {
-                    const isLocked = selectedUser.accountLockedUntil && selectedUser.accountLockedUntil > Date.now();
-                    await toggleStatus.mutateAsync({ id: selectedUser.id, locked: !isLocked });
-                    setSelectedUser({
-                      ...selectedUser,
-                      accountLockedUntil: isLocked ? null : Date.now() + 86400000,
-                    });
-                    toast.success(isLocked ? "Account unlocked" : "Account locked");
-                  }}
-                >
+                <Button variant="outline" size="sm" className="text-xs"
+                  onClick={() => handleToggleLock(selectedUser.id, !(selectedUser.accountLockedUntil && selectedUser.accountLockedUntil > Date.now()))}>
                   {selectedUser.accountLockedUntil && selectedUser.accountLockedUntil > Date.now() ? (
                     <><Unlock className="h-3 w-3 mr-1" /> Unlock</>
                   ) : (
@@ -497,19 +460,7 @@ export default function AdminUsers() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-white hover:bg-destructive/90"
-              onClick={async () => {
-                if (!deleteTarget) return;
-                try {
-                  await deleteUser.mutateAsync({ id: deleteTarget.id });
-                  toast.success(`User ${deleteTarget.email} deleted`);
-                  setDeleteTarget(null);
-                } catch (err: any) {
-                  toast.error(err?.message || "Failed to delete user");
-                }
-              }}
-            >
+            <AlertDialogAction className="bg-destructive text-white hover:bg-destructive/90" onClick={handleDeleteUser}>
               Delete User
             </AlertDialogAction>
           </AlertDialogFooter>
