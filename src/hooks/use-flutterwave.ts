@@ -3,6 +3,7 @@ import { toast } from "sonner";
 
 export interface FlutterwaveCheckoutParams {
   amount: number;
+  originalAmount?: number;
   currency?: string;
   email: string;
   name: string;
@@ -10,6 +11,7 @@ export interface FlutterwaveCheckoutParams {
   templateId: string;
   accountSizeId: string;
   couponCode?: string;
+  couponId?: number;
   description?: string;
 }
 
@@ -60,10 +62,12 @@ export function useFlutterwavePayment() {
           credentials: "include",
           body: JSON.stringify({
             amount: params.amount,
+            originalAmount: params.originalAmount || params.amount,
             currency: params.currency || "NGN",
             templateId: params.templateId,
             accountSizeId: params.accountSizeId,
             couponCode: params.couponCode,
+            couponId: params.couponId,
             description: params.description || "Challenge Purchase",
           }),
         });

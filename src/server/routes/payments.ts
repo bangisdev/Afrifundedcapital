@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
-import { payments, paymentLogs, flutterwaveTransactions, challengeTemplates, accountSizes, userChallenges, mt5Accounts, settings } from "../schema";
+import { payments, paymentLogs, flutterwaveTransactions, challengeTemplates, accountSizes, userChallenges, mt5Accounts, settings, coupons, couponRedemptions } from "../schema";
 import { eq, desc, count, and, sql } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification } from "../lib/notifications";
@@ -87,13 +87,52 @@ app.post("/initiate", requireAuth, async (c) => {
   const db = getDb();
   const now = Date.now();
 
+  // Validate and apply coupon if provided
+  let finalAmount = body.amount;
+  let couponId: number | null = null;
+  let discount = 0;
+
+  if (body.couponCode) {
+    const coupon = db.select().from(coupons).where(eq(coupons.code, body.couponCode.trim().toUpperCase())).get();
+    if (coupon) {
+      // Re-validate coupon (double-check)
+      let valid = true;
+      if (coupon.expiresAt && coupon.expiresAt < now) valid = false;
+      if (coupon.maxUses) {
+        const totalRedemptions = db.select({ count: sql<number>`count(*)` }).from(couponRedemptions).where(eq(couponRedemptions.couponId, coupon.id)).get();
+        if (totalRedemptions && totalRedemptions.count >= coupon.maxUses) valid = false;
+      }
+      if (coupon.maxUsesPerUser) {
+        const userRedemptions = db.select({ count: sql<number>`count(*)` }).from(couponRedemptions).where(and(eq(couponRedemptions.couponId, coupon.id), eq(couponRedemptions.userId, userId))).get();
+        if (userRedemptions && userRedemptions.count >= coupon.maxUsesPerUser) valid = false;
+      }
+
+      if (valid) {
+        const originalAmount = body.originalAmount || body.amount;
+        if (coupon.discountType === "percentage") {
+          discount = Math.round(originalAmount * (coupon.discountValue / 100));
+        } else {
+          discount = Math.min(coupon.discountValue, originalAmount);
+        }
+        finalAmount = Math.max(originalAmount - discount, 0);
+        couponId = coupon.id;
+      }
+    }
+  }
+
   // Generate unique reference
   const reference = `AFC-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
   // Create payment record
+  const metadata: Record<string, unknown> = {};
+  if (body.couponCode) metadata.couponCode = body.couponCode;
+  if (couponId) metadata.couponId = couponId;
+  if (discount > 0) metadata.discount = discount;
+  if (finalAmount !== (body.originalAmount || body.amount)) metadata.originalAmount = body.originalAmount || body.amount;
+
   const payment = db.insert(payments).values({
     userId,
-    amount: body.amount,
+    amount: finalAmount,
     currency: body.currency || "NGN",
     provider: "flutterwave",
     status: "pending",
@@ -101,11 +140,25 @@ app.post("/initiate", requireAuth, async (c) => {
     description: body.description || "Challenge Purchase",
     templateId: body.templateId ? parseInt(body.templateId) : null,
     accountSizeId: body.accountSizeId ? parseInt(body.accountSizeId) : null,
-    metadata: body.couponCode ? JSON.stringify({ couponCode: body.couponCode }) : null,
+    metadata: Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null,
     createdAt: now,
   }).returning().get();
 
-  return c.json({ paymentId: payment.id, reference });
+  // Record coupon redemption now (will be confirmed on payment success)
+  if (couponId) {
+    try {
+      db.insert(couponRedemptions).values({
+        couponId,
+        userId,
+        paymentId: payment.id,
+        discountAmount: discount,
+        originalAmount: body.originalAmount || body.amount,
+        redeemedAt: now,
+      }).run();
+    } catch {}
+  }
+
+  return c.json({ paymentId: payment.id, reference, finalAmount, discount });
 });
 
 // ─── Verify Transaction (client-side callback) ─────────

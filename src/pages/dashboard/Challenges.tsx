@@ -32,6 +32,9 @@ export default function Challenges() {
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [couponCode, setCouponCode] = useState("");
+  const [couponResult, setCouponResult] = useState<any>(null);
+  const [couponError, setCouponError] = useState("");
+  const [validatingCoupon, setValidatingCoupon] = useState(false);
   const [showPurchase, setShowPurchase] = useState(false);
 
   const isAdmin = user?.role === "super_admin" || user?.role === "support_admin" || user?.role === "finance_admin";
@@ -69,6 +72,48 @@ export default function Challenges() {
     return <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded ${v.className}`}>{v.label}</span>;
   };
 
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim()) {
+      setCouponError("");
+      setCouponResult(null);
+      return;
+    }
+    const selectedAccountSize = sizes?.find((s: Doc) => String(s.id) === selectedSize);
+    if (!selectedAccountSize) {
+      setCouponError("Select an account size first");
+      return;
+    }
+    setValidatingCoupon(true);
+    setCouponError("");
+    setCouponResult(null);
+    try {
+      const res = await fetch("/api/coupons/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ code: couponCode.trim(), amount: selectedAccountSize.price }),
+      });
+      const data = await res.json();
+      if (data.valid) {
+        setCouponResult(data);
+        toast.success(`Coupon applied! You save ₦${data.discount?.toLocaleString()}`);
+      } else {
+        setCouponError(data.error || "Invalid coupon");
+        setCouponResult(null);
+      }
+    } catch {
+      setCouponError("Failed to validate coupon");
+    } finally {
+      setValidatingCoupon(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setCouponCode("");
+    setCouponResult(null);
+    setCouponError("");
+  };
+
   const handleProceedToPayment = async () => {
     if (!selectedTemplate || !selectedSize || !user?.email) {
       toast.error("Please select a challenge and account size");
@@ -81,15 +126,19 @@ export default function Challenges() {
       return;
     }
 
+    const finalAmount = couponResult?.finalAmount ?? selectedAccountSize.price;
+
     await startCheckout({
-      amount: selectedAccountSize.price,
+      amount: finalAmount,
+      originalAmount: selectedAccountSize.price,
       currency: "NGN",
       email: user.email,
       name: user.name || "Trader",
       phoneNumber: user.phone || "",
       templateId: selectedTemplate as any,
       accountSizeId: selectedSize as any,
-      couponCode: couponCode || undefined,
+      couponCode: couponResult?.valid ? couponCode.trim() : undefined,
+      couponId: couponResult?.couponId,
       description: `${selectedAccountSize.label} Challenge`,
     });
   };
@@ -252,15 +301,49 @@ export default function Challenges() {
 
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">Coupon Code (optional)</label>
-                <Input placeholder="Enter coupon code" value={couponCode} onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                  className="text-xs h-9" disabled={paymentState.status === "initiating" || paymentState.status === "verifying"} />
+                <div className="flex gap-2">
+                  <Input placeholder="Enter coupon code" value={couponCode}
+                    onChange={(e) => { setCouponCode(e.target.value.toUpperCase()); if (couponResult) { setCouponResult(null); setCouponError(""); } }}
+                    className="text-xs h-9 flex-1" disabled={paymentState.status === "initiating" || paymentState.status === "verifying"} />
+                  {couponResult ? (
+                    <Button variant="outline" size="sm" className="h-9 px-3 text-xs"
+                      onClick={handleRemoveCoupon} disabled={paymentState.status === "initiating" || paymentState.status === "verifying"}>
+                      Remove
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" className="h-9 px-3 text-xs"
+                      onClick={handleApplyCoupon} disabled={!couponCode.trim() || validatingCoupon || paymentState.status === "initiating" || paymentState.status === "verifying"}>
+                      {validatingCoupon ? <Loader2 className="h-3 w-3 animate-spin" /> : "Apply"}
+                    </Button>
+                  )}
+                </div>
+                {couponError && <p className="text-[10px] text-red-500 mt-1">{couponError}</p>}
+                {couponResult && (
+                  <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1">
+                    ✓ {couponResult.discountType === "percentage"
+                      ? `${couponResult.discountValue}% off — You save ₦${couponResult.discount?.toLocaleString()}`
+                      : `₦${couponResult.discountValue} off — You save ₦${couponResult.discount?.toLocaleString()}`}
+                  </p>
+                )}
               </div>
 
               {selectedSize && (
-                <div className="border-t border-border pt-3">
-                  <div className="flex justify-between text-sm">
+                <div className="border-t border-border pt-3 space-y-1">
+                  {couponResult && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">Original Price</span>
+                      <span className="text-muted-foreground line-through">₦{sizes.find((s: Doc) => String(s.id) === selectedSize)?.price?.toLocaleString()}</span>
+                    </div>
+                  )}
+                  {couponResult && (
+                    <div className="flex justify-between text-xs text-emerald-600 dark:text-emerald-400">
+                      <span>Discount</span>
+                      <span>-₦{couponResult.discount?.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm font-medium">
                     <span className="text-muted-foreground">Total</span>
-                    <span className="font-medium">₦{sizes.find((s: Doc) => String(s.id) === selectedSize)?.price?.toLocaleString()}</span>
+                    <span>₦{(couponResult?.finalAmount ?? sizes.find((s: Doc) => String(s.id) === selectedSize)?.price)?.toLocaleString()}</span>
                   </div>
                 </div>
               )}
