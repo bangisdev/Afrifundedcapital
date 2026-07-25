@@ -1,5 +1,4 @@
-import { useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
+import { useApiQuery } from "@/hooks/use-api";
 import { useParams, Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,15 +16,27 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+interface VerifyResult {
+  valid: boolean;
+  type?: string;
+  typeLabel?: string;
+  certificateNumber?: string;
+  issuedAt?: number;
+  traderName?: string;
+  accountSize?: number;
+  challengeName?: string;
+}
+
 export default function VerifyCertificate() {
   const { verificationCode } = useParams();
-  const result = useQuery(
-    api.certificates.verifyCertificate,
-    verificationCode ? { verificationCode } : "skip",
+  const { data: result, isLoading } = useApiQuery<VerifyResult>(
+    ["cert-verify", verificationCode || ""],
+    `/api/certificates/verify/${verificationCode || ""}`,
+    { enabled: !!verificationCode },
   );
 
   // ── Loading ──
-  if (result === undefined) {
+  if (isLoading || (verificationCode && !result)) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
@@ -63,9 +74,14 @@ export default function VerifyCertificate() {
     );
   }
 
-  const cert = result.certificate!;
-  const trader = result.trader!;
-  const challenge = result.challenge;
+  const typeLabel =
+    result.type === "phase_1"
+      ? "Phase 1 Evaluation Passed"
+      : result.type === "phase_2"
+        ? "Phase 2 Evaluation Passed"
+        : result.type === "funded"
+          ? "Funded Trader Status Achieved"
+          : "Certificate of Achievement";
 
   const typeColor = (type: string) => {
     switch (type) {
@@ -95,9 +111,9 @@ export default function VerifyCertificate() {
             <ShieldCheck className="h-8 w-8 text-foreground" />
           </div>
           <span
-            className={`inline-flex items-center px-3 py-1 text-xs font-medium rounded-full ${typeColor(cert.type)}`}
+            className={`inline-flex items-center px-3 py-1 text-xs font-medium rounded-full ${typeColor(result.type || "")}`}
           >
-            {cert.typeLabel}
+            {typeLabel}
           </span>
         </div>
 
@@ -107,7 +123,7 @@ export default function VerifyCertificate() {
             <User className="h-3.5 w-3.5" />
             <span className="text-[11px] uppercase tracking-widest">Trader</span>
           </div>
-          <h2 className="text-xl font-light tracking-tight">{trader.name}</h2>
+          <h2 className="text-xl font-light tracking-tight">{result.traderName}</h2>
         </div>
 
         {/* Details */}
@@ -117,32 +133,44 @@ export default function VerifyCertificate() {
               <Award className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-xs text-muted-foreground">Certificate Number</span>
             </div>
-            <span className="text-xs font-mono font-medium">{cert.certificateNumber}</span>
+            <span className="text-xs font-mono font-medium">{result.certificateNumber}</span>
           </div>
 
-          {challenge?.accountSize && (
+          {result.challengeName && (
+            <div className="flex items-center justify-between px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Hash className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Challenge</span>
+              </div>
+              <span className="text-xs font-medium">{result.challengeName}</span>
+            </div>
+          )}
+
+          {result.accountSize != null && (
             <div className="flex items-center justify-between px-4 py-3">
               <div className="flex items-center gap-2">
                 <Hash className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">Account Size</span>
               </div>
-              <span className="text-xs font-medium">{challenge.accountSize}</span>
+              <span className="text-xs font-medium">${result.accountSize.toLocaleString()}</span>
             </div>
           )}
 
-          <div className="flex items-center justify-between px-4 py-3">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">Issued</span>
+          {result.issuedAt && (
+            <div className="flex items-center justify-between px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Issued</span>
+              </div>
+              <span className="text-xs">
+                {new Date(result.issuedAt).toLocaleDateString("en-NG", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })}
+              </span>
             </div>
-            <span className="text-xs">
-              {new Date(cert.issuedAt).toLocaleDateString("en-NG", {
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })}
-            </span>
-          </div>
+          )}
         </div>
 
         {/* Verification badge */}
