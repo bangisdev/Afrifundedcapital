@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { auth } from "./auth";
+import { authRouter } from "./auth";
 import { initDatabase } from "./db";
 import type { Plugin, ViteDevServer } from "vite";
 
@@ -33,8 +33,8 @@ app.use("*", cors({
 // Health check
 app.get("/api/health", (c) => c.json({ status: "ok", timestamp: Date.now() }));
 
-// Better Auth handler
-app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+// Custom auth routes
+app.route("/api/auth", authRouter);
 
 // Mount route modules
 app.route("/api/users", usersRouter);
