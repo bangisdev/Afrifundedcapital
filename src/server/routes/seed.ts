@@ -25,6 +25,33 @@ app.post("/admin", async (c) => {
   let body: Record<string, unknown> = {};
   try { body = await c.req.json(); } catch {}
 
+  const email = (body.email as string) || "admin@afrifundedcapital.com";
+  const password = (body.password as string) || "Admin@123456";
+  const name = (body.name as string) || "Super Admin";
+
+  // Allow action=delete to remove a specific user by email
+  const action = body.action as string;
+  if (action === "delete") {
+    const target = db.select().from(users).where(eq(users.email, email)).get();
+    if (!target) return c.json({ error: "User not found" }, 404);
+    // Prevent deleting the last super_admin
+    if (target.role === "super_admin") {
+      const allAdmins = db.select().from(users).where(eq(users.role, "super_admin")).all();
+      if (allAdmins.length <= 1) {
+        return c.json({ error: "Cannot delete the last super_admin" }, 400);
+      }
+    }
+    const sqlite = getSqlite();
+    sqlite.prepare("DELETE FROM sessions WHERE user_id = ?").run(target.id);
+    sqlite.prepare("DELETE FROM accounts WHERE user_id = ?").run(String(target.id));
+    sqlite.prepare("DELETE FROM notifications WHERE user_id = ?").run(target.id);
+    sqlite.prepare("DELETE FROM wallets WHERE user_id = ?").run(target.id);
+    sqlite.prepare("DELETE FROM certificates WHERE user_id = ?").run(target.id);
+    sqlite.prepare("DELETE FROM kyc_documents WHERE user_id = ?").run(target.id);
+    db.delete(users).where(eq(users.id, target.id)).run();
+    return c.json({ success: true, message: `User ${email} deleted` });
+  }
+
   // Check if super_admin already exists
   const existing = db
     .select()
@@ -50,10 +77,6 @@ app.post("/admin", async (c) => {
     } catch {}
     db.delete(users).where(eq(users.id, existing.id)).run();
   }
-
-  const email = (body.email as string) || "admin@afrifundedcapital.com";
-  const password = (body.password as string) || "Admin@123456";
-  const name = (body.name as string) || "Super Admin";
 
   // Hash password with scrypt (Node built-in, no native addons)
   const hashedPassword = await hashPassword(password);
@@ -177,6 +200,40 @@ app.post("/seed", requireAuth, requireAdmin, (c) => {
 // Get enabled payment providers
 app.get("/providers", (c) => {
   return c.json([{ name: "flutterwave", enabled: true }]);
+});
+
+// ─── Public: delete a user by email (bootstrap cleanup) ────
+app.post("/delete-user", async (c) => {
+  const db = getDb();
+  const sqlite = getSqlite();
+
+  let body: Record<string, unknown> = {};
+  try { body = await c.req.json(); } catch {}
+
+  const email = (body.email as string)?.trim().toLowerCase();
+  if (!email) return c.json({ error: "Email is required" }, 400);
+
+  const target = db.select().from(users).where(eq(users.email, email)).get();
+  if (!target) return c.json({ error: "User not found" }, 404);
+
+  // Prevent deleting the last super_admin
+  if (target.role === "super_admin") {
+    const allAdmins = db.select().from(users).where(eq(users.role, "super_admin")).all();
+    if (allAdmins.length <= 1) {
+      return c.json({ error: "Cannot delete the last super_admin" }, 400);
+    }
+  }
+
+  // Cascade delete
+  sqlite.prepare("DELETE FROM sessions WHERE user_id = ?").run(target.id);
+  sqlite.prepare("DELETE FROM accounts WHERE user_id = ?").run(String(target.id));
+  sqlite.prepare("DELETE FROM notifications WHERE user_id = ?").run(target.id);
+  sqlite.prepare("DELETE FROM wallets WHERE user_id = ?").run(target.id);
+  sqlite.prepare("DELETE FROM certificates WHERE user_id = ?").run(target.id);
+  sqlite.prepare("DELETE FROM kyc_documents WHERE user_id = ?").run(target.id);
+  db.delete(users).where(eq(users.id, target.id)).run();
+
+  return c.json({ success: true, message: `User ${email} deleted` });
 });
 
 // ─── Public: check if super admin exists ───────────────────

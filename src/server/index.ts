@@ -400,13 +400,14 @@ app.post("/api/auth/sign-out", (c) => {
   }
 });
 
-// POST /api/auth/cleanup-orphan — reset password for users with incompatible hashes
+// POST /api/auth/cleanup-orphan — reset password or delete users with incompatible hashes
 app.post("/api/auth/cleanup-orphan", async (c) => {
   try {
     let body: Record<string, unknown> = {};
     try { body = await c.req.json(); } catch {}
 
     const email = (body.email as string)?.trim().toLowerCase();
+    const action = (body.action as string) || "reset-password"; // "reset-password" or "delete"
     const newPassword = (body.password as string) || "Admin@123456";
 
     if (!email) {
@@ -419,16 +420,29 @@ app.post("/api/auth/cleanup-orphan", async (c) => {
       return c.json({ error: "User not found" }, 404);
     }
 
-    // Delete old password hash and create new one with scrypt
     const sqlite = (await import("./db")).getSqlite();
-    
-    // Remove old account entry
+
+    // If action is delete, remove the user entirely
+    if (action === "delete") {
+      sqlite.prepare("DELETE FROM sessions WHERE user_id = ?").run(user.id);
+      sqlite.prepare("DELETE FROM accounts WHERE user_id = ?").run(String(user.id));
+      sqlite.prepare("DELETE FROM notifications WHERE user_id = ?").run(user.id);
+      sqlite.prepare("DELETE FROM wallets WHERE user_id = ?").run(user.id);
+      sqlite.prepare("DELETE FROM certificates WHERE user_id = ?").run(user.id);
+      sqlite.prepare("DELETE FROM kyc_documents WHERE user_id = ?").run(user.id);
+      db.delete(users).where(eq(users.id, user.id)).run();
+
+      return c.json({
+        success: true,
+        message: `User ${email} deleted successfully`,
+        email,
+      });
+    }
+
+    // Default: reset password with scrypt
     sqlite.prepare("DELETE FROM accounts WHERE user_id = ? AND provider_id = 'email'").run(String(user.id));
-    
-    // Remove old sessions
     sqlite.prepare("DELETE FROM sessions WHERE user_id = ?").run(user.id);
-    
-    // Create new password hash with scrypt
+
     const hashedPassword = await hashPassword(newPassword);
     sqlite.prepare(
       "INSERT OR REPLACE INTO accounts (user_id, account_id, provider_id, password) VALUES (?, ?, 'email', ?)"
@@ -442,6 +456,100 @@ app.post("/api/auth/cleanup-orphan", async (c) => {
   } catch (err) {
     console.error("[Auth] cleanup-orphan error:", err);
     return c.json({ error: "Failed to cleanup orphan" }, 500);
+  }
+});
+
+// POST /api/auth/nuke-duplicate — remove all super_admins except the specified email
+app.post("/api/auth/nuke-duplicate", async (c) => {
+  try {
+    let body: Record<string, unknown> = {};
+    try { body = await c.req.json(); } catch {}
+
+    const keepEmail = (body.email as string)?.trim().toLowerCase() || "admin@afrifundedcapital.com";
+    const sqlite = (await import("./db")).getSqlite();
+    const db = getDb();
+
+    // Find all super_admins
+    const allAdmins = sqlite.prepare("SELECT id, email FROM users WHERE role = 'super_admin'").all() as Array<{ id: number; email: string }>;
+
+    const deleted: string[] = [];
+    for (const admin of allAdmins) {
+      if (admin.email === keepEmail) continue; // Skip the one we want to keep
+      sqlite.prepare("DELETE FROM sessions WHERE user_id = ?").run(admin.id);
+      sqlite.prepare("DELETE FROM accounts WHERE user_id = ?").run(String(admin.id));
+      sqlite.prepare("DELETE FROM notifications WHERE user_id = ?").run(admin.id);
+      sqlite.prepare("DELETE FROM wallets WHERE user_id = ?").run(admin.id);
+      sqlite.prepare("DELETE FROM certificates WHERE user_id = ?").run(admin.id);
+      sqlite.prepare("DELETE FROM kyc_documents WHERE user_id = ?").run(admin.id);
+      db.delete(users).where(eq(users.id, admin.id)).run();
+      deleted.push(admin.email);
+    }
+
+    return c.json({ success: true, deleted, kept: keepEmail });
+  } catch (err) {
+    console.error("[Auth] nuke-duplicate error:", err);
+    return c.json({ error: "Failed to nuke duplicates" }, 500);
+  }
+});
+
+// POST /api/auth/delete-user — delete a user by email (admin only)
+app.post("/api/auth/delete-user", async (c) => {
+  try {
+    // Require authentication
+    const cookieHeader = c.req.header("cookie") || "";
+    const cookies = parseCookies(cookieHeader);
+    const token = cookies[COOKIE_NAME];
+    if (!token) return c.json({ error: "Not authenticated" }, 401);
+
+    const db = getDb();
+    const session = db
+      .select()
+      .from(sessions)
+      .where(and(eq(sessions.token, token), gt(sessions.expiresAt, Date.now())))
+      .get();
+    if (!session) return c.json({ error: "Invalid session" }, 401);
+
+    const caller = db.select().from(users).where(eq(users.id, session.userId)).get();
+    if (!caller || caller.role !== "super_admin") {
+      return c.json({ error: "Only super_admin can delete users" }, 403);
+    }
+
+    let body: Record<string, unknown> = {};
+    try { body = await c.req.json(); } catch {}
+
+    const email = (body.email as string)?.trim().toLowerCase();
+    if (!email) return c.json({ error: "Email is required" }, 400);
+
+    // Prevent deleting yourself
+    if (email === caller.email) {
+      return c.json({ error: "Cannot delete your own account" }, 400);
+    }
+
+    const target = db.select().from(users).where(eq(users.email, email)).get();
+    if (!target) return c.json({ error: "User not found" }, 404);
+
+    // Prevent deleting the last super_admin
+    if (target.role === "super_admin") {
+      const adminCount = db.select().from(users).where(eq(users.role, "super_admin")).all().length;
+      if (adminCount <= 1) {
+        return c.json({ error: "Cannot delete the last super_admin" }, 400);
+      }
+    }
+
+    // Cascade delete related data
+    const sqlite = (await import("./db")).getSqlite();
+    sqlite.prepare("DELETE FROM sessions WHERE user_id = ?").run(target.id);
+    sqlite.prepare("DELETE FROM accounts WHERE user_id = ?").run(String(target.id));
+    sqlite.prepare("DELETE FROM notifications WHERE user_id = ?").run(target.id);
+    sqlite.prepare("DELETE FROM wallets WHERE user_id = ?").run(target.id);
+    sqlite.prepare("DELETE FROM certificates WHERE user_id = ?").run(target.id);
+    sqlite.prepare("DELETE FROM kyc_documents WHERE user_id = ?").run(target.id);
+    db.delete(users).where(eq(users.id, target.id)).run();
+
+    return c.json({ success: true, message: `User ${email} deleted` });
+  } catch (err) {
+    console.error("[Auth] delete-user error:", err);
+    return c.json({ error: "Failed to delete user" }, 500);
   }
 });
 
