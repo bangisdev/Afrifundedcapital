@@ -310,6 +310,28 @@ app.put("/admin/sizes/:id", requireAuth, requireAdmin, async (c) => {
   return c.json({ success: true });
 });
 
+// Admin: Delete account size
+app.delete("/admin/sizes/:id", requireAuth, requireAdmin, async (c) => {
+  const id = parseInt(c.req.param("id"));
+  const db = getDb();
+  db.delete(accountSizes).where(eq(accountSizes.id, id)).run();
+  return c.json({ success: true });
+});
+
+// Admin: Delete challenge template (cascade deletes sizes)
+app.delete("/admin/templates/:id", requireAuth, requireAdmin, async (c) => {
+  const id = parseInt(c.req.param("id"));
+  const db = getDb();
+  // Check if any user challenges use this template
+  const usage = db.select({ cnt: count() }).from(userChallenges).where(eq(userChallenges.templateId, id)).get();
+  if (usage && (usage.cnt ?? 0) > 0) {
+    return c.json({ error: `Cannot delete: ${usage.cnt} user challenges use this template` }, 400);
+  }
+  db.delete(accountSizes).where(eq(accountSizes.templateId, id)).run();
+  db.delete(challengeTemplates).where(eq(challengeTemplates.id, id)).run();
+  return c.json({ success: true });
+});
+
 // Admin: Update challenge status (with automatic certificate generation)
 app.put("/admin/:id/status", requireAuth, requireAdmin, async (c) => {
   const id = parseInt(c.req.param("id"));
