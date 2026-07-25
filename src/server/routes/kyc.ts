@@ -7,6 +7,10 @@ import { createNotification } from "../lib/notifications";
 
 const app = new Hono();
 
+// Allowed MIME types and max size (5MB)
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+const MAX_SIZE_BYTES = 5 * 1024 * 1024;
+
 // Get my KYC documents
 app.get("/my", requireAuth, (c) => {
   const userId = c.get("userId");
@@ -14,64 +18,233 @@ app.get("/my", requireAuth, (c) => {
   const docs = db.select().from(kycDocuments)
     .where(eq(kycDocuments.userId, userId))
     .orderBy(desc(kycDocuments.uploadedAt)).all();
-  return c.json(docs);
+  // Strip fileData from list responses for performance
+  const stripped = docs.map(({ fileUrl, ...rest }) => ({
+    ...rest,
+    hasFile: !!fileUrl,
+    filePreview: fileUrl ? fileUrl.substring(0, 30) + "..." : null,
+  }));
+  return c.json(stripped);
 });
 
-// Upload KYC document
+// Get single KYC document (with file data for preview)
+app.get("/my/:id", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  const id = parseInt(c.req.param("id"));
+  const db = getDb();
+  const doc = db.select().from(kycDocuments)
+    .where(and(eq(kycDocuments.id, id), eq(kycDocuments.userId, userId)))
+    .get();
+  if (!doc) return c.json({ error: "Document not found" }, 404);
+  return c.json(doc);
+});
+
+// Upload KYC document (with real file data)
 app.post("/upload", requireAuth, async (c) => {
   const userId = c.get("userId");
   const body = await c.req.json();
   const db = getDb();
+
+  const { documentType, fileData, fileName, fileSize, mimeType } = body;
+
+  // Validate document type
+  const validTypes = ["passport", "national_id", "drivers_license", "proof_of_address", "selfie"];
+  if (!validTypes.includes(documentType)) {
+    return c.json({ error: "Invalid document type" }, 400);
+  }
+
+  // Validate file if provided
+  if (fileData) {
+    // Check MIME type
+    if (mimeType && !ALLOWED_TYPES.includes(mimeType)) {
+      return c.json({ error: `File type not allowed. Accepted: JPEG, PNG, WebP, PDF` }, 400);
+    }
+
+    // Check file size (if provided as base64, estimate decoded size)
+    if (fileSize && fileSize > MAX_SIZE_BYTES) {
+      return c.json({ error: "File size must be under 5MB" }, 400);
+    }
+
+    // For base64 data URLs, also check the data length
+    if (fileData.startsWith("data:")) {
+      const base64Part = fileData.split(",")[1] || "";
+      const estimatedSize = Math.ceil(base64Part.length * 0.75);
+      if (estimatedSize > MAX_SIZE_BYTES) {
+        return c.json({ error: "File size must be under 5MB" }, 400);
+      }
+    }
+  }
+
+  // Check if user already has a pending/approved document of this type
+  // If so, allow re-upload (creates a new record, old ones stay for audit)
+  const existingDoc = db.select().from(kycDocuments)
+    .where(and(
+      eq(kycDocuments.userId, userId),
+      eq(kycDocuments.documentType, documentType),
+    ))
+    .orderBy(desc(kycDocuments.uploadedAt))
+    .get();
+
+  // If there's an approved doc of this type, don't allow re-upload
+  if (existingDoc && existingDoc.status === "approved") {
+    return c.json({ error: "This document type is already approved" }, 400);
+  }
+
+  // Compute a simple hash of the file data for duplicate detection
+  let fileHash: string | null = null;
+  if (fileData) {
+    // Simple hash: use filename + size + first 100 chars of data
+    fileHash = `${fileName || "unknown"}-${fileSize || 0}-${(fileData || "").substring(0, 100)}`;
+  }
+
   const result = db.insert(kycDocuments).values({
     userId,
-    documentType: body.documentType,
-    fileUrl: body.fileUrl || "/uploads/" + Date.now() + ".pdf",
+    documentType,
+    fileUrl: fileData || "/uploads/" + Date.now() + ".pdf",
+    fileHash,
     status: "pending",
     uploadedAt: Date.now(),
   }).returning().get();
-  return c.json(result);
+
+  // Update user's KYC status to pending if it was unverified
+  const user = db.select().from(users).where(eq(users.id, userId)).get();
+  if (user && user.kycStatus === "unverified") {
+    db.update(users).set({
+      kycStatus: "pending",
+      updatedAt: Date.now(),
+    }).where(eq(users.id, userId)).run();
+  }
+
+  return c.json({
+    id: result.id,
+    documentType: result.documentType,
+    status: result.status,
+    uploadedAt: result.uploadedAt,
+  });
 });
+
+// Delete a KYC document (before it's reviewed)
+app.delete("/my/:id", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  const id = parseInt(c.req.param("id"));
+  const db = getDb();
+  const doc = db.select().from(kycDocuments)
+    .where(and(eq(kycDocuments.id, id), eq(kycDocuments.userId, userId)))
+    .get();
+  if (!doc) return c.json({ error: "Document not found" }, 404);
+  if (doc.status === "approved") {
+    return c.json({ error: "Cannot delete an approved document" }, 400);
+  }
+  db.delete(kycDocuments).where(eq(kycDocuments.id, id)).run();
+  return c.json({ success: true });
+});
+
+// ─── Admin Endpoints ──────────────────────────────────
 
 // Admin: List all KYC documents
 app.get("/admin/all", requireAuth, requireAdmin, (c) => {
   const db = getDb();
   const docs = db.select().from(kycDocuments).orderBy(desc(kycDocuments.uploadedAt)).all();
-  return c.json(docs);
+  // Strip fileData for list view
+  const stripped = docs.map(({ fileUrl, ...rest }) => ({
+    ...rest,
+    hasFile: !!fileUrl,
+  }));
+  return c.json(stripped);
+});
+
+// Admin: Get single document with file data for preview
+app.get("/admin/:id", requireAuth, requireAdmin, (c) => {
+  const id = parseInt(c.req.param("id"));
+  const db = getDb();
+  const doc = db.select().from(kycDocuments).where(eq(kycDocuments.id, id)).get();
+  if (!doc) return c.json({ error: "Document not found" }, 404);
+  // Get user info
+  const user = db.select().from(users).where(eq(users.id, doc.userId)).get();
+  return c.json({
+    ...doc,
+    userName: user?.name || "Unknown",
+    userEmail: user?.email || "Unknown",
+  });
 });
 
 // Admin: Approve KYC
 app.post("/admin/:id/approve", requireAuth, requireAdmin, async (c) => {
+  const adminId = c.get("userId");
   const id = parseInt(c.req.param("id"));
   const db = getDb();
   const doc = db.select().from(kycDocuments).where(eq(kycDocuments.id, id)).get();
-  if (doc) {
-    db.update(kycDocuments).set({ status: "approved", reviewedAt: Date.now() }).where(eq(kycDocuments.id, id)).run();
-    db.update(users).set({ kycStatus: "approved", kycVerifiedAt: Date.now(), updatedAt: Date.now() }).where(eq(users.id, doc.userId)).run();
+  if (!doc) return c.json({ error: "Document not found" }, 404);
+
+  db.update(kycDocuments).set({
+    status: "approved",
+    reviewedBy: adminId,
+    reviewedAt: Date.now(),
+  }).where(eq(kycDocuments.id, id)).run();
+
+  // Check if all required document types are approved for this user
+  const userDocs = db.select().from(kycDocuments)
+    .where(and(
+      eq(kycDocuments.userId, doc.userId),
+      eq(kycDocuments.status, "approved"),
+    ))
+    .all();
+
+  const approvedTypes = new Set(userDocs.map((d) => d.documentType));
+  const requiredTypes = ["passport", "national_id"];
+  const hasAllRequired = requiredTypes.some((t) => approvedTypes.has(t));
+
+  // Also accept proof_of_address as alternative
+  const hasAlternative = approvedTypes.has("proof_of_address") || approvedTypes.has("drivers_license");
+
+  if (hasAllRequired || hasAlternative) {
+    db.update(users).set({
+      kycStatus: "approved",
+      kycVerifiedAt: Date.now(),
+      updatedAt: Date.now(),
+    }).where(eq(users.id, doc.userId)).run();
+
     createNotification(db, doc.userId, {
       type: "kyc",
-      title: "KYC Approved",
-      message: `Your ${doc.documentType.replace(/_/g, " ")} document has been approved. Your profile is now fully verified.`,
+      title: "Identity Verified",
+      message: "Your identity has been verified. Your profile is now fully verified and profile fields are locked.",
+      link: "/dashboard/profile",
+    });
+  } else {
+    createNotification(db, doc.userId, {
+      type: "kyc",
+      title: "Document Approved",
+      message: `Your ${doc.documentType.replace(/_/g, " ")} document has been approved. ${hasAllRequired ? "" : "Please upload additional documents to complete verification."}`,
       link: "/dashboard/profile",
     });
   }
-  return c.json({ success: true });
+
+  return c.json({ success: true, userFullyVerified: hasAllRequired || hasAlternative });
 });
 
 // Admin: Reject KYC
 app.post("/admin/:id/reject", requireAuth, requireAdmin, async (c) => {
+  const adminId = c.get("userId");
   const id = parseInt(c.req.param("id"));
   const body = await c.req.json();
   const db = getDb();
   const doc = db.select().from(kycDocuments).where(eq(kycDocuments.id, id)).get();
-  db.update(kycDocuments).set({ status: "rejected", rejectionReason: body.reason, reviewedAt: Date.now() }).where(eq(kycDocuments.id, id)).run();
-  if (doc) {
-    createNotification(db, doc.userId, {
-      type: "kyc",
-      title: "KYC Rejected",
-      message: `Your ${doc.documentType.replace(/_/g, " ")} document was rejected. Reason: ${body.reason || "Not specified"}. Please re-upload with the correct documents.`,
-      link: "/dashboard/profile",
-    });
-  }
+  if (!doc) return c.json({ error: "Document not found" }, 404);
+
+  db.update(kycDocuments).set({
+    status: "rejected",
+    rejectionReason: body.reason || "Document does not meet requirements",
+    reviewedBy: adminId,
+    reviewedAt: Date.now(),
+  }).where(eq(kycDocuments.id, id)).run();
+
+  createNotification(db, doc.userId, {
+    type: "kyc",
+    title: "Document Rejected",
+    message: `Your ${doc.documentType.replace(/_/g, " ")} document was rejected. Reason: ${body.reason || "Not specified"}. Please re-upload with the correct documents.`,
+    link: "/dashboard/profile",
+  });
+
   return c.json({ success: true });
 });
 
