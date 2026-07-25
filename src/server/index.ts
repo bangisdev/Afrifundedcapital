@@ -7,6 +7,12 @@ import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { initDatabase } from "./db";
 import type { Plugin, ViteDevServer } from "vite";
+import {
+  signInRateLimit,
+  signUpRateLimit,
+  promoteAdminRateLimit,
+  loginAccountLockout,
+} from "./middleware";
 
 // Import route modules
 import usersRouter from "./routes/users";
@@ -87,8 +93,8 @@ app.get("/api/payments/flutterwave-config", (c) => {
 //  AUTH ROUTES — inlined to avoid sub-router issues
 // ═══════════════════════════════════════════════
 
-// POST /api/auth/sign-up/email
-app.post("/api/auth/sign-up/email", async (c) => {
+// POST /api/auth/sign-up/email — rate limited: 3 per hour per IP
+app.post("/api/auth/sign-up/email", signUpRateLimit, async (c) => {
   try {
     let body: Record<string, unknown> = {};
     try { body = await c.req.json(); } catch {}
@@ -161,8 +167,8 @@ app.post("/api/auth/sign-up/email", async (c) => {
   }
 });
 
-// POST /api/auth/sign-in/email
-app.post("/api/auth/sign-in/email", async (c) => {
+// POST /api/auth/sign-in/email — rate limited: 5 per 15min per IP + account lockout
+app.post("/api/auth/sign-in/email", signInRateLimit, loginAccountLockout, async (c) => {
   try {
     let body: Record<string, unknown> = {};
     try { body = await c.req.json(); } catch {}
@@ -313,8 +319,8 @@ app.post("/api/auth/reset-admin", async (c) => {
   }
 });
 
-// POST /api/auth/promote-admin — promote user to super_admin (bootstrap only, works without auth)
-app.post("/api/auth/promote-admin", async (c) => {
+// POST /api/auth/promote-admin — rate limited: 3 per day per IP (bootstrap only)
+app.post("/api/auth/promote-admin", promoteAdminRateLimit, async (c) => {
   try {
     let body: Record<string, unknown> = {};
     try { body = await c.req.json(); } catch {}
