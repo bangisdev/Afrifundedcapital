@@ -119,11 +119,30 @@ app.post("/redeem", requireAuth, async (c) => {
   return c.json({ success: true });
 });
 
-// List all coupons (admin)
+// List all coupons (admin) with redemption counts
 app.get("/admin/all", requireAuth, requireAdmin, (c) => {
   const db = getDb();
   const items = db.select().from(coupons).orderBy(desc(coupons.createdAt)).all();
-  return c.json(items);
+
+  // Enrich each coupon with actual redemption count and total discount given
+  const enriched = items.map((coupon) => {
+    const stats = db
+      .select({
+        count: sql<number>`count(*)`,
+        totalDiscount: sql<number>`coalesce(sum(${couponRedemptions.discountAmount}), 0)`,
+      })
+      .from(couponRedemptions)
+      .where(eq(couponRedemptions.couponId, coupon.id))
+      .get();
+
+    return {
+      ...coupon,
+      redemptionCount: stats?.count || 0,
+      totalDiscountGiven: stats?.totalDiscount || 0,
+    };
+  });
+
+  return c.json(enriched);
 });
 
 // Create coupon
