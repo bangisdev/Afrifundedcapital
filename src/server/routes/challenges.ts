@@ -6,9 +6,12 @@ import {
   userChallenges,
   tradingMetrics,
   users,
+  payments,
+  mt5Accounts,
 } from "../schema";
 import { eq, desc, count, sql, and } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
+import { createNotification } from "../lib/notifications";
 import { maybeGenerateCertificate } from "../lib/certificates";
 
 let seeded = false;
@@ -330,6 +333,98 @@ app.delete("/admin/templates/:id", requireAuth, requireAdmin, async (c) => {
   db.delete(accountSizes).where(eq(accountSizes.templateId, id)).run();
   db.delete(challengeTemplates).where(eq(challengeTemplates.id, id)).run();
   return c.json({ success: true });
+});
+
+// Admin: Demo purchase (create challenge without payment)
+app.post("/demo-purchase", requireAuth, requireAdmin, async (c) => {
+  const userId = c.get("userId");
+  const body = await c.req.json();
+  const db = getDb();
+  const now = Date.now();
+
+  const templateId = parseInt(body.templateId);
+  const accountSizeId = parseInt(body.accountSizeId);
+  const targetUserId = body.userId ? parseInt(body.userId) : userId;
+
+  if (!templateId || !accountSizeId) {
+    return c.json({ error: "templateId and accountSizeId are required" }, 400);
+  }
+
+  const template = db.select().from(challengeTemplates).where(eq(challengeTemplates.id, templateId)).get();
+  const size = db.select().from(accountSizes).where(eq(accountSizes.id, accountSizeId)).get();
+  if (!template) return c.json({ error: "Template not found" }, 404);
+  if (!size) return c.json({ error: "Account size not found" }, 404);
+
+  // Create a completed payment record for audit trail
+  const reference = `DEMO-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+  const payment = db.insert(payments).values({
+    userId: targetUserId,
+    amount: 0,
+    currency: "NGN",
+    provider: "demo",
+    status: "completed",
+    reference,
+    description: `Demo: ${template.name} — ${size.label}`,
+    templateId,
+    accountSizeId,
+    createdAt: now,
+    completedAt: now,
+  }).returning().get();
+
+  // Create challenge
+  const challenge = db.insert(userChallenges).values({
+    userId: targetUserId,
+    templateId,
+    accountSizeId,
+    status: "active",
+    accountSize: size.size,
+    currency: "NGN",
+    profitTarget: template.profitTarget,
+    dailyDrawdown: template.dailyDrawdown,
+    maxDrawdown: template.maxDrawdown,
+    maxLeverage: template.maxLeverage,
+    minTradingDays: template.minTradingDays,
+    maxTradingDays: template.maxTradingDays || null,
+    paymentId: payment.id,
+    amountPaid: 0,
+    startedAt: now,
+    expiresAt: now + (template.durationDays || 30) * 86400000,
+    createdAt: now,
+    updatedAt: now,
+  }).returning().get();
+
+  // Create MT5 demo account
+  const login = "AFC" + Math.floor(100000 + Math.random() * 900000);
+  const mt5Account = db.insert(mt5Accounts).values({
+    userId: targetUserId,
+    login,
+    password: "Demo@" + Math.random().toString(36).substring(2, 10),
+    investorPassword: "Demo@" + Math.random().toString(36).substring(2, 10),
+    server: "AfriFundedCapital-Demo",
+    group: "DEMO\\AFC",
+    leverage: template.maxLeverage || 100,
+    balance: size.size,
+    equity: size.size,
+    currency: "NGN",
+    createdAt: now,
+  }).returning().get();
+
+  db.update(userChallenges).set({ mt5AccountId: mt5Account.id, updatedAt: now }).where(eq(userChallenges.id, challenge.id)).run();
+
+  // Notify user
+  createNotification(db, targetUserId, {
+    type: "payment",
+    title: "Demo Challenge Created",
+    message: `A demo ${template.name} challenge (${size.label}) has been created for your account.`,
+    link: "/dashboard/challenges",
+  });
+
+  return c.json({
+    success: true,
+    challengeId: challenge.id,
+    mt5Login: login,
+    message: `Demo challenge created: ${template.name} — ${size.label}`,
+  });
 });
 
 // Admin: Update challenge status (with automatic certificate generation)

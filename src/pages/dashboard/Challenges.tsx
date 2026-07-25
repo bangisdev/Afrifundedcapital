@@ -34,6 +34,9 @@ export default function Challenges() {
   const [couponCode, setCouponCode] = useState("");
   const [showPurchase, setShowPurchase] = useState(false);
 
+  const isAdmin = user?.role === "super_admin" || user?.role === "support_admin" || user?.role === "finance_admin";
+  const demoPurchase = useApiMutation<any, any>("post", "/api/challenges/demo-purchase");
+
   const { state: paymentState, startCheckout, reset: resetPayment } = useFlutterwavePayment();
 
   const { data: sizes } = useApiQuery<any[]>(
@@ -268,6 +271,32 @@ export default function Challenges() {
               >
                 {getPaymentButtonContent()}
               </Button>
+
+              {isAdmin && (
+                <Button
+                  variant="outline"
+                  className="w-full text-xs"
+                  size="sm"
+                  disabled={!selectedSize || demoPurchase.isPending}
+                  onClick={async () => {
+                    if (!selectedTemplate || !selectedSize) return;
+                    try {
+                      await demoPurchase.mutateAsync({ templateId: selectedTemplate, accountSizeId: selectedSize });
+                      toast.success("Demo challenge created!");
+                      setShowPurchase(false);
+                      resetPayment();
+                    } catch (err: any) {
+                      toast.error(err?.message || "Failed to create demo challenge");
+                    }
+                  }}
+                >
+                  {demoPurchase.isPending ? (
+                    <div className="flex items-center gap-2"><Loader2 className="h-3 w-3 animate-spin" /><span>Creating...</span></div>
+                  ) : (
+                    "Create Demo Challenge"
+                  )}
+                </Button>
+              )}
 
               <p className="text-[10px] text-muted-foreground text-center">
                 Secure payment powered by Flutterwave. Your payment data is encrypted.
