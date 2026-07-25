@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Loader2, Save, CreditCard, Shield, Webhook, Eye, EyeOff,
-  CheckCircle, AlertTriangle, Copy, Database
+  CheckCircle, AlertTriangle, Copy, Database, Zap, Globe
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -18,6 +18,7 @@ interface ProviderConfig {
   secretHash?: string;
   webhookUrl?: string;
   isEnabled: boolean;
+  mode?: "test" | "live";
 }
 
 export default function AdminSettings() {
@@ -28,17 +29,30 @@ export default function AdminSettings() {
   const updateSetting = useApiMutation<any, any>("put", "/api/seed/settings/flutterwave_config");
   const seedData = useApiMutation<any, any>("post", "/api/seed/seed");
 
-  // Flutterwave state
-  const [flwConfig, setFlwConfig] = useState<ProviderConfig>({
+  // Mode state
+  const [liveMode, setLiveMode] = useState(false);
+
+  // Flutterwave state - stores both test and live keys
+  const [flwTestConfig, setFlwTestConfig] = useState<ProviderConfig>({
     publicKey: "",
     secretKey: "",
     secretHash: "",
     webhookUrl: "",
     isEnabled: true,
+    mode: "test",
+  });
+  const [flwLiveConfig, setFlwLiveConfig] = useState<ProviderConfig>({
+    publicKey: "",
+    secretKey: "",
+    secretHash: "",
+    webhookUrl: "",
+    isEnabled: false,
+    mode: "live",
   });
   const [showFlwSecret, setShowFlwSecret] = useState(false);
   const [showFlwHash, setShowFlwHash] = useState(false);
   const [savingFlw, setSavingFlw] = useState(false);
+  const [confirmLiveSwitch, setConfirmLiveSwitch] = useState(false);
 
   // Paystack state (future-ready)
   const [pskConfig, setPskConfig] = useState<ProviderConfig>({
@@ -54,16 +68,64 @@ export default function AdminSettings() {
   // Load existing config from settings
   useEffect(() => {
     if (!settings) return;
+
+    // Load Flutterwave config
     const flwSetting = settings.find((s: any) => s.key === "flutterwave_config");
     if (flwSetting?.value) {
-      setFlwConfig({
-        publicKey: flwSetting.value.publicKey || "",
-        secretKey: flwSetting.value.secretKey || "",
-        secretHash: flwSetting.value.secretHash || "",
-        webhookUrl: flwSetting.value.webhookUrl || "",
-        isEnabled: flwSetting.value.isEnabled !== false,
+      const val = flwSetting.value;
+      // Detect mode from keys
+      const isTest = (val.publicKey || "").includes("TEST") || (val.secretKey || "").includes("TEST");
+      const mode = isTest ? "test" : "live";
+
+      if (mode === "test") {
+        setFlwTestConfig({
+          publicKey: val.publicKey || "",
+          secretKey: val.secretKey || "",
+          secretHash: val.secretHash || "",
+          webhookUrl: val.webhookUrl || "",
+          isEnabled: val.isEnabled !== false,
+          mode: "test",
+        });
+      } else {
+        setFlwLiveConfig({
+          publicKey: val.publicKey || "",
+          secretKey: val.secretKey || "",
+          secretHash: val.secretHash || "",
+          webhookUrl: val.webhookUrl || "",
+          isEnabled: val.isEnabled !== false,
+          mode: "live",
+        });
+        setLiveMode(true);
+      }
+    }
+
+    // Load saved live keys separately
+    const flwLiveSetting = settings.find((s: any) => s.key === "flutterwave_live_config");
+    if (flwLiveSetting?.value) {
+      setFlwLiveConfig({
+        publicKey: flwLiveSetting.value.publicKey || "",
+        secretKey: flwLiveSetting.value.secretKey || "",
+        secretHash: flwLiveSetting.value.secretHash || "",
+        webhookUrl: flwLiveSetting.value.webhookUrl || "",
+        isEnabled: flwLiveSetting.value.isEnabled !== false,
+        mode: "live",
       });
     }
+
+    // Load saved test keys separately
+    const flwTestSetting = settings.find((s: any) => s.key === "flutterwave_test_config");
+    if (flwTestSetting?.value) {
+      setFlwTestConfig({
+        publicKey: flwTestSetting.value.publicKey || "",
+        secretKey: flwTestSetting.value.secretKey || "",
+        secretHash: flwTestSetting.value.secretHash || "",
+        webhookUrl: flwTestSetting.value.webhookUrl || "",
+        isEnabled: flwTestSetting.value.isEnabled !== false,
+        mode: "test",
+      });
+    }
+
+    // Load Paystack config
     const pskSetting = settings.find((s: any) => s.key === "paystack_config");
     if (pskSetting?.value) {
       setPskConfig({
@@ -74,20 +136,62 @@ export default function AdminSettings() {
     }
   }, [settings]);
 
+  // Get the currently active config based on mode
+  const activeFlwConfig = liveMode ? flwLiveConfig : flwTestConfig;
+  const setActiveFlwConfig = liveMode ? setFlwLiveConfig : setFlwTestConfig;
+
+  const handleModeSwitch = (wantLive: boolean) => {
+    if (wantLive && !liveMode) {
+      // Show confirmation when switching to live
+      setConfirmLiveSwitch(true);
+    } else {
+      setLiveMode(wantLive);
+    }
+  };
+
+  const confirmSwitchToLive = () => {
+    setLiveMode(true);
+    setConfirmLiveSwitch(false);
+    toast.success("Switched to Live mode");
+  };
+
   const saveFlutterwave = async () => {
     setSavingFlw(true);
     try {
+      // Save to mode-specific key
+      const configKey = liveMode ? "flutterwave_live_config" : "flutterwave_test_config";
+      await fetch(`/api/seed/settings/${configKey}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          value: {
+            publicKey: activeFlwConfig.publicKey,
+            secretKey: activeFlwConfig.secretKey,
+            secretHash: activeFlwConfig.secretHash,
+            webhookUrl: activeFlwConfig.webhookUrl,
+            isEnabled: activeFlwConfig.isEnabled,
+            mode: liveMode ? "live" : "test",
+          },
+          group: "payments",
+        }),
+      });
+
+      // Also update the main flutterwave_config to the active mode's keys
       await updateSetting.mutateAsync({
         value: {
-          publicKey: flwConfig.publicKey,
-          secretKey: flwConfig.secretKey,
-          secretHash: flwConfig.secretHash,
-          webhookUrl: flwConfig.webhookUrl,
-          isEnabled: flwConfig.isEnabled,
+          publicKey: activeFlwConfig.publicKey,
+          secretKey: activeFlwConfig.secretKey,
+          secretHash: activeFlwConfig.secretHash,
+          webhookUrl: activeFlwConfig.webhookUrl,
+          isEnabled: activeFlwConfig.isEnabled,
+          mode: liveMode ? "live" : "test",
+          activeMode: liveMode ? "live" : "test",
         },
         group: "payments",
       });
-      toast.success("Flutterwave configuration saved");
+
+      toast.success(`Flutterwave ${liveMode ? "Live" : "Test"} configuration saved`);
       refetch();
     } catch (e: any) {
       toast.error(e?.message || "Failed to save Flutterwave config");
@@ -155,7 +259,7 @@ export default function AdminSettings() {
         <div>
           <h1 className="text-lg font-medium tracking-tight">Payment Settings</h1>
           <p className="text-xs text-muted-foreground mt-1">
-            Configure payment providers and API keys
+            Configure payment providers, API keys, and environment mode
           </p>
         </div>
         <Button size="sm" className="text-xs" onClick={handleSeed} disabled={seeding}>
@@ -164,11 +268,131 @@ export default function AdminSettings() {
         </Button>
       </div>
 
+      {/* ─── LIVE / TEST MODE TOGGLE ────────────────────── */}
+      <div className={`card-subtle p-5 ${liveMode ? "border-red-500/30 bg-red-500/5" : "border-emerald-500/20 bg-emerald-500/5"}`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${liveMode ? "bg-red-500/10" : "bg-emerald-500/10"}`}>
+              {liveMode ? (
+                <Globe className="h-5 w-5 text-red-500" />
+              ) : (
+                <Zap className="h-5 w-5 text-emerald-500" />
+              )}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-medium">
+                  {liveMode ? "Live Mode" : "Test Mode"}
+                </h3>
+                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${liveMode ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"}`}>
+                  {liveMode ? "PRODUCTION" : "SANDBOX"}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {liveMode
+                  ? "Real money transactions are being processed. Ensure live API keys are configured."
+                  : "All payments are simulated using Flutterwave's sandbox. No real money is processed."}
+              </p>
+            </div>
+          </div>
+          <Switch
+            checked={liveMode}
+            onCheckedChange={handleModeSwitch}
+            className={liveMode ? "data-[state=checked]:bg-red-500" : ""}
+          />
+        </div>
+
+        {/* Live mode warning banner */}
+        {liveMode && (
+          <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/5 p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
+              <div>
+                <div className="text-sm font-semibold text-red-600 dark:text-red-400">
+                  ⚠️ Production Mode Active
+                </div>
+                <ul className="mt-2 space-y-1 text-xs text-red-600/80 dark:text-red-400/80">
+                  <li>• Real payments will be processed through Flutterwave</li>
+                  <li>• Users will be charged actual amounts in NGN</li>
+                  <li>• Ensure your live API keys are correctly configured below</li>
+                  <li>• Verify webhook URLs are updated in Flutterwave dashboard</li>
+                  <li>• Monitor transaction logs closely for the first 24 hours</li>
+                </ul>
+                <div className="mt-3 flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10"
+                    onClick={() => {
+                      setLiveMode(false);
+                      setConfirmLiveSwitch(false);
+                      toast.success("Switched back to Test mode");
+                    }}
+                  >
+                    Switch Back to Test Mode
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!liveMode && (
+          <div className="mt-3 flex items-center gap-2 text-[10px] text-muted-foreground">
+            <CheckCircle className="h-3 w-3 text-emerald-500" />
+            <span>Safe to test — no real money will be charged</span>
+          </div>
+        )}
+      </div>
+
+      {/* ─── Confirm Live Switch Dialog ────────────────── */}
+      {confirmLiveSwitch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="card-subtle max-w-md w-full mx-4 p-6 space-y-4 border border-red-500/30">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10">
+                <AlertTriangle className="h-5 w-5 text-red-500" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold">Switch to Live Mode?</h3>
+                <p className="text-xs text-muted-foreground">This action requires confirmation</p>
+              </div>
+            </div>
+            <div className="space-y-2 text-xs text-muted-foreground">
+              <p>You are about to switch to <strong className="text-red-600 dark:text-red-400">Live (Production)</strong> mode:</p>
+              <ul className="list-disc list-inside space-y-1 ml-2">
+                <li>Real money transactions will be processed</li>
+                <li>Ensure your live API keys are configured</li>
+                <li>Webhook URLs must be updated for production</li>
+              </ul>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs"
+                onClick={() => setConfirmLiveSwitch(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                className="text-xs bg-red-600 hover:bg-red-700 text-white"
+                onClick={confirmSwitchToLive}
+              >
+                Yes, Switch to Live
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Tabs defaultValue="flutterwave" className="space-y-6">
         <TabsList className="border border-border bg-transparent p-0.5">
           <TabsTrigger value="flutterwave" className="text-xs data-[state=active]:bg-secondary gap-1.5">
             <CreditCard className="h-3 w-3" />
             Flutterwave
+            {liveMode && <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />}
           </TabsTrigger>
           <TabsTrigger value="paystack" className="text-xs data-[state=active]:bg-secondary gap-1.5">
             <CreditCard className="h-3 w-3" />
@@ -182,24 +406,41 @@ export default function AdminSettings() {
 
         {/* ─── Flutterwave ──────────────────────────── */}
         <TabsContent value="flutterwave" className="space-y-6">
+          {/* Mode indicator stripe */}
+          {liveMode ? (
+            <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 flex items-center gap-2">
+              <Globe className="h-4 w-4 text-red-500" />
+              <span className="text-xs font-medium text-red-600 dark:text-red-400">
+                Editing LIVE (Production) keys
+              </span>
+            </div>
+          ) : (
+            <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3 flex items-center gap-2">
+              <Zap className="h-4 w-4 text-emerald-500" />
+              <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                Editing TEST (Sandbox) keys
+              </span>
+            </div>
+          )}
+
           {/* Status indicator */}
           <div className="card-subtle p-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className={`h-2 w-2 rounded-full ${flwConfig.isEnabled && flwConfig.publicKey ? "bg-emerald-500" : "bg-yellow-500"}`} />
+              <div className={`h-2 w-2 rounded-full ${activeFlwConfig.isEnabled && activeFlwConfig.publicKey ? "bg-emerald-500" : "bg-yellow-500"}`} />
               <div>
-                <div className="text-sm font-medium">Flutterwave</div>
+                <div className="text-sm font-medium">Flutterwave ({liveMode ? "Live" : "Test"} Keys)</div>
                 <div className="text-xs text-muted-foreground">
-                  {flwConfig.isEnabled && flwConfig.publicKey
-                    ? "Active — keys configured"
-                    : flwConfig.isEnabled
-                      ? "Enabled — keys not yet configured"
+                  {activeFlwConfig.isEnabled && activeFlwConfig.publicKey
+                    ? `${liveMode ? "Live" : "Test"} keys configured`
+                    : activeFlwConfig.isEnabled
+                      ? `Enabled — ${liveMode ? "live" : "test"} keys not yet configured`
                       : "Disabled"}
                 </div>
               </div>
             </div>
             <Switch
-              checked={flwConfig.isEnabled}
-              onCheckedChange={(checked) => setFlwConfig({ ...flwConfig, isEnabled: checked })}
+              checked={activeFlwConfig.isEnabled}
+              onCheckedChange={(checked) => setActiveFlwConfig({ ...activeFlwConfig, isEnabled: checked })}
             />
           </div>
 
@@ -207,7 +448,9 @@ export default function AdminSettings() {
           <div className="card-subtle p-6 space-y-5">
             <div className="flex items-center gap-2 mb-1">
               <Shield className="h-4 w-4 text-muted-foreground" />
-              <h3 className="text-sm font-medium">API Keys</h3>
+              <h3 className="text-sm font-medium">
+                {liveMode ? "Production" : "Test"} API Keys
+              </h3>
             </div>
 
             <div className="space-y-2">
@@ -215,15 +458,15 @@ export default function AdminSettings() {
               <div className="relative">
                 <Input
                   type="text"
-                  placeholder="FLWPUBK_TEST-..."
-                  value={flwConfig.publicKey}
-                  onChange={(e) => setFlwConfig({ ...flwConfig, publicKey: e.target.value })}
+                  placeholder={liveMode ? "FLWPUBK_live-..." : "FLWPUBK_TEST-..."}
+                  value={activeFlwConfig.publicKey}
+                  onChange={(e) => setActiveFlwConfig({ ...activeFlwConfig, publicKey: e.target.value })}
                   className="text-xs font-mono pr-20"
                 />
                 <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
-                  {flwConfig.publicKey && (
+                  {activeFlwConfig.publicKey && (
                     <button
-                      onClick={() => copyToClipboard(flwConfig.publicKey)}
+                      onClick={() => copyToClipboard(activeFlwConfig.publicKey)}
                       className="p-1 hover:bg-secondary rounded"
                     >
                       <Copy className="h-3 w-3 text-muted-foreground" />
@@ -241,9 +484,9 @@ export default function AdminSettings() {
               <div className="relative">
                 <Input
                   type={showFlwSecret ? "text" : "password"}
-                  placeholder="FLWSECK_TEST-..."
-                  value={flwConfig.secretKey}
-                  onChange={(e) => setFlwConfig({ ...flwConfig, secretKey: e.target.value })}
+                  placeholder={liveMode ? "FLWSECK_live-..." : "FLWSECK_TEST-..."}
+                  value={activeFlwConfig.secretKey}
+                  onChange={(e) => setActiveFlwConfig({ ...activeFlwConfig, secretKey: e.target.value })}
                   className="text-xs font-mono pr-20"
                 />
                 <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
@@ -253,9 +496,9 @@ export default function AdminSettings() {
                   >
                     {showFlwSecret ? <EyeOff className="h-3 w-3 text-muted-foreground" /> : <Eye className="h-3 w-3 text-muted-foreground" />}
                   </button>
-                  {flwConfig.secretKey && (
+                  {activeFlwConfig.secretKey && (
                     <button
-                      onClick={() => copyToClipboard(flwConfig.secretKey)}
+                      onClick={() => copyToClipboard(activeFlwConfig.secretKey)}
                       className="p-1 hover:bg-secondary rounded"
                     >
                       <Copy className="h-3 w-3 text-muted-foreground" />
@@ -273,9 +516,9 @@ export default function AdminSettings() {
               <div className="relative">
                 <Input
                   type={showFlwHash ? "text" : "password"}
-                  placeholder="Your verif-hash from Flutterwave dashboard"
-                  value={flwConfig.secretHash || ""}
-                  onChange={(e) => setFlwConfig({ ...flwConfig, secretHash: e.target.value })}
+                  placeholder={liveMode ? "Production verif-hash" : "Test verif-hash"}
+                  value={activeFlwConfig.secretHash || ""}
+                  onChange={(e) => setActiveFlwConfig({ ...activeFlwConfig, secretHash: e.target.value })}
                   className="text-xs font-mono pr-20"
                 />
                 <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
@@ -285,9 +528,9 @@ export default function AdminSettings() {
                   >
                     {showFlwHash ? <EyeOff className="h-3 w-3 text-muted-foreground" /> : <Eye className="h-3 w-3 text-muted-foreground" />}
                   </button>
-                  {flwConfig.secretHash && (
+                  {activeFlwConfig.secretHash && (
                     <button
-                      onClick={() => copyToClipboard(flwConfig.secretHash || "")}
+                      onClick={() => copyToClipboard(activeFlwConfig.secretHash || "")}
                       className="p-1 hover:bg-secondary rounded"
                     >
                       <Copy className="h-3 w-3 text-muted-foreground" />
@@ -300,44 +543,97 @@ export default function AdminSettings() {
               </p>
             </div>
 
-            <div className="pt-2">
+            <div className="pt-2 flex items-center gap-3">
               <Button
                 size="sm"
                 className="text-xs"
                 onClick={saveFlutterwave}
-                disabled={savingFlw || !flwConfig.publicKey || !flwConfig.secretKey}
+                disabled={savingFlw || !activeFlwConfig.publicKey || !activeFlwConfig.secretKey}
               >
                 {savingFlw ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
-                Save Flutterwave Config
+                Save {liveMode ? "Live" : "Test"} Config
               </Button>
+              {!liveMode && flwTestConfig.publicKey && flwLiveConfig.publicKey && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs"
+                  onClick={() => {
+                    setLiveMode(true);
+                    toast.success("Switched to Live mode to edit production keys");
+                  }}
+                >
+                  <Globe className="h-3 w-3 mr-1" />
+                  Edit Live Keys
+                </Button>
+              )}
+              {liveMode && flwTestConfig.publicKey && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs"
+                  onClick={() => {
+                    setLiveMode(false);
+                    toast.success("Switched to Test mode to edit sandbox keys");
+                  }}
+                >
+                  <Zap className="h-3 w-3 mr-1" />
+                  Edit Test Keys
+                </Button>
+              )}
             </div>
           </div>
 
           {/* Test mode notice */}
-          {flwConfig.publicKey.includes("TEST") && (
+          {!liveMode && activeFlwConfig.publicKey.includes("TEST") && (
             <div className="card-subtle p-4 flex items-start gap-3 border-yellow-500/20">
               <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5 shrink-0" />
               <div>
                 <div className="text-xs font-medium text-yellow-600 dark:text-yellow-400">Test Mode</div>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
                   Your keys contain "TEST" — payments will use Flutterwave's sandbox.
-                  Switch to live keys in production.
+                  Switch to live mode above when you're ready for production.
                 </p>
               </div>
             </div>
           )}
 
-          {flwConfig.publicKey && flwConfig.secretKey && flwConfig.isEnabled && (
-            <div className="card-subtle p-4 flex items-start gap-3 border-emerald-500/20">
-              <CheckCircle className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+          {activeFlwConfig.publicKey && activeFlwConfig.secretKey && activeFlwConfig.isEnabled && (
+            <div className={`card-subtle p-4 flex items-start gap-3 ${liveMode ? "border-red-500/20" : "border-emerald-500/20"}`}>
+              <CheckCircle className={`h-4 w-4 mt-0.5 shrink-0 ${liveMode ? "text-red-500" : "text-emerald-500"}`} />
               <div>
-                <div className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Configured</div>
+                <div className={`text-xs font-medium ${liveMode ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                  {liveMode ? "Live Mode Active" : "Configured"}
+                </div>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Flutterwave checkout is ready. Users can purchase challenges via card, USSD, bank transfer, or mobile money.
+                  {liveMode
+                    ? "Flutterwave checkout is LIVE. Real payments will be processed."
+                    : "Flutterwave checkout is ready in sandbox mode. Users can test the full purchase flow."}
                 </p>
               </div>
             </div>
           )}
+
+          {/* Quick key status summary */}
+          <div className="card-subtle p-4">
+            <div className="text-xs font-medium mb-3">Key Status Summary</div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex items-center gap-2">
+                <div className={`h-2 w-2 rounded-full ${flwTestConfig.publicKey && flwTestConfig.secretKey ? "bg-emerald-500" : "bg-muted"}`} />
+                <span className="text-[11px] text-muted-foreground">Test Keys</span>
+                <span className="text-[10px] text-muted-foreground">
+                  {flwTestConfig.publicKey && flwTestConfig.secretKey ? "Configured" : "Not set"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`h-2 w-2 rounded-full ${flwLiveConfig.publicKey && flwLiveConfig.secretKey ? "bg-emerald-500" : "bg-muted"}`} />
+                <span className="text-[11px] text-muted-foreground">Live Keys</span>
+                <span className="text-[10px] text-muted-foreground">
+                  {flwLiveConfig.publicKey && flwLiveConfig.secretKey ? "Configured" : "Not set"}
+                </span>
+              </div>
+            </div>
+          </div>
         </TabsContent>
 
         {/* ─── Paystack (future-ready) ─────────────── */}
