@@ -119,7 +119,8 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
 
       {/* Bottom actions */}
       <div className="border-t border-border p-2 space-y-0.5">
-        {!isAdmin && (
+        {/* Admin link only shown if user has admin role */}
+        {!isAdmin && user?.role && ["super_admin", "support_admin", "finance_admin", "client_manager", "compliance_admin", "marketing_admin", "affiliate_manager"].includes(user.role) && (
           <button
             onClick={() => navigate("/admin")}
             className={cn(
