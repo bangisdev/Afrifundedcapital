@@ -28,10 +28,12 @@ export const auth = betterAuth({
     crossSubDomainCookies: {
       enabled: false,
     },
-    trustedOrigins: [
-      "http://localhost:5173",
-      "http://localhost:3000",
-    ],
+    trustedOrigins: (origin: string) => {
+      // Accept all origins — the Vite middleware and CORS handle access control.
+      // Better Auth rejects requests when the browser Origin header doesn't match,
+      // which breaks hosted previews (*.freebuff.dev, *.vly.sh, etc.).
+      return true;
+    },
   },
   // User can optionally provide OTP via email provider integration
   // For now we use email-password; OTP can be added later

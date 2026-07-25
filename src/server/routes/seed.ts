@@ -1,10 +1,80 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
 import { settings, challengeTemplates, accountSizes, users } from "../schema";
-import { eq, count } from "drizzle-orm";
+import { eq, count, sql } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
+import { hash } from "@node-rs/argon2";
+import { randomBytes } from "crypto";
 
 const app = new Hono();
+
+// ─── Bootstrap super admin (public, one-time) ─────────────
+// POST /api/seed/admin — creates the initial super admin account
+// Only works if no super_admin exists yet.
+app.post("/admin", async (c) => {
+  const db = getDb();
+
+  // Check if super_admin already exists
+  const existing = db
+    .select()
+    .from(users)
+    .where(eq(users.role, "super_admin"))
+    .get();
+
+  if (existing) {
+    return c.json({
+      error: "Super admin already exists",
+      hint: `Use email: ${existing.email}`,
+    }, 409);
+  }
+
+  let body: Record<string, unknown> = {};
+  try { body = await c.req.json(); } catch {}
+
+  const email = (body.email as string) || "admin@afrifundedcapital.com";
+  const password = (body.password as string) || "Admin@123456";
+  const name = (body.name as string) || "Super Admin";
+
+  // Hash password with argon2 (same as Better Auth uses)
+  const hashedPassword = await hash(password);
+  const now = Date.now();
+
+  const result = db
+    .insert(users)
+    .values({
+      name,
+      email,
+      emailVerified: true,
+      role: "super_admin",
+      onboardingComplete: true,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning()
+    .get();
+
+  // Store the hashed password in the accounts table (Better Auth format)
+  // Better Auth stores passwords in the `accounts` table via its adapter.
+  // We need to insert into accounts manually since we're bypassing Better Auth.
+  db.run(
+    sql`INSERT INTO accounts (user_id, account_id, provider_id, password) VALUES (${result.id}, ${String(result.id)}, ${"email"}, ${hashedPassword})`
+  );
+
+  // Create wallet for the admin
+  try {
+    db.run(
+      sql`INSERT INTO wallets (user_id, balance, referral_balance, bonus_balance, currency, created_at, updated_at) VALUES (${result.id}, 0, 0, 0, 'NGN', ${now}, ${now})`
+    );
+  } catch (e) {
+    // Wallet creation is non-critical
+  }
+
+  return c.json({
+    success: true,
+    message: "Super admin created successfully",
+    credentials: { email, password, name },
+  }, 201);
+});
 
 // List settings
 app.get("/settings", requireAuth, (c) => {
@@ -83,6 +153,21 @@ app.post("/seed", requireAuth, requireAdmin, (c) => {
 // Get enabled payment providers
 app.get("/providers", (c) => {
   return c.json([{ name: "flutterwave", enabled: true }]);
+});
+
+// ─── Public: check if super admin exists ───────────────────
+app.get("/admin/status", (c) => {
+  const db = getDb();
+  const existing = db
+    .select({ email: users.email, name: users.name })
+    .from(users)
+    .where(eq(users.role, "super_admin"))
+    .get();
+
+  return c.json({
+    seeded: !!existing,
+    email: existing?.email || null,
+  });
 });
 
 export default app;
