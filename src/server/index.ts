@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { getDb } from "./db";
-import { users, sessions } from "./schema";
+import { users, sessions, settings } from "./schema";
 import { eq, and, gt } from "drizzle-orm";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
@@ -68,6 +68,20 @@ app.use("*", cors({
 
 // Health check
 app.get("/api/health", (c) => c.json({ status: "ok", timestamp: Date.now() }));
+
+// Flutterwave public config (reads from settings table first, then env)
+app.get("/api/payments/flutterwave-config", (c) => {
+  let publicKey = process.env.FLW_PUBLIC_KEY || "";
+  try {
+    const db = getDb();
+    const setting = db.select().from(settings).where(eq(settings.key, "flutterwave_config")).get();
+    if (setting) {
+      const config = JSON.parse(setting.value);
+      if (config.publicKey) publicKey = config.publicKey;
+    }
+  } catch {}
+  return c.json({ publicKey });
+});
 
 // ═══════════════════════════════════════════════
 //  AUTH ROUTES — inlined to avoid sub-router issues

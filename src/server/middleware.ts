@@ -33,9 +33,8 @@ export const requireAuth = createMiddleware(async (c, next) => {
     })
   );
 
-  // Better Auth sets the session token in a cookie called "better-auth.session_token"
-  // or it could be "auth_session" depending on config
-  const token = cookies["better-auth.session_token"] || cookies["auth_session"];
+  // Check all possible session cookie names
+  const token = cookies["afc_session"] || cookies["better-auth.session_token"] || cookies["auth_session"];
 
   if (!token) {
     return c.json({ error: "Authentication required" }, 401);
@@ -97,7 +96,7 @@ export const optionalAuth = createMiddleware(async (c, next) => {
     })
   );
 
-  const token = cookies["better-auth.session_token"] || cookies["auth_session"];
+  const token = cookies["afc_session"] || cookies["better-auth.session_token"] || cookies["auth_session"];
 
   if (token) {
     const db = getDb();

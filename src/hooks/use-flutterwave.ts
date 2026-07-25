@@ -27,10 +27,27 @@ export function useFlutterwavePayment() {
       try {
         setState({ status: "initiating" });
 
-        // Step 1: Get Flutterwave public key from backend
-        const configRes = await fetch("/api/payments/flutterwave-config", { credentials: "include" });
-        const config = await configRes.json();
-        if (!config.publicKey) {
+        // Step 1: Get Flutterwave public key from settings
+        let flwPublicKey = "";
+        try {
+          const settingsRes = await fetch("/api/seed/settings", { credentials: "include" });
+          if (settingsRes.ok) {
+            const settings = await settingsRes.json();
+            const flwSetting = settings.find((s: { key: string }) => s.key === "flutterwave_config");
+            if (flwSetting?.value?.publicKey) {
+              flwPublicKey = flwSetting.value.publicKey;
+            }
+          }
+        } catch {}
+        // Fallback: try the direct config endpoint
+        if (!flwPublicKey) {
+          try {
+            const configRes = await fetch("/api/payments/flutterwave-config", { credentials: "include" });
+            const config = await configRes.json();
+            if (config.publicKey) flwPublicKey = config.publicKey;
+          } catch {}
+        }
+        if (!flwPublicKey) {
           setState({ status: "error", message: "Flutterwave is not configured. Please add your API key." });
           toast.error("Flutterwave public key not configured");
           return;
@@ -61,7 +78,7 @@ export function useFlutterwavePayment() {
 
         // Step 3: Build Flutterwave inline config
         const flutterwaveConfig = {
-          public_key: config.publicKey,
+          public_key: flwPublicKey,
           tx_ref: reference,
           amount: params.amount,
           currency: params.currency || "NGN",

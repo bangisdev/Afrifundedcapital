@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
-import { payments, paymentLogs, flutterwaveTransactions, challengeTemplates, accountSizes, userChallenges, mt5Accounts } from "../schema";
+import { payments, paymentLogs, flutterwaveTransactions, challengeTemplates, accountSizes, userChallenges, mt5Accounts, settings } from "../schema";
 import { eq, desc, count, and, sql } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification } from "../lib/notifications";
@@ -9,8 +9,75 @@ const app = new Hono();
 
 // ─── Flutterwave Config ────────────────────────────────
 app.get("/flutterwave-config", requireAuth, (c) => {
-  const publicKey = process.env.FLW_PUBLIC_KEY || "";
-  return c.json({ publicKey });
+  const db = getDb();
+  let publicKey = process.env.FLW_PUBLIC_KEY || "";
+  let provider = "flutterwave";
+  let isEnabled = true;
+  
+  // Also check settings table (database-stored config takes priority)
+  try {
+    const setting = db.select().from(settings).where(eq(settings.key, "flutterwave_config")).get();
+    if (setting) {
+      const config = JSON.parse(setting.value);
+      if (config.publicKey) publicKey = config.publicKey;
+      if (config.provider) provider = config.provider;
+      if (config.isEnabled !== undefined) isEnabled = config.isEnabled;
+    }
+  } catch {}
+  
+  return c.json({ publicKey, provider, isEnabled });
+});
+
+// ─── Admin: Save Flutterwave Config ────────────────────
+app.post("/admin/flutterwave-config", requireAuth, requireAdmin, async (c) => {
+  const db = getDb();
+  const body = await c.req.json();
+  const config = {
+    publicKey: body.publicKey || "",
+    secretKey: body.secretKey || "",
+    secretHash: body.secretHash || "",
+    isEnabled: body.isEnabled !== undefined ? body.isEnabled : true,
+  };
+  
+  const existing = db.select().from(settings).where(eq(settings.key, "flutterwave_config")).get();
+  if (existing) {
+    db.update(settings).set({ value: JSON.stringify(config) }).where(eq(settings.key, "flutterwave_config")).run();
+  } else {
+    db.insert(settings).values({
+      key: "flutterwave_config",
+      value: JSON.stringify(config),
+      group: "payments",
+      description: "Flutterwave payment gateway configuration",
+    }).run();
+  }
+  
+  return c.json({ success: true, message: "Flutterwave config saved" });
+});
+
+// ─── Admin: Get full Flutterwave config (for settings page) ──
+app.get("/admin/flutterwave-config", requireAuth, requireAdmin, (c) => {
+  const db = getDb();
+  try {
+    const setting = db.select().from(settings).where(eq(settings.key, "flutterwave_config")).get();
+    if (setting) {
+      const config = JSON.parse(setting.value);
+      // Mask secret key for display
+      return c.json({
+        publicKey: config.publicKey || "",
+        secretKey: config.secretKey ? "••••••" + config.secretKey.slice(-4) : "",
+        secretHash: config.secretHash || "",
+        isEnabled: config.isEnabled !== undefined ? config.isEnabled : true,
+      });
+    }
+  } catch {}
+  
+  // Fall back to env vars
+  return c.json({
+    publicKey: process.env.FLW_PUBLIC_KEY || "",
+    secretKey: process.env.FLW_SECRET_KEY ? "••••••" + process.env.FLW_SECRET_KEY.slice(-4) : "",
+    secretHash: process.env.FLW_SECRET_HASH || "",
+    isEnabled: !!(process.env.FLW_PUBLIC_KEY),
+  });
 });
 
 // ─── Initiate Payment ──────────────────────────────────
@@ -56,8 +123,15 @@ app.post("/verify", requireAuth, async (c) => {
   if (payment.userId !== userId) return c.json({ error: "Unauthorized" }, 403);
   if (payment.status === "completed") return c.json({ status: "completed", message: "Already processed" });
 
-  // Verify with Flutterwave API
-  const secretKey = process.env.FLW_SECRET_KEY || "";
+  // Verify with Flutterwave API — read secret key from settings first, then env
+  let secretKey = process.env.FLW_SECRET_KEY || "";
+  try {
+    const setting = db.select().from(settings).where(eq(settings.key, "flutterwave_config")).get();
+    if (setting) {
+      const config = JSON.parse(setting.value);
+      if (config.secretKey) secretKey = config.secretKey;
+    }
+  } catch {}
   let verificationResult: any;
 
   try {
@@ -170,8 +244,15 @@ app.post("/webhook/flutterwave", async (c) => {
   const db = getDb();
   const now = Date.now();
 
-  // Verify webhook signature (verif-hash)
-  const secretHash = process.env.FLW_SECRET_HASH || "";
+  // Verify webhook signature (verif-hash) — read from settings first, then env
+  let secretHash = process.env.FLW_SECRET_HASH || "";
+  try {
+    const setting = db.select().from(settings).where(eq(settings.key, "flutterwave_config")).get();
+    if (setting) {
+      const config = JSON.parse(setting.value);
+      if (config.secretHash) secretHash = config.secretHash;
+    }
+  } catch {}
   const signature = c.req.header("verif-hash") || "";
   if (secretHash && signature !== secretHash) {
     return c.json({ error: "Invalid signature" }, 401);
