@@ -1,10 +1,18 @@
 import { Hono } from "hono";
-import { getDb } from "../db";
+import { getDb, getSqlite } from "../db";
 import { settings, challengeTemplates, accountSizes, users } from "../schema";
-import { eq, count, sql } from "drizzle-orm";
+import { eq, count } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
-import { hash } from "@node-rs/argon2";
-import { randomBytes } from "crypto";
+import { scrypt, randomBytes } from "crypto";
+import { promisify } from "util";
+
+const scryptAsync = promisify(scrypt);
+
+async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(16).toString("hex");
+  const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer;
+  return `${salt}:${derivedKey.toString("hex")}`;
+}
 
 const app = new Hono();
 
@@ -14,6 +22,9 @@ const app = new Hono();
 app.post("/admin", async (c) => {
   const db = getDb();
 
+  let body: Record<string, unknown> = {};
+  try { body = await c.req.json(); } catch {}
+
   // Check if super_admin already exists
   const existing = db
     .select()
@@ -22,21 +33,30 @@ app.post("/admin", async (c) => {
     .get();
 
   if (existing) {
-    return c.json({
-      error: "Super admin already exists",
-      hint: `Use email: ${existing.email}`,
-    }, 409);
+    // Allow force re-creation with {"force": true}
+    const force = body.force === true || body.force === "true";
+    if (!force) {
+      return c.json({
+        error: "Super admin already exists",
+        hint: `Use email: ${existing.email}. Pass {"force": true} to recreate.`,
+      }, 409);
+    }
+    // Delete existing admin and their sessions
+    try {
+      const sqlite = getSqlite();
+      sqlite.prepare("DELETE FROM sessions WHERE user_id = ?").run(existing.id);
+      sqlite.prepare("DELETE FROM accounts WHERE user_id = ?").run(String(existing.id));
+      sqlite.prepare("DELETE FROM wallets WHERE user_id = ?").run(existing.id);
+    } catch {}
+    db.delete(users).where(eq(users.id, existing.id)).run();
   }
-
-  let body: Record<string, unknown> = {};
-  try { body = await c.req.json(); } catch {}
 
   const email = (body.email as string) || "admin@afrifundedcapital.com";
   const password = (body.password as string) || "Admin@123456";
   const name = (body.name as string) || "Super Admin";
 
-  // Hash password with argon2 (same as Better Auth uses)
-  const hashedPassword = await hash(password);
+  // Hash password with scrypt (Node built-in, no native addons)
+  const hashedPassword = await hashPassword(password);
   const now = Date.now();
 
   const result = db
@@ -53,18 +73,22 @@ app.post("/admin", async (c) => {
     .returning()
     .get();
 
-  // Store the hashed password in the accounts table (Better Auth format)
-  // Better Auth stores passwords in the `accounts` table via its adapter.
-  // We need to insert into accounts manually since we're bypassing Better Auth.
-  db.run(
-    sql`INSERT INTO accounts (user_id, account_id, provider_id, password) VALUES (${result.id}, ${String(result.id)}, ${"email"}, ${hashedPassword})`
-  );
+  // Store the hashed password in the accounts table via raw SQLite
+  try {
+    const sqlite = getSqlite();
+    sqlite.prepare(
+      "INSERT OR IGNORE INTO accounts (user_id, account_id, provider_id, password) VALUES (?, ?, ?, ?)"
+    ).run(String(result.id), String(result.id), "email", hashedPassword);
+  } catch (e) {
+    console.warn("[Seed] Could not store password:", e);
+  }
 
   // Create wallet for the admin
   try {
-    db.run(
-      sql`INSERT INTO wallets (user_id, balance, referral_balance, bonus_balance, currency, created_at, updated_at) VALUES (${result.id}, 0, 0, 0, 'NGN', ${now}, ${now})`
-    );
+    const sqlite = getSqlite();
+    sqlite.prepare(
+      "INSERT OR IGNORE INTO wallets (user_id, balance, referral_balance, bonus_balance, currency, created_at, updated_at) VALUES (?, 0, 0, 0, 'NGN', ?, ?)"
+    ).run(result.id, now, now);
   } catch (e) {
     // Wallet creation is non-critical
   }
