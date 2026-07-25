@@ -202,8 +202,8 @@ app.get("/providers", (c) => {
   return c.json([{ name: "flutterwave", enabled: true }]);
 });
 
-// ─── Public: delete a user by email (bootstrap cleanup) ────
-app.post("/delete-user", async (c) => {
+// ─── Admin: delete a user by email (requires auth) ────
+app.post("/delete-user", requireAuth, requireAdmin, async (c) => {
   const db = getDb();
   const sqlite = getSqlite();
 

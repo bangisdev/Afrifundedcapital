@@ -235,8 +235,20 @@ app.post("/api/auth/sign-in/email", async (c) => {
   }
 });
 
-// POST /api/auth/reset-admin — force-recreate super admin (bootstrap only)
+// POST /api/auth/reset-admin — force-recreate super admin (super_admin only)
 app.post("/api/auth/reset-admin", async (c) => {
+  // Require authentication + super_admin role
+  try {
+    const cookieHeader = c.req.header("cookie") || "";
+    const cookies = parseCookies(cookieHeader);
+    const token = cookies[COOKIE_NAME];
+    if (!token) return c.json({ error: "Authentication required" }, 401);
+    const db = getDb();
+    const session = db.select().from(sessions).where(and(eq(sessions.token, token), gt(sessions.expiresAt, Date.now()))).get();
+    if (!session) return c.json({ error: "Invalid session" }, 401);
+    const caller = db.select().from(users).where(eq(users.id, session.userId)).get();
+    if (!caller || caller.role !== "super_admin") return c.json({ error: "Super admin access required" }, 403);
+  } catch { return c.json({ error: "Auth check failed" }, 401); }
   try {
     let body: Record<string, unknown> = {};
     try { body = await c.req.json(); } catch {}
@@ -414,8 +426,20 @@ app.post("/api/auth/sign-out", (c) => {
   }
 });
 
-// POST /api/auth/cleanup-orphan — reset password or delete users with incompatible hashes
+// POST /api/auth/cleanup-orphan — reset password or delete users (super_admin only)
 app.post("/api/auth/cleanup-orphan", async (c) => {
+  // Require authentication + super_admin role
+  try {
+    const cookieHeader = c.req.header("cookie") || "";
+    const cookies = parseCookies(cookieHeader);
+    const token = cookies[COOKIE_NAME];
+    if (!token) return c.json({ error: "Authentication required" }, 401);
+    const db = getDb();
+    const session = db.select().from(sessions).where(and(eq(sessions.token, token), gt(sessions.expiresAt, Date.now()))).get();
+    if (!session) return c.json({ error: "Invalid session" }, 401);
+    const caller = db.select().from(users).where(eq(users.id, session.userId)).get();
+    if (!caller || caller.role !== "super_admin") return c.json({ error: "Super admin access required" }, 403);
+  } catch { return c.json({ error: "Auth check failed" }, 401); }
   try {
     let body: Record<string, unknown> = {};
     try { body = await c.req.json(); } catch {}
@@ -473,8 +497,20 @@ app.post("/api/auth/cleanup-orphan", async (c) => {
   }
 });
 
-// POST /api/auth/nuke-duplicate — remove all super_admins except the specified email
+// POST /api/auth/nuke-duplicate — remove all super_admins except specified email (super_admin only)
 app.post("/api/auth/nuke-duplicate", async (c) => {
+  // Require authentication + super_admin role
+  try {
+    const cookieHeader = c.req.header("cookie") || "";
+    const cookies = parseCookies(cookieHeader);
+    const token = cookies[COOKIE_NAME];
+    if (!token) return c.json({ error: "Authentication required" }, 401);
+    const db = getDb();
+    const session = db.select().from(sessions).where(and(eq(sessions.token, token), gt(sessions.expiresAt, Date.now()))).get();
+    if (!session) return c.json({ error: "Invalid session" }, 401);
+    const caller = db.select().from(users).where(eq(users.id, session.userId)).get();
+    if (!caller || caller.role !== "super_admin") return c.json({ error: "Super admin access required" }, 403);
+  } catch { return c.json({ error: "Auth check failed" }, 401); }
   try {
     let body: Record<string, unknown> = {};
     try { body = await c.req.json(); } catch {}

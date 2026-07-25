@@ -158,3 +158,13 @@ export const requireAdmin = createMiddleware(async (c, next) => {
 
   await next();
 });
+
+export const requireSuperAdmin = createMiddleware(async (c, next) => {
+  const user = c.get("user");
+
+  if (!user || user.role !== "super_admin") {
+    return c.json({ error: "Super admin access required" }, 403);
+  }
+
+  await next();
+});

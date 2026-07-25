@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { getDb } from "../db";
 import { notifications, users } from "../schema";
 import { eq, desc, count, and, sql } from "drizzle-orm";
-import { requireAuth } from "../middleware";
+import { requireAuth, requireAdmin } from "../middleware";
 
 const app = new Hono();
 
@@ -57,14 +57,14 @@ app.delete("/:id", requireAuth, async (c) => {
 });
 
 // Admin: List all notifications (with user info)
-app.get("/admin/all", requireAuth, async (c) => {
+app.get("/admin/all", requireAuth, requireAdmin, async (c) => {
   const db = getDb();
   const items = db.select().from(notifications).orderBy(desc(notifications.createdAt)).limit(200).all();
   return c.json(items);
 });
 
 // Admin: Notification stats
-app.get("/admin/stats", requireAuth, async (c) => {
+app.get("/admin/stats", requireAuth, requireAdmin, async (c) => {
   const db = getDb();
   const total = db.select({ count: count() }).from(notifications).get();
   const unread = db.select({ count: count() }).from(notifications).where(eq(notifications.read, false)).get();
@@ -72,7 +72,7 @@ app.get("/admin/stats", requireAuth, async (c) => {
 });
 
 // Admin: Broadcast to all users
-app.post("/broadcast", requireAuth, async (c) => {
+app.post("/broadcast", requireAuth, requireAdmin, async (c) => {
   const body = await c.req.json();
   const db = getDb();
   const now = Date.now();
@@ -95,7 +95,7 @@ app.post("/broadcast", requireAuth, async (c) => {
 });
 
 // Admin: Broadcast to specific users or segment
-app.post("/broadcast/segmented", requireAuth, async (c) => {
+app.post("/broadcast/segmented", requireAuth, requireAdmin, async (c) => {
   const body = await c.req.json();
   const db = getDb();
   const now = Date.now();
