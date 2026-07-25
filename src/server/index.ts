@@ -400,6 +400,51 @@ app.post("/api/auth/sign-out", (c) => {
   }
 });
 
+// POST /api/auth/cleanup-orphan — reset password for users with incompatible hashes
+app.post("/api/auth/cleanup-orphan", async (c) => {
+  try {
+    let body: Record<string, unknown> = {};
+    try { body = await c.req.json(); } catch {}
+
+    const email = (body.email as string)?.trim().toLowerCase();
+    const newPassword = (body.password as string) || "Admin@123456";
+
+    if (!email) {
+      return c.json({ error: "Email is required" }, 400);
+    }
+
+    const db = getDb();
+    const user = db.select().from(users).where(eq(users.email, email)).get();
+    if (!user) {
+      return c.json({ error: "User not found" }, 404);
+    }
+
+    // Delete old password hash and create new one with scrypt
+    const sqlite = (await import("./db")).getSqlite();
+    
+    // Remove old account entry
+    sqlite.prepare("DELETE FROM accounts WHERE user_id = ? AND provider_id = 'email'").run(String(user.id));
+    
+    // Remove old sessions
+    sqlite.prepare("DELETE FROM sessions WHERE user_id = ?").run(user.id);
+    
+    // Create new password hash with scrypt
+    const hashedPassword = await hashPassword(newPassword);
+    sqlite.prepare(
+      "INSERT OR REPLACE INTO accounts (user_id, account_id, provider_id, password) VALUES (?, ?, 'email', ?)"
+    ).run(String(user.id), String(user.id), hashedPassword);
+
+    return c.json({
+      success: true,
+      message: `Password reset for ${email}. You can now sign in with: ${newPassword}`,
+      email,
+    });
+  } catch (err) {
+    console.error("[Auth] cleanup-orphan error:", err);
+    return c.json({ error: "Failed to cleanup orphan" }, 500);
+  }
+});
+
 // PUT /api/auth/update-user
 app.put("/api/auth/update-user", async (c) => {
   try {
