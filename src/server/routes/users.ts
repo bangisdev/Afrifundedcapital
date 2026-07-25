@@ -115,6 +115,16 @@ app.get("/growth", requireAuth, requireAdmin, (c) => {
   });
 });
 
+// Admin: Get single user details
+app.get("/:id", requireAuth, requireAdmin, (c) => {
+  const id = parseInt(c.req.param("id"));
+  const db = getDb();
+  const user = db.select().from(users).where(eq(users.id, id)).get();
+  if (!user) return c.json({ error: "User not found" }, 404);
+  const { twoFactorSecret, accountLockedUntil, loginAttempts, ...safe } = user;
+  return c.json(safe);
+});
+
 // Admin: Update user role
 app.put("/:id/role", requireAuth, requireAdmin, async (c) => {
   const id = parseInt(c.req.param("id"));
@@ -136,6 +146,66 @@ app.put("/:id/status", requireAuth, requireAdmin, async (c) => {
   } else {
     db.update(users).set({ accountLockedUntil: null, loginAttempts: 0, updatedAt: Date.now() }).where(eq(users.id, id)).run();
   }
+  return c.json({ success: true });
+});
+
+// Admin: Update user profile fields
+app.put("/:id/profile", requireAuth, requireAdmin, async (c) => {
+  const id = parseInt(c.req.param("id"));
+  const body = await c.req.json();
+  const db = getDb();
+
+  const allowedFields = ["name", "phone", "country", "tradingExperience", "timezone", "kycStatus"];
+  const updates: Record<string, any> = {};
+  for (const field of allowedFields) {
+    if (body[field] !== undefined) updates[field] = body[field];
+  }
+  updates.updatedAt = Date.now();
+
+  if (Object.keys(updates).length > 1) {
+    db.update(users).set(updates).where(eq(users.id, id)).run();
+  }
+  return c.json({ success: true });
+});
+
+// Admin: Delete user (cascade delete related data)
+app.delete("/:id", requireAuth, requireAdmin, async (c) => {
+  const id = parseInt(c.req.param("id"));
+  const callerId = c.get("userId");
+  const db = getDb();
+
+  // Prevent self-deletion
+  if (id === callerId) {
+    return c.json({ error: "Cannot delete your own account" }, 400);
+  }
+
+  const target = db.select().from(users).where(eq(users.id, id)).get();
+  if (!target) return c.json({ error: "User not found" }, 404);
+
+  // Prevent deleting the last super_admin
+  if (target.role === "super_admin") {
+    const allAdmins = db.select().from(users).where(eq(users.role, "super_admin")).all();
+    if (allAdmins.length <= 1) {
+      return c.json({ error: "Cannot delete the last super_admin" }, 400);
+    }
+  }
+
+  // Cascade delete via raw SQLite
+  try {
+    const { getSqlite } = await import("../db");
+    const sqlite = getSqlite();
+    sqlite.prepare("DELETE FROM sessions WHERE user_id = ?").run(id);
+    sqlite.prepare("DELETE FROM accounts WHERE user_id = ?").run(String(id));
+    sqlite.prepare("DELETE FROM notifications WHERE user_id = ?").run(id);
+    sqlite.prepare("DELETE FROM wallets WHERE user_id = ?").run(id);
+    sqlite.prepare("DELETE FROM certificates WHERE user_id = ?").run(id);
+    sqlite.prepare("DELETE FROM kyc_documents WHERE user_id = ?").run(id);
+    sqlite.prepare("DELETE FROM user_challenges WHERE user_id = ?").run(id);
+  } catch (e) {
+    console.warn("[Users] Cascade delete warning:", e);
+  }
+
+  db.delete(users).where(eq(users.id, id)).run();
   return c.json({ success: true });
 });
 

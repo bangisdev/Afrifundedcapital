@@ -1,53 +1,520 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, Shield, Lock, Unlock } from "lucide-react";
+import {
+  Loader2,
+  Search,
+  Shield,
+  Lock,
+  Unlock,
+  Trash2,
+  ChevronDown,
+  X,
+  Users,
+  UserCheck,
+  UserX,
+  Eye,
+  Mail,
+  Phone,
+  MapPin,
+  Calendar,
+  Globe,
+} from "lucide-react";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+interface User {
+  id: number;
+  name: string | null;
+  email: string | null;
+  role: string | null;
+  kycStatus: string | null;
+  onboardingComplete: boolean | null;
+  emailVerified: boolean | null;
+  twoFactorEnabled: boolean | null;
+  accountLockedUntil: number | null;
+  phone: string | null;
+  country: string | null;
+  tradingExperience: string | null;
+  timezone: string | null;
+  referralCode: string | null;
+  createdAt: number | null;
+  updatedAt: number | null;
+}
+
+const ROLES = [
+  "super_admin",
+  "support_admin",
+  "finance_admin",
+  "client_manager",
+  "compliance_admin",
+  "marketing_admin",
+  "affiliate_manager",
+  "user",
+];
+
+const ROLE_LABELS: Record<string, string> = {
+  super_admin: "Super Admin",
+  support_admin: "Support Admin",
+  finance_admin: "Finance Admin",
+  client_manager: "Client Manager",
+  compliance_admin: "Compliance Admin",
+  marketing_admin: "Marketing Admin",
+  affiliate_manager: "Affiliate Manager",
+  user: "User",
+};
+
+const ROLE_COLORS: Record<string, string> = {
+  super_admin: "bg-destructive/10 text-destructive border-destructive/20",
+  support_admin: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+  finance_admin: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+  client_manager: "bg-violet-500/10 text-violet-600 border-violet-500/20",
+  compliance_admin: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+  marketing_admin: "bg-pink-500/10 text-pink-600 border-pink-500/20",
+  affiliate_manager: "bg-cyan-500/10 text-cyan-600 border-cyan-500/20",
+  user: "bg-secondary text-secondary-foreground",
+};
+
+const KYC_COLORS: Record<string, string> = {
+  approved: "bg-emerald-500/10 text-emerald-600",
+  pending: "bg-amber-500/10 text-amber-600",
+  rejected: "bg-red-500/10 text-red-600",
+  unverified: "bg-secondary text-secondary-foreground",
+};
+
+function formatTimestamp(ts: number | null) {
+  if (!ts) return "—";
+  return new Date(ts).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatDateTime(ts: number | null) {
+  if (!ts) return "—";
+  return new Date(ts).toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 export default function AdminUsers() {
-  const { data: users, isLoading } = useApiQuery<any[]>(["admin", "users"], "/api/users/list");
+  const { data: users, isLoading } = useApiQuery<User[]>(["admin", "users"], "/api/users/list");
   const updateRole = useApiMutation<any, any>("put", "/api/users/${id}/role");
+  const updateProfile = useApiMutation<any, any>("put", "/api/users/${id}/profile");
   const toggleStatus = useApiMutation<any, any>("put", "/api/users/${id}/status");
+  const deleteUser = useApiMutation<any, any>("delete", "/api/users/${id}");
+
   const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [kycFilter, setKycFilter] = useState<string>("all");
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [showUserDetail, setShowUserDetail] = useState(false);
+  const [editingRole, setEditingRole] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+
+  const filtered = useMemo(() => {
+    if (!users) return [];
+    return users.filter((u) => {
+      const matchesSearch =
+        !search ||
+        u.name?.toLowerCase().includes(search.toLowerCase()) ||
+        u.email?.toLowerCase().includes(search.toLowerCase()) ||
+        u.phone?.includes(search) ||
+        u.referralCode?.toLowerCase().includes(search.toLowerCase());
+      const matchesRole = roleFilter === "all" || u.role === roleFilter;
+      const matchesKyc = kycFilter === "all" || u.kycStatus === kycFilter;
+      return matchesSearch && matchesRole && matchesKyc;
+    });
+  }, [users, search, roleFilter, kycFilter]);
+
+  const stats = useMemo(() => {
+    if (!users) return { total: 0, admins: 0, verified: 0, locked: 0 };
+    return {
+      total: users.length,
+      admins: users.filter((u) => u.role && u.role !== "user").length,
+      verified: users.filter((u) => u.emailVerified).length,
+      locked: users.filter((u) => u.accountLockedUntil && u.accountLockedUntil > Date.now()).length,
+    };
+  }, [users]);
 
   if (isLoading) {
-    return <div className="flex items-center justify-center h-64"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
   }
 
-  const filtered = (users || []).filter((u: any) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q);
-  });
-
   return (
-    <div className="space-y-8">
-      <div><h1 className="text-lg font-medium tracking-tight">Users</h1><p className="text-xs text-muted-foreground mt-1">Manage platform users ({filtered.length})</p></div>
-      <div className="relative"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-        <input type="text" placeholder="Search users..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full h-9 pl-8 pr-3 rounded-md border border-input bg-background text-xs" />
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-lg font-medium tracking-tight">User Management</h1>
+        <p className="text-xs text-muted-foreground mt-1">
+          View, edit, and manage all platform users
+        </p>
       </div>
-      <div className="space-y-1">
-        {filtered.map((u: any) => (
-          <div key={u.id} className="card-subtle p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center text-xs font-medium">{u.name?.[0] || u.email?.[0]}</div>
-              <div><div className="text-sm font-medium">{u.name || "Unnamed"}</div><div className="text-xs text-muted-foreground">{u.email}</div></div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: "Total Users", value: stats.total, icon: Users },
+          { label: "Admins", value: stats.admins, icon: Shield },
+          { label: "Verified", value: stats.verified, icon: UserCheck },
+          { label: "Locked", value: stats.locked, icon: UserX },
+        ].map((s) => (
+          <div key={s.label} className="card-subtle p-3 flex items-center gap-3">
+            <div className="h-8 w-8 rounded-md bg-secondary flex items-center justify-center">
+              <s.icon className="h-4 w-4 text-muted-foreground" />
             </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-[10px]">{u.role || "user"}</Badge>
-              <Badge variant={u.kycStatus === "approved" ? "default" : "secondary"} className="text-[10px]">KYC: {u.kycStatus || "unverified"}</Badge>
-              <Button variant="ghost" size="sm" className="h-7 text-[10px]" onClick={async () => {
-                const newRole = u.role === "user" ? "super_admin" : "user";
-                await updateRole.mutateAsync({ id: u.id, role: newRole });
-                toast.success(`Role updated to ${newRole}`);
-              }}>Change Role</Button>
+            <div>
+              <div className="text-lg font-medium">{s.value}</div>
+              <div className="text-[10px] text-muted-foreground">{s.label}</div>
             </div>
           </div>
         ))}
       </div>
+
+      {/* Search & Filters */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Search by name, email, phone, or referral code..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-8 h-9 text-xs"
+          />
+        </div>
+        <div className="relative">
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-3 pr-8 text-xs appearance-none cursor-pointer"
+          >
+            <option value="all">All Roles</option>
+            {ROLES.map((r) => (
+              <option key={r} value={r}>
+                {ROLE_LABELS[r] || r}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+        </div>
+        <div className="relative">
+          <select
+            value={kycFilter}
+            onChange={(e) => setKycFilter(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-3 pr-8 text-xs appearance-none cursor-pointer"
+          >
+            <option value="all">All KYC Status</option>
+            <option value="unverified">Unverified</option>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+        </div>
+        {(search || roleFilter !== "all" || kycFilter !== "all") && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-9 text-xs"
+            onClick={() => {
+              setSearch("");
+              setRoleFilter("all");
+              setKycFilter("all");
+            }}
+          >
+            <X className="h-3 w-3 mr-1" />
+            Clear
+          </Button>
+        )}
+      </div>
+
+      {/* Users Table */}
+      <div className="border rounded-lg overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b bg-muted/50">
+                <th className="text-left p-3 font-medium text-muted-foreground">User</th>
+                <th className="text-left p-3 font-medium text-muted-foreground hidden md:table-cell">Role</th>
+                <th className="text-left p-3 font-medium text-muted-foreground hidden lg:table-cell">KYC</th>
+                <th className="text-left p-3 font-medium text-muted-foreground hidden lg:table-cell">Status</th>
+                <th className="text-left p-3 font-medium text-muted-foreground hidden xl:table-cell">Joined</th>
+                <th className="text-right p-3 font-medium text-muted-foreground">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                    No users found matching your criteria
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((u) => {
+                  const isLocked = u.accountLockedUntil && u.accountLockedUntil > Date.now();
+                  return (
+                    <tr key={u.id} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
+                      <td className="p-3">
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center text-xs font-medium shrink-0">
+                            {u.name?.[0]?.toUpperCase() || u.email?.[0]?.toUpperCase() || "?"}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-medium truncate">{u.name || "Unnamed"}</div>
+                            <div className="text-muted-foreground truncate">{u.email}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-3 hidden md:table-cell">
+                        <div className="relative">
+                          {editingRole === u.id ? (
+                            <div className="flex items-center gap-1">
+                              <select
+                                defaultValue={u.role || "user"}
+                                onChange={async (e) => {
+                                  await updateRole.mutateAsync({ id: u.id, role: e.target.value });
+                                  toast.success(`Role updated to ${ROLE_LABELS[e.target.value] || e.target.value}`);
+                                  setEditingRole(null);
+                                }}
+                                className="h-7 rounded border border-input bg-background px-1.5 text-[10px] w-32"
+                                autoFocus
+                                onBlur={() => setEditingRole(null)}
+                              >
+                                {ROLES.map((r) => (
+                                  <option key={r} value={r}>
+                                    {ROLE_LABELS[r]}
+                                  </option>
+                                ))}
+                              </select>
+                              <button onClick={() => setEditingRole(null)} className="text-muted-foreground hover:text-foreground">
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setEditingRole(u.id)}
+                              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium cursor-pointer hover:opacity-80 transition-opacity ${ROLE_COLORS[u.role || "user"] || ""}`}
+                            >
+                              {ROLE_LABELS[u.role || "user"] || u.role || "user"}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-3 hidden lg:table-cell">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${KYC_COLORS[u.kycStatus || "unverified"] || ""}`}>
+                          {u.kycStatus || "unverified"}
+                        </span>
+                      </td>
+                      <td className="p-3 hidden lg:table-cell">
+                        {isLocked ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-red-600">
+                            <Lock className="h-3 w-3" />
+                            Locked
+                          </span>
+                        ) : u.emailVerified ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600">
+                            <UserCheck className="h-3 w-3" />
+                            Active
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                            Unverified
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-3 hidden xl:table-cell text-muted-foreground">
+                        {formatTimestamp(u.createdAt)}
+                      </td>
+                      <td className="p-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="h-7 w-7"
+                            title="View details"
+                            onClick={() => {
+                              setSelectedUser(u);
+                              setShowUserDetail(true);
+                            }}
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="h-7 w-7"
+                            title={isLocked ? "Unlock account" : "Lock account"}
+                            onClick={async () => {
+                              await toggleStatus.mutateAsync({ id: u.id, locked: !isLocked });
+                              toast.success(isLocked ? "Account unlocked" : "Account locked for 24 hours");
+                            }}
+                          >
+                            {isLocked ? (
+                              <Unlock className="h-3.5 w-3.5 text-emerald-600" />
+                            ) : (
+                              <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="h-7 w-7"
+                            title="Delete user"
+                            onClick={() => setDeleteTarget(u)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="text-xs text-muted-foreground text-right">
+        Showing {filtered.length} of {users?.length || 0} users
+      </div>
+
+      {/* User Detail Modal */}
+      {showUserDetail && selectedUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowUserDetail(false)}>
+          <div
+            className="bg-background border rounded-lg shadow-lg w-full max-w-lg mx-4 max-h-[80vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center text-sm font-medium">
+                  {selectedUser.name?.[0]?.toUpperCase() || selectedUser.email?.[0]?.toUpperCase() || "?"}
+                </div>
+                <div>
+                  <div className="font-medium">{selectedUser.name || "Unnamed"}</div>
+                  <div className="text-xs text-muted-foreground">{selectedUser.email}</div>
+                </div>
+              </div>
+              <button onClick={() => setShowUserDetail(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                {[
+                  { label: "User ID", value: `#${selectedUser.id}` },
+                  { label: "Role", value: ROLE_LABELS[selectedUser.role || "user"] || selectedUser.role || "user" },
+                  { label: "KYC Status", value: selectedUser.kycStatus || "unverified" },
+                  { label: "Email Verified", value: selectedUser.emailVerified ? "Yes" : "No" },
+                  { label: "2FA Enabled", value: selectedUser.twoFactorEnabled ? "Yes" : "No" },
+                  { label: "Onboarding", value: selectedUser.onboardingComplete ? "Complete" : "Incomplete" },
+                  { label: "Phone", value: selectedUser.phone || "—" },
+                  { label: "Country", value: selectedUser.country || "—" },
+                  { label: "Timezone", value: selectedUser.timezone || "—" },
+                  { label: "Experience", value: selectedUser.tradingExperience || "—" },
+                  { label: "Referral Code", value: selectedUser.referralCode || "—" },
+                  { label: "Joined", value: formatDateTime(selectedUser.createdAt) },
+                ].map((item) => (
+                  <div key={item.label}>
+                    <div className="text-muted-foreground mb-0.5">{item.label}</div>
+                    <div className="font-medium">{item.value}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t pt-3 flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  onClick={async () => {
+                    const newRole = selectedUser.role === "user" ? "super_admin" : "user";
+                    await updateRole.mutateAsync({ id: selectedUser.id, role: newRole });
+                    setSelectedUser({ ...selectedUser, role: newRole });
+                    toast.success(`Role changed to ${ROLE_LABELS[newRole]}`);
+                  }}
+                >
+                  <Shield className="h-3 w-3 mr-1" />
+                  Toggle Admin
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  onClick={async () => {
+                    const isLocked = selectedUser.accountLockedUntil && selectedUser.accountLockedUntil > Date.now();
+                    await toggleStatus.mutateAsync({ id: selectedUser.id, locked: !isLocked });
+                    setSelectedUser({
+                      ...selectedUser,
+                      accountLockedUntil: isLocked ? null : Date.now() + 86400000,
+                    });
+                    toast.success(isLocked ? "Account unlocked" : "Account locked");
+                  }}
+                >
+                  {selectedUser.accountLockedUntil && selectedUser.accountLockedUntil > Date.now() ? (
+                    <><Unlock className="h-3 w-3 mr-1" /> Unlock</>
+                  ) : (
+                    <><Lock className="h-3 w-3 mr-1" /> Lock</>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete User</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to permanently delete <strong>{deleteTarget?.email}</strong>?
+              This will remove all their data including sessions, wallet, challenges, and certificates.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={async () => {
+                if (!deleteTarget) return;
+                try {
+                  await deleteUser.mutateAsync({ id: deleteTarget.id });
+                  toast.success(`User ${deleteTarget.email} deleted`);
+                  setDeleteTarget(null);
+                } catch (err: any) {
+                  toast.error(err?.message || "Failed to delete user");
+                }
+              }}
+            >
+              Delete User
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
