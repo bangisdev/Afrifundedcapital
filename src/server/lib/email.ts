@@ -11,8 +11,8 @@ import { getDb } from "../db";
 import { settings } from "../schema";
 import { eq } from "drizzle-orm";
 
-const FROM_EMAIL_FALLBACK = "AfriFundedCapital <noreply@afrifundedcapital.com>";
-const APP_URL = process.env.APP_URL || "https://afrifundedcapital.com";
+const FROM_EMAIL_FALLBACK = "AfriFundedCapital <onboarding@resend.dev>";
+const APP_URL = process.env.APP_URL || "https://beige-crews-rescue.freebuff.dev";
 
 // Lazy-init Resend client — reads from DB settings first, falls back to env
 let _resend: Resend | null = null;
@@ -58,6 +58,13 @@ function getFromEmail(): string {
     }
   } catch {}
   return process.env.RESEND_EMAIL_FROM || FROM_EMAIL_FALLBACK;
+}
+
+// Reset the Resend client when settings change
+export function resetResendClient(): void {
+  _resend = null;
+  _resendKey = "";
+  console.log("[Email] Resend client reset — will re-initialize on next send");
 }
 
 export interface SendEmailParams {

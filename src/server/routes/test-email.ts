@@ -1,12 +1,38 @@
 import { Hono } from "hono";
-import { sendEmail } from "../lib/email";
+import { sendEmail, resetResendClient } from "../lib/email";
+import { getDb } from "../db";
+import { settings } from "../schema";
+import { eq } from "drizzle-orm";
 
 const app = new Hono();
 
-// Test email endpoint - sends a test email via Resend
+// POST /api/test-email/send-test — save API key and send test email
 app.post("/send-test", async (c) => {
   const body = await c.req.json();
-  const { to } = body;
+  const { to, apiKey, fromEmail } = body;
+
+  // Save API key if provided
+  if (apiKey) {
+    try {
+      const db = getDb();
+      const config = {
+        apiKey,
+        fromEmail: fromEmail || "AfriFundedCapital <onboarding@resend.dev>",
+        enabled: true,
+      };
+      const existing = db.select().from(settings).where(eq(settings.key, "resend_config")).get();
+      if (existing) {
+        db.update(settings).set({ value: JSON.stringify(config) }).where(eq(settings.key, "resend_config")).run();
+      } else {
+        db.insert(settings).values({ key: "resend_config", value: JSON.stringify(config), group: "email", description: "Resend email configuration" }).run();
+      }
+      resetResendClient();
+      console.log("[TestEmail] Resend config saved to database");
+    } catch (err) {
+      console.error("[TestEmail] Failed to save Resend config:", err);
+      return c.json({ error: "Failed to save API key" }, 500);
+    }
+  }
 
   if (!to) {
     return c.json({ error: "Email address is required" }, 400);
@@ -32,6 +58,7 @@ app.post("/send-test", async (c) => {
     <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 12px 16px; margin: 16px 0;">
       <p style="font-size: 13px; color: #166534; margin: 0;"><strong>Status:</strong> Email service is operational</p>
       <p style="font-size: 13px; color: #166534; margin: 4px 0 0;"><strong>Provider:</strong> Resend</p>
+      <p style="font-size: 13px; color: #166534; margin: 4px 0 0;"><strong>Sender:</strong> onboarding@resend.dev</p>
     </div>
     <p style="font-size: 14px; color: #444;">
       Transactional emails will be sent for:
@@ -58,7 +85,7 @@ app.post("/send-test", async (c) => {
   if (result) {
     return c.json({ success: true, message: "Test email sent successfully" });
   } else {
-    return c.json({ error: "Failed to send email. Check RESEND_API_KEY configuration." }, 500);
+    return c.json({ error: "Failed to send email. Check your Resend API key configuration." }, 500);
   }
 });
 
