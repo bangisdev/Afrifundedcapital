@@ -59,6 +59,9 @@ export function generateToken(): string {
 
 // ─── Build the Hono app for tests ─────────────────────────────
 export async function buildTestApp(): Promise<Hono> {
+  // Reset module registry so route modules re-import with fresh mock
+  vi.resetModules();
+
   const db = getTestDb();
   const sqlite = getTestSqlite();
 
@@ -66,7 +69,6 @@ export async function buildTestApp(): Promise<Hono> {
   const mockGetDb = () => db;
 
   // Mock the db module so route modules get our test DB
-  // vi.mock is hoisted, but we use the factory form to access our closure
   vi.doMock("../db", () => ({
     getDb: mockGetDb,
     getSqlite: () => sqlite,
@@ -281,9 +283,23 @@ export async function buildTestApp(): Promise<Hono> {
   // The vi.doMock above ensures route modules get our test DB via getDb()
   const kycModule = await import("../routes/kyc");
   const paymentsModule = await import("../routes/payments");
+  const challengesModule = await import("../routes/challenges");
+  const walletsModule = await import("../routes/wallets");
+  const notificationsModule = await import("../routes/notifications");
+  const supportModule = await import("../routes/support");
+  const couponsModule = await import("../routes/coupons");
+  const certificatesModule = await import("../routes/certificates");
+  const affiliatesModule = await import("../routes/affiliates");
 
   app.route("/api/kyc", kycModule.default);
   app.route("/api/payments", paymentsModule.default);
+  app.route("/api/challenges", challengesModule.default);
+  app.route("/api/wallets", walletsModule.default);
+  app.route("/api/notifications", notificationsModule.default);
+  app.route("/api/support", supportModule.default);
+  app.route("/api/coupons", couponsModule.default);
+  app.route("/api/certificates", certificatesModule.default);
+  app.route("/api/affiliates", affiliatesModule.default);
 
   // Unmock so other tests can re-mock cleanly
   vi.doUnmock("../db");
@@ -363,6 +379,21 @@ export async function authPost(
 ): Promise<{ status: number; body: unknown }> {
   const res = await app.request(url, {
     method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: cookie },
+    body: data ? JSON.stringify(data) : undefined,
+  });
+  const body = await res.json();
+  return { status: res.status, body };
+}
+
+export async function authPut(
+  app: Hono,
+  url: string,
+  cookie: string,
+  data?: unknown,
+): Promise<{ status: number; body: unknown }> {
+  const res = await app.request(url, {
+    method: "PUT",
     headers: { "Content-Type": "application/json", Cookie: cookie },
     body: data ? JSON.stringify(data) : undefined,
   });
