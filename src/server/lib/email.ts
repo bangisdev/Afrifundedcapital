@@ -7,12 +7,58 @@
 
 import { Resend } from "resend";
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
-const FROM_EMAIL = process.env.RESEND_EMAIL_FROM || "AfriFundedCapital <noreply@afrifundedcapital.com>";
+import { getDb } from "../db";
+import { settings } from "../schema";
+import { eq } from "drizzle-orm";
+
+const FROM_EMAIL_FALLBACK = "AfriFundedCapital <noreply@afrifundedcapital.com>";
 const APP_URL = process.env.APP_URL || "https://afrifundedcapital.com";
 
-// Initialize Resend client
-const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
+// Lazy-init Resend client — reads from DB settings first, falls back to env
+let _resend: Resend | null = null;
+let _resendKey: string = "";
+
+function getResendClient(): Resend | null {
+  // Try DB settings first
+  try {
+    const db = getDb();
+    const setting = db.select().from(settings).where(eq(settings.key, "resend_config")).get();
+    if (setting?.value) {
+      const config = JSON.parse(setting.value);
+      if (config.apiKey && config.apiKey !== _resendKey) {
+        _resendKey = config.apiKey;
+        _resend = new Resend(_resendKey);
+        console.log("[Email] Resend client initialized from DB settings");
+      }
+      if (config.fromEmail) {
+        // Update from email if configured
+        return _resend;
+      }
+    }
+  } catch {}
+
+  // Fall back to environment variable
+  const envKey = process.env.RESEND_API_KEY || "";
+  if (envKey && envKey !== _resendKey) {
+    _resendKey = envKey;
+    _resend = new Resend(_resendKey);
+    console.log("[Email] Resend client initialized from env");
+  }
+
+  return _resend;
+}
+
+function getFromEmail(): string {
+  try {
+    const db = getDb();
+    const setting = db.select().from(settings).where(eq(settings.key, "resend_config")).get();
+    if (setting?.value) {
+      const config = JSON.parse(setting.value);
+      if (config.fromEmail) return config.fromEmail;
+    }
+  } catch {}
+  return process.env.RESEND_EMAIL_FROM || FROM_EMAIL_FALLBACK;
+}
 
 export interface SendEmailParams {
   to: string;
@@ -26,14 +72,15 @@ export interface SendEmailParams {
  * Silently logs and returns false if not configured or on failure.
  */
 export async function sendEmail(params: SendEmailParams): Promise<boolean> {
-  if (!resend) {
+  const resendClient = getResendClient();
+  if (!resendClient) {
     console.warn("[Email] RESEND_API_KEY not configured — skipping email send to", params.to);
     return false;
   }
 
   try {
-    const { data, error } = await resend.emails.send({
-      from: FROM_EMAIL,
+    const { data, error } = await resendClient.emails.send({
+      from: getFromEmail(),
       to: [params.to],
       subject: params.subject,
       html: params.html,

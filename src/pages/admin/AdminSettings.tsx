@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Loader2, Save, CreditCard, Shield, Webhook, Eye, EyeOff,
-  CheckCircle, AlertTriangle, Copy, Database, Zap, Globe
+  CheckCircle, AlertTriangle, Copy, Database, Zap, Globe, Mail
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -62,6 +62,17 @@ export default function AdminSettings() {
   });
   const [showPskSecret, setShowPskSecret] = useState(false);
   const [savingPsk, setSavingPsk] = useState(false);
+
+  // Resend email state
+  const [resendConfig, setResendConfig] = useState({
+    apiKey: "",
+    fromEmail: "AfriFundedCapital <noreply@afrifundedcapital.com>",
+    isEnabled: false,
+  });
+  const [showResendKey, setShowResendKey] = useState(false);
+  const [savingResend, setSavingResend] = useState(false);
+  const [testEmail, setTestEmail] = useState("");
+  const [sendingTest, setSendingTest] = useState(false);
 
   const [seeding, setSeeding] = useState(false);
 
@@ -122,6 +133,16 @@ export default function AdminSettings() {
         webhookUrl: flwTestSetting.value.webhookUrl || "",
         isEnabled: flwTestSetting.value.isEnabled !== false,
         mode: "test",
+      });
+    }
+
+    // Load Resend config
+    const resendSetting = settings.find((s: any) => s.key === "resend_config");
+    if (resendSetting?.value) {
+      setResendConfig({
+        apiKey: resendSetting.value.apiKey || "",
+        fromEmail: resendSetting.value.fromEmail || "AfriFundedCapital <noreply@afrifundedcapital.com>",
+        isEnabled: resendSetting.value.isEnabled === true,
       });
     }
 
@@ -197,6 +218,55 @@ export default function AdminSettings() {
       toast.error(e?.message || "Failed to save Flutterwave config");
     }
     setSavingFlw(false);
+  };
+
+  const saveResend = async () => {
+    setSavingResend(true);
+    try {
+      await fetch("/api/seed/settings/resend_config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          value: {
+            apiKey: resendConfig.apiKey,
+            fromEmail: resendConfig.fromEmail,
+            isEnabled: resendConfig.isEnabled,
+          },
+          group: "email",
+        }),
+      });
+      toast.success("Resend email configuration saved");
+      refetch();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to save Resend config");
+    }
+    setSavingResend(false);
+  };
+
+  const sendTestEmail = async () => {
+    if (!testEmail) {
+      toast.error("Enter an email address to test");
+      return;
+    }
+    setSendingTest(true);
+    try {
+      const res = await fetch("/api/test-email/send-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ to: testEmail }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast.success(`Test email sent to ${testEmail}`);
+      } else {
+        toast.error(data.error || "Failed to send test email");
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to send test email");
+    }
+    setSendingTest(false);
   };
 
   const savePaystack = async () => {
@@ -397,6 +467,10 @@ export default function AdminSettings() {
           <TabsTrigger value="paystack" className="text-xs data-[state=active]:bg-secondary gap-1.5">
             <CreditCard className="h-3 w-3" />
             Paystack
+          </TabsTrigger>
+          <TabsTrigger value="resend" className="text-xs data-[state=active]:bg-secondary gap-1.5">
+            <Mail className="h-3 w-3" />
+            Resend
           </TabsTrigger>
           <TabsTrigger value="webhooks" className="text-xs data-[state=active]:bg-secondary gap-1.5">
             <Webhook className="h-3 w-3" />
@@ -716,6 +790,152 @@ export default function AdminSettings() {
               </p>
             </div>
           </div>
+        </TabsContent>
+
+        {/* ─── Resend Email ──────────────────────────── */}
+        <TabsContent value="resend" className="space-y-6">
+          {/* Status indicator */}
+          <div className="card-subtle p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`h-2 w-2 rounded-full ${resendConfig.isEnabled && resendConfig.apiKey ? "bg-emerald-500" : "bg-yellow-500"}`} />
+              <div>
+                <div className="text-sm font-medium">Resend Email Service</div>
+                <div className="text-xs text-muted-foreground">
+                  {resendConfig.isEnabled && resendConfig.apiKey
+                    ? "Active — emails are being sent"
+                    : resendConfig.isEnabled
+                      ? "Enabled — API key not yet configured"
+                      : "Disabled"}
+                </div>
+              </div>
+            </div>
+            <Switch
+              checked={resendConfig.isEnabled}
+              onCheckedChange={(checked) => setResendConfig({ ...resendConfig, isEnabled: checked })}
+            />
+          </div>
+
+          {/* API Key */}
+          <div className="card-subtle p-6 space-y-5">
+            <div className="flex items-center gap-2 mb-1">
+              <Shield className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-medium">API Configuration</h3>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Resend API Key</Label>
+              <div className="relative">
+                <Input
+                  type={showResendKey ? "text" : "password"}
+                  placeholder="re_..."
+                  value={resendConfig.apiKey}
+                  onChange={(e) => setResendConfig({ ...resendConfig, apiKey: e.target.value })}
+                  className="text-xs font-mono pr-20"
+                />
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
+                  <button
+                    onClick={() => setShowResendKey(!showResendKey)}
+                    className="p-1 hover:bg-secondary rounded"
+                  >
+                    {showResendKey ? <EyeOff className="h-3 w-3 text-muted-foreground" /> : <Eye className="h-3 w-3 text-muted-foreground" />}
+                  </button>
+                  {resendConfig.apiKey && (
+                    <button
+                      onClick={() => copyToClipboard(resendConfig.apiKey)}
+                      className="p-1 hover:bg-secondary rounded"
+                    >
+                      <Copy className="h-3 w-3 text-muted-foreground" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Get your API key from <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer" className="underline">resend.com/api-keys</a>. Server-side only — never exposed to clients.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">From Email</Label>
+              <Input
+                type="text"
+                placeholder="AfriFundedCapital <noreply@afrifundedcapital.com>"
+                value={resendConfig.fromEmail}
+                onChange={(e) => setResendConfig({ ...resendConfig, fromEmail: e.target.value })}
+                className="text-xs font-mono"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                The sender address for all outgoing emails. Must be from a verified domain in Resend.
+              </p>
+            </div>
+
+            <div className="pt-2">
+              <Button
+                size="sm"
+                className="text-xs"
+                onClick={saveResend}
+                disabled={savingResend}
+              >
+                {savingResend ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
+                Save Resend Config
+              </Button>
+            </div>
+          </div>
+
+          {/* Test email */}
+          <div className="card-subtle p-6 space-y-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Mail className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-medium">Send Test Email</h3>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Send a test email to verify your Resend configuration is working correctly.
+            </p>
+
+            <div className="flex gap-2">
+              <Input
+                type="email"
+                placeholder="your@email.com"
+                value={testEmail}
+                onChange={(e) => setTestEmail(e.target.value)}
+                className="text-xs"
+              />
+              <Button
+                size="sm"
+                className="text-xs shrink-0"
+                onClick={sendTestEmail}
+                disabled={sendingTest || !resendConfig.apiKey || !testEmail}
+              >
+                {sendingTest ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Mail className="h-3 w-3 mr-1" />}
+                Send Test
+              </Button>
+            </div>
+          </div>
+
+          {/* Status */}
+          {resendConfig.isEnabled && resendConfig.apiKey && (
+            <div className="card-subtle p-4 flex items-start gap-3 border-emerald-500/20">
+              <CheckCircle className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+              <div>
+                <div className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Email Service Active</div>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Transactional emails will be sent for KYC approvals, payment confirmations, support replies, and more.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!resendConfig.apiKey && resendConfig.isEnabled && (
+            <div className="card-subtle p-4 flex items-start gap-3 border-yellow-500/20">
+              <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5 shrink-0" />
+              <div>
+                <div className="text-xs font-medium text-yellow-600 dark:text-yellow-400">API Key Required</div>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Enter your Resend API key above and save to enable email delivery.
+                </p>
+              </div>
+            </div>
+          )}
         </TabsContent>
 
         {/* ─── Webhooks ─────────────────────────────── */}
