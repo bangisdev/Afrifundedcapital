@@ -76,6 +76,70 @@ app.use("*", cors({
 // Health check
 app.get("/api/health", (c) => c.json({ status: "ok", timestamp: Date.now() }));
 
+// ═══════════════════════════════════════════════
+//  SETTINGS API
+// ═══════════════════════════════════════════════
+
+// GET /api/settings/public — public settings (no auth required)
+app.get("/api/settings/public", (c) => {
+  try {
+    const db = getDb();
+    const allSettings = db.select().from(settings).all();
+    const result: Record<string, unknown> = {};
+    for (const s of allSettings) {
+      try {
+        result[s.key] = JSON.parse(s.value);
+      } catch {
+        result[s.key] = s.value;
+      }
+    }
+    return c.json(result);
+  } catch (err) {
+    return c.json({ error: "Failed to load settings" }, 500);
+  }
+});
+
+// PUT /api/settings — save a setting (admin only)
+app.put("/api/settings", async (c) => {
+  // Require auth + admin role
+  try {
+    const cookieHeader = c.req.header("cookie") || "";
+    const cookies = parseCookies(cookieHeader);
+    const token = cookies[COOKIE_NAME];
+    if (!token) return c.json({ error: "Authentication required" }, 401);
+    const db = getDb();
+    const session = db.select().from(sessions).where(and(eq(sessions.token, token), gt(sessions.expiresAt, Date.now()))).get();
+    if (!session) return c.json({ error: "Invalid session" }, 401);
+    const caller = db.select().from(users).where(eq(users.id, session.userId)).get();
+    if (!caller || (caller.role !== "super_admin" && caller.role !== "admin")) {
+      return c.json({ error: "Admin access required" }, 403);
+    }
+  } catch { return c.json({ error: "Auth check failed" }, 401); }
+
+  try {
+    const body = await c.req.json();
+    const { key, value } = body;
+    if (!key || value === undefined) {
+      return c.json({ error: "key and value are required" }, 400);
+    }
+
+    const db = getDb();
+    const existing = db.select().from(settings).where(eq(settings.key, key)).get();
+    const valueStr = typeof value === "string" ? value : JSON.stringify(value);
+
+    if (existing) {
+      db.update(settings).set({ value: valueStr }).where(eq(settings.key, key)).run();
+    } else {
+      db.insert(settings).values({ key, value: valueStr, group: "general", description: key }).run();
+    }
+
+    return c.json({ success: true, key });
+  } catch (err) {
+    console.error("[Settings] Error saving setting:", err);
+    return c.json({ error: "Failed to save setting" }, 500);
+  }
+});
+
 // Flutterwave public config (reads from settings table first, then env)
 app.get("/api/payments/flutterwave-config", (c) => {
   let publicKey = process.env.FLW_PUBLIC_KEY || "";
