@@ -1,14 +1,18 @@
 /**
  * Email sending utility for AfriFundedCapital.
  *
- * Uses the VLY integrations email service (backed by Resend).
+ * Uses Resend SDK for transactional emails.
  * Falls back gracefully if the API key is not configured.
  */
 
-const VLY_API_BASE = process.env.VLY_INTEGRATION_BASE_URL || "https://integrations.freebuff.com";
-const VLY_KEY = process.env.VLY_INTEGRATION_KEY || "";
+import { Resend } from "resend";
+
+const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
 const FROM_EMAIL = process.env.RESEND_EMAIL_FROM || "AfriFundedCapital <noreply@afrifundedcapital.com>";
 const APP_URL = process.env.APP_URL || "https://afrifundedcapital.com";
+
+// Initialize Resend client
+const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
 export interface SendEmailParams {
   to: string;
@@ -18,38 +22,30 @@ export interface SendEmailParams {
 }
 
 /**
- * Send a transactional email via VLY integrations.
+ * Send a transactional email via Resend.
  * Silently logs and returns false if not configured or on failure.
  */
 export async function sendEmail(params: SendEmailParams): Promise<boolean> {
-  if (!VLY_KEY) {
-    console.warn("[Email] VLY_INTEGRATION_KEY not configured — skipping email send to", params.to);
+  if (!resend) {
+    console.warn("[Email] RESEND_API_KEY not configured — skipping email send to", params.to);
     return false;
   }
 
   try {
-    const res = await fetch(`${VLY_API_BASE}/email/send`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${VLY_KEY}`,
-      },
-      body: JSON.stringify({
-        from: FROM_EMAIL,
-        to: params.to,
-        subject: params.subject,
-        html: params.html,
-        text: params.text || params.subject,
-      }),
+    const { data, error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: [params.to],
+      subject: params.subject,
+      html: params.html,
+      text: params.text || params.subject,
     });
 
-    if (!res.ok) {
-      const err = await res.text();
-      console.error("[Email] Failed to send:", res.status, err);
+    if (error) {
+      console.error("[Email] Resend error:", error);
       return false;
     }
 
-    console.log("[Email] Sent to", params.to, "—", params.subject);
+    console.log("[Email] Sent to", params.to, "—", params.subject, "— ID:", data?.id);
     return true;
   } catch (err) {
     console.error("[Email] Error sending to", params.to, ":", err);

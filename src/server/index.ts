@@ -28,6 +28,7 @@ import couponsRouter from "./routes/coupons";
 import certificatesRouter from "./routes/certificates";
 import payoutsRouter from "./routes/payouts";
 import seedRouter from "./routes/seed";
+import testEmailRouter from "./routes/test-email";
 
 // Initialize database
 initDatabase();
@@ -679,6 +680,7 @@ app.route("/api/coupons", couponsRouter);
 app.route("/api/certificates", certificatesRouter);
 app.route("/api/payouts", payoutsRouter);
 app.route("/api/seed", seedRouter);
+app.route("/api/test-email", testEmailRouter);
 
 // ═══════════════════════════════════════════════
 //  VITE PLUGIN — mounts Hono into dev server
