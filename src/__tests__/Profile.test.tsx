@@ -534,6 +534,116 @@ describe("Profile Page", () => {
     });
   });
 
+  // ─── File validation ──────────────────────────────────
+  describe("File Validation", () => {
+    it("rejects invalid file types with toast error", async () => {
+      const user = userEvent.setup();
+      setQueryData({});
+      const { container } = render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      const fileInputs = container.querySelectorAll('input[type="file"]');
+      const invalidFile = new File(["test"], "test.exe", { type: "application/x-msdownload" });
+      Object.defineProperty(invalidFile, "size", { value: 1000 });
+      fireEvent.change(fileInputs[0], { target: { files: [invalidFile] } });
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("Invalid file type"));
+      });
+    });
+
+    it("rejects oversized files with toast error", async () => {
+      const user = userEvent.setup();
+      setQueryData({});
+      const { container } = render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      const fileInputs = container.querySelectorAll('input[type="file"]');
+      const bigFile = new File(["x".repeat(6 * 1024 * 1024)], "big.jpg", { type: "image/jpeg" });
+      Object.defineProperty(bigFile, "size", { value: 6 * 1024 * 1024 });
+      fireEvent.change(fileInputs[0], { target: { files: [bigFile] } });
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("File size"));
+      });
+    });
+
+    it("accepts valid JPEG file and calls upload mutation", async () => {
+      const user = userEvent.setup();
+      setQueryData({});
+      const { container } = render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      const fileInputs = container.querySelectorAll('input[type="file"]');
+      const validFile = new File(["image-data"], "passport.jpg", { type: "image/jpeg" });
+      Object.defineProperty(validFile, "size", { value: 1000 });
+      fireEvent.change(fileInputs[0], { target: { files: [validFile] } });
+      await waitFor(() => {
+        expect(mockUploadKyc).toHaveBeenCalled();
+      });
+    });
+
+    it("accepts valid PDF file", async () => {
+      const user = userEvent.setup();
+      setQueryData({});
+      const { container } = render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      const fileInputs = container.querySelectorAll('input[type="file"]');
+      const validPdf = new File(["pdf-data"], "doc.pdf", { type: "application/pdf" });
+      Object.defineProperty(validPdf, "size", { value: 5000 });
+      fireEvent.change(fileInputs[0], { target: { files: [validPdf] } });
+      await waitFor(() => {
+        expect(mockUploadKyc).toHaveBeenCalled();
+      });
+    });
+  });
+
+  // ─── Upload button states ──────────────────────────────
+  describe("Upload Button States", () => {
+    it("shows Upload text for each unsubmitted document", async () => {
+      const user = userEvent.setup();
+      setQueryData({});
+      const { container } = render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      const uploadButtons = screen.getAllByText("Upload");
+      expect(uploadButtons.length).toBe(5);
+      uploadButtons.forEach((btn) => {
+        const button = btn.closest("button");
+        expect(button).toBeTruthy();
+        expect(button).not.toBeDisabled();
+      });
+    });
+
+    it("shows Re-upload text for rejected documents", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "kyc/my": [
+          makeKycDoc({ documentType: "passport", status: "rejected", rejectionReason: "Blurry" }),
+          makeKycDoc({ id: 2, documentType: "national_id", status: "pending" }),
+        ],
+      });
+      const { container } = render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      expect(screen.getByText("Re-upload")).toBeTruthy();
+      // The rejected doc shows Re-upload, the pending doc shows "Under review" text
+      const uploadButtons = screen.getAllByText((t) => t === "Upload" || t === "Re-upload");
+      expect(uploadButtons.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("does not show Upload for approved documents", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "kyc/my": [
+          makeKycDoc({ documentType: "passport", status: "approved" }),
+          makeKycDoc({ id: 2, documentType: "national_id", status: "approved" }),
+          makeKycDoc({ id: 3, documentType: "drivers_license", status: "approved" }),
+          makeKycDoc({ id: 4, documentType: "proof_of_address", status: "approved" }),
+          makeKycDoc({ id: 5, documentType: "selfie", status: "approved" }),
+        ],
+      });
+      const { container } = render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      // All 5 docs approved = no Upload/Re-upload buttons
+      const uploadButtons = screen.queryAllByText((t) => t === "Upload" || t === "Re-upload");
+      expect(uploadButtons.length).toBe(0);
+    });
+  });
+
   // ─── Multiple KYC documents ────────────────────────────
   describe("Multiple KYC Documents", () => {
     it("shows different statuses for different documents", async () => {
