@@ -1,0 +1,600 @@
+// @vitest-environment jsdom
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import React from "react";
+
+// ─── Mock: sonner ──────────────────────────────────────────
+vi.mock("sonner", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+  },
+}));
+
+// ─── Mock: useAuth ─────────────────────────────────────────
+const mockUser = {
+  id: 1,
+  name: "John Doe",
+  email: "john@example.com",
+  phone: "+2348012345678",
+  address: "123 Lagos Street",
+  country: "Nigeria",
+  role: "user",
+  kycStatus: "unverified",
+  referralCode: "JOHN001",
+};
+
+vi.mock("@/hooks/use-auth", () => ({
+  useAuth: vi.fn(() => ({
+    isLoading: false,
+    isAuthenticated: true,
+    user: mockUser,
+    error: null,
+    signIn: vi.fn(),
+    signOut: vi.fn(),
+    refetch: vi.fn(),
+  })),
+}));
+
+// ─── Mock: useApiQuery / useApiMutation ────────────────────
+const queryDataMap: Record<string, any> = {};
+const mockUpdateProfile = vi.fn(async () => ({ message: "ok" }));
+const mockUploadKyc = vi.fn(async () => ({ message: "uploaded" }));
+const mockRefetchKyc = vi.fn(async () => ({}));
+
+vi.mock("@/hooks/use-api", () => ({
+  useApiQuery: vi.fn((key: string[], path: string, _opts?: any) => {
+    const dataKey = `${key.join("/")}`;
+    if (queryDataMap[dataKey] === undefined) {
+      return { data: undefined, isLoading: true, refetch: mockRefetchKyc };
+    }
+    return { data: queryDataMap[dataKey], isLoading: false, refetch: mockRefetchKyc };
+  }),
+  useApiMutation: vi.fn((method: string, path: string, _onSuccess?: any) => {
+    if (path === "/api/kyc/upload") {
+      return { mutateAsync: mockUploadKyc, mutate: vi.fn(), isPending: false };
+    }
+    return { mutateAsync: mockUpdateProfile, mutate: vi.fn(), isPending: false };
+  }),
+}));
+
+// ─── Mock: Tabs with React state for tab switching ─────────
+vi.mock("@/components/ui/tabs", () => {
+  const React = require("react");
+  const TabCtx = React.createContext({ active: "profile", setActive: (_: string) => {} });
+
+  function Tabs({ defaultValue, children }: any) {
+    const [active, setActive] = React.useState(defaultValue || "profile");
+    return (
+      <TabCtx.Provider value={{ active, setActive }}>
+        <div data-testid="tabs">{children}</div>
+      </TabCtx.Provider>
+    );
+  }
+
+  function TabsList({ children }: any) {
+    return <div data-testid="tabs-list">{children}</div>;
+  }
+
+  function TabsTrigger({ value, children }: any) {
+    const { active, setActive } = React.useContext(TabCtx);
+    return (
+      <button
+        data-testid={`tab-trigger-${value}`}
+        data-state={active === value ? "active" : "inactive"}
+        onClick={() => setActive(value)}
+      >
+        {children}
+      </button>
+    );
+  }
+
+  function TabsContent({ value, children }: any) {
+    const { active } = React.useContext(TabCtx);
+    if (active !== value) return null;
+    return <div data-testid={`tab-content-${value}`}>{children}</div>;
+  }
+
+  return { Tabs, TabsList, TabsTrigger, TabsContent };
+});
+
+// ─── Import component after mocks ─────────────────────────
+import Profile from "@/pages/dashboard/Profile";
+import { useAuth } from "@/hooks/use-auth";
+import { toast } from "sonner";
+
+// ─── Helpers ──────────────────────────────────────────────
+function clearAllQueryData() {
+  Object.keys(queryDataMap).forEach((k) => delete queryDataMap[k]);
+}
+
+function setQueryData(updates: Record<string, any>) {
+  Object.keys(queryDataMap).forEach((k) => delete queryDataMap[k]);
+  Object.assign(queryDataMap, { "kyc/my": [], ...updates });
+}
+
+function makeKycDoc(overrides: any = {}) {
+  return {
+    id: 1,
+    documentType: "passport",
+    status: "pending",
+    uploadedAt: Date.now() - 86400000 * 3,
+    fileUrl: "data:image/jpeg;base64,abc123",
+    fileName: "passport.jpg",
+    rejectionReason: null,
+    ...overrides,
+  };
+}
+
+// ─── Tests ────────────────────────────────────────────────
+describe("Profile Page", () => {
+  beforeEach(() => {
+    clearAllQueryData();
+    vi.clearAllMocks();
+    mockUpdateProfile.mockResolvedValue({ message: "ok" });
+    mockUploadKyc.mockResolvedValue({ message: "uploaded" });
+    vi.mocked(useAuth).mockReturnValue({
+      isLoading: false,
+      isAuthenticated: true,
+      user: { ...mockUser } as any,
+      error: null,
+      signIn: vi.fn() as any,
+      signOut: vi.fn() as any,
+      refetch: vi.fn() as any,
+    });
+  });
+
+  // ─── Loading state ─────────────────────────────────────
+  describe("Loading State", () => {
+    it("shows spinner when user is null", () => {
+      vi.mocked(useAuth).mockReturnValue({
+        isLoading: false,
+        isAuthenticated: true,
+        user: null as any,
+        error: null,
+        signIn: vi.fn() as any,
+        signOut: vi.fn() as any,
+        refetch: vi.fn() as any,
+      });
+      const { container } = render(<Profile />);
+      expect(container.querySelector(".animate-spin")).toBeTruthy();
+    });
+  });
+
+  // ─── Page header ───────────────────────────────────────
+  describe("Page Header", () => {
+    it("renders the Profile heading", () => {
+      setQueryData({});
+      render(<Profile />);
+      expect(screen.getByRole("heading", { name: "Profile" })).toBeTruthy();
+    });
+
+    it("renders the page description", () => {
+      setQueryData({});
+      render(<Profile />);
+      expect(screen.getByText(/Manage your personal information/)).toBeTruthy();
+    });
+  });
+
+  // ─── Tabs ──────────────────────────────────────────────
+  describe("Tabs", () => {
+    it("renders Profile and KYC tab triggers", () => {
+      setQueryData({});
+      render(<Profile />);
+      expect(screen.getByTestId("tab-trigger-profile")).toBeTruthy();
+      expect(screen.getByTestId("tab-trigger-kyc")).toBeTruthy();
+    });
+
+    it("defaults to Profile tab content", () => {
+      setQueryData({});
+      render(<Profile />);
+      expect(screen.getByText("Save Changes")).toBeTruthy();
+    });
+  });
+
+  // ─── Profile Tab ───────────────────────────────────────
+  describe("Profile Tab", () => {
+    it("pre-fills name from user data", () => {
+      setQueryData({});
+      render(<Profile />);
+      expect(screen.getByDisplayValue("John Doe")).toBeTruthy();
+    });
+
+    it("pre-fills phone from user data", () => {
+      setQueryData({});
+      render(<Profile />);
+      expect(screen.getByDisplayValue("+2348012345678")).toBeTruthy();
+    });
+
+    it("pre-fills address from user data", () => {
+      setQueryData({});
+      render(<Profile />);
+      expect(screen.getByDisplayValue("123 Lagos Street")).toBeTruthy();
+    });
+
+    it("pre-fills country from user data", () => {
+      setQueryData({});
+      render(<Profile />);
+      expect(screen.getByDisplayValue("Nigeria")).toBeTruthy();
+    });
+
+    it("renders all four form field labels", () => {
+      setQueryData({});
+      render(<Profile />);
+      expect(screen.getByText("Full Name")).toBeTruthy();
+      expect(screen.getByText("Phone")).toBeTruthy();
+      expect(screen.getByText("Address")).toBeTruthy();
+      expect(screen.getByText("Country")).toBeTruthy();
+    });
+
+    it("renders Save Changes button", () => {
+      setQueryData({});
+      render(<Profile />);
+      expect(screen.getByText("Save Changes")).toBeTruthy();
+    });
+
+    it("allows editing name", async () => {
+      const user = userEvent.setup();
+      setQueryData({});
+      render(<Profile />);
+      const nameInput = screen.getByDisplayValue("John Doe");
+      await user.clear(nameInput);
+      await user.type(nameInput, "Jane Doe");
+      expect(nameInput).toHaveValue("Jane Doe");
+    });
+
+    it("allows editing phone", async () => {
+      const user = userEvent.setup();
+      setQueryData({});
+      render(<Profile />);
+      const phoneInput = screen.getByDisplayValue("+2348012345678");
+      await user.clear(phoneInput);
+      await user.type(phoneInput, "+2348098765432");
+      expect(phoneInput).toHaveValue("+2348098765432");
+    });
+
+    it("allows editing address", async () => {
+      const user = userEvent.setup();
+      setQueryData({});
+      render(<Profile />);
+      const addressInput = screen.getByDisplayValue("123 Lagos Street");
+      await user.clear(addressInput);
+      await user.type(addressInput, "456 Abuja Avenue");
+      expect(addressInput).toHaveValue("456 Abuja Avenue");
+    });
+
+    it("allows editing country", async () => {
+      const user = userEvent.setup();
+      setQueryData({});
+      render(<Profile />);
+      const countryInput = screen.getByDisplayValue("Nigeria");
+      await user.clear(countryInput);
+      await user.type(countryInput, "Ghana");
+      expect(countryInput).toHaveValue("Ghana");
+    });
+  });
+
+  // ─── Save profile ──────────────────────────────────────
+  describe("Save Profile", () => {
+    it("submits profile update with correct data", async () => {
+      const user = userEvent.setup();
+      setQueryData({});
+      render(<Profile />);
+      const nameInput = screen.getByDisplayValue("John Doe");
+      await user.clear(nameInput);
+      await user.type(nameInput, "Jane Smith");
+      await user.click(screen.getByText("Save Changes"));
+      await waitFor(() => {
+        expect(mockUpdateProfile).toHaveBeenCalledWith({
+          name: "Jane Smith",
+          phone: "+2348012345678",
+          address: "123 Lagos Street",
+          country: "Nigeria",
+        });
+      });
+    });
+
+    it("shows success toast after save", async () => {
+      const user = userEvent.setup();
+      setQueryData({});
+      render(<Profile />);
+      await user.click(screen.getByText("Save Changes"));
+      await waitFor(() => {
+        expect(toast.success).toHaveBeenCalledWith("Profile updated");
+      });
+    });
+
+    it("shows error toast on save failure", async () => {
+      const user = userEvent.setup();
+      mockUpdateProfile.mockRejectedValueOnce(new Error("Update failed"));
+      setQueryData({});
+      render(<Profile />);
+      await user.click(screen.getByText("Save Changes"));
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith("Update failed");
+      });
+    });
+
+    it("disables button and shows Saving... while saving", async () => {
+      const user = userEvent.setup();
+      let resolveSave: (v: any) => void;
+      mockUpdateProfile.mockImplementation(() => new Promise((r) => { resolveSave = r; }));
+      setQueryData({});
+      render(<Profile />);
+      await user.click(screen.getByText("Save Changes"));
+      expect(screen.getByText("Saving...")).toBeTruthy();
+      expect(screen.getByText("Saving...").closest("button")).toBeDisabled();
+      resolveSave!({});
+      await waitFor(() => {
+        expect(screen.getByText("Save Changes")).toBeTruthy();
+      });
+    });
+  });
+
+  // ─── KYC Tab ───────────────────────────────────────────
+  describe("KYC Tab", () => {
+    it("switches to KYC tab and shows identity verification", async () => {
+      const user = userEvent.setup();
+      setQueryData({});
+      render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      expect(screen.getByText("Identity Verification")).toBeTruthy();
+    });
+
+    it("renders KYC status banner for unverified user", async () => {
+      const user = userEvent.setup();
+      setQueryData({});
+      render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      expect(screen.getByText(/Upload your identity documents/)).toBeTruthy();
+      expect(screen.getByText("Not Submitted")).toBeTruthy();
+    });
+
+    it("renders KYC status banner for approved user", async () => {
+      const user = userEvent.setup();
+      vi.mocked(useAuth).mockReturnValue({
+        isLoading: false, isAuthenticated: true,
+        user: { ...mockUser, kycStatus: "approved" } as any,
+        error: null, signIn: vi.fn() as any, signOut: vi.fn() as any, refetch: vi.fn() as any,
+      });
+      setQueryData({});
+      render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      expect(screen.getByText("Approved")).toBeTruthy();
+      expect(screen.getByText(/Your identity is verified/)).toBeTruthy();
+    });
+
+    it("renders KYC status banner for pending user", async () => {
+      const user = userEvent.setup();
+      vi.mocked(useAuth).mockReturnValue({
+        isLoading: false, isAuthenticated: true,
+        user: { ...mockUser, kycStatus: "pending" } as any,
+        error: null, signIn: vi.fn() as any, signOut: vi.fn() as any, refetch: vi.fn() as any,
+      });
+      setQueryData({});
+      render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      expect(screen.getByText("Pending Review")).toBeTruthy();
+      expect(screen.getByText(/Documents are under review/)).toBeTruthy();
+    });
+
+    it("renders KYC status banner for rejected user", async () => {
+      const user = userEvent.setup();
+      vi.mocked(useAuth).mockReturnValue({
+        isLoading: false, isAuthenticated: true,
+        user: { ...mockUser, kycStatus: "rejected" } as any,
+        error: null, signIn: vi.fn() as any, signOut: vi.fn() as any, refetch: vi.fn() as any,
+      });
+      setQueryData({});
+      render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      expect(screen.getByText("Rejected")).toBeTruthy();
+      expect(screen.getByText(/One or more documents were rejected/)).toBeTruthy();
+    });
+
+    it("renders verification requirements", async () => {
+      const user = userEvent.setup();
+      setQueryData({});
+      render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      expect(screen.getByText("Verification Requirements")).toBeTruthy();
+      expect(screen.getByText(/government-issued ID/)).toBeTruthy();
+    });
+  });
+
+  // ─── KYC Document Cards ────────────────────────────────
+  describe("KYC Document Cards", () => {
+    it("renders all five document type cards", async () => {
+      const user = userEvent.setup();
+      setQueryData({});
+      render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      expect(screen.getByText("International Passport")).toBeTruthy();
+      expect(screen.getByText("National ID")).toBeTruthy();
+      expect(screen.getByText("Driver's License")).toBeTruthy();
+      expect(screen.getByText("Proof of Address")).toBeTruthy();
+      expect(screen.getByText("Selfie Verification")).toBeTruthy();
+    });
+
+    it("shows Required badge on passport", async () => {
+      const user = userEvent.setup();
+      setQueryData({});
+      render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      const badges = screen.getAllByText("Required");
+      expect(badges.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("shows Upload button for unsubmitted documents", async () => {
+      const user = userEvent.setup();
+      setQueryData({});
+      render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      const uploadButtons = screen.getAllByText("Upload");
+      expect(uploadButtons.length).toBe(5);
+    });
+
+    it("shows 'Not yet submitted' for documents without uploads", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "kyc/my": [] });
+      render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      const notSubmitted = screen.getAllByText("Not yet submitted");
+      expect(notSubmitted.length).toBe(5);
+    });
+
+    it("shows pending status for submitted documents", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "kyc/my": [makeKycDoc({ documentType: "passport", status: "pending" })],
+      });
+      render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      expect(screen.getByText("Pending Review")).toBeTruthy();
+      expect(screen.getByText("Under review")).toBeTruthy();
+    });
+
+    it("shows approved status", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "kyc/my": [makeKycDoc({ documentType: "passport", status: "approved" })],
+      });
+      render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      expect(screen.getByText("Approved")).toBeTruthy();
+    });
+
+    it("hides Upload button for approved documents", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "kyc/my": [makeKycDoc({ documentType: "passport", status: "approved" })],
+      });
+      render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      const uploadButtons = screen.getAllByText("Upload");
+      expect(uploadButtons.length).toBe(4);
+    });
+
+    it("shows Re-upload button for rejected documents", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "kyc/my": [makeKycDoc({ documentType: "passport", status: "rejected", rejectionReason: "Blurry" })],
+      });
+      render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      expect(screen.getByText("Re-upload")).toBeTruthy();
+    });
+
+    it("shows rejection reason", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "kyc/my": [makeKycDoc({ documentType: "passport", status: "rejected", rejectionReason: "Image is blurry" })],
+      });
+      render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      expect(screen.getByText("Image is blurry")).toBeTruthy();
+    });
+
+    it("shows upload date for submitted documents", async () => {
+      const user = userEvent.setup();
+      const date = new Date("2025-06-15");
+      setQueryData({
+        "kyc/my": [makeKycDoc({ documentType: "passport", status: "pending", uploadedAt: date.getTime() })],
+      });
+      render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      expect(screen.getByText(/Jun 15, 2025/)).toBeTruthy();
+    });
+  });
+
+  // ─── File Upload ───────────────────────────────────────
+  describe("File Upload", () => {
+    it("creates hidden file input for each document type", async () => {
+      const user = userEvent.setup();
+      setQueryData({});
+      const { container } = render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      const fileInputs = container.querySelectorAll('input[type="file"]');
+      expect(fileInputs.length).toBe(5);
+    });
+
+    it("file inputs accept correct file types", async () => {
+      const user = userEvent.setup();
+      setQueryData({});
+      const { container } = render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      const fileInputs = container.querySelectorAll('input[type="file"]');
+      fileInputs.forEach((input) => {
+        expect(input).toHaveAttribute("accept", "image/jpeg,image/png,image/webp,application/pdf");
+      });
+    });
+  });
+
+  // ─── Multiple KYC documents ────────────────────────────
+  describe("Multiple KYC Documents", () => {
+    it("shows different statuses for different documents", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "kyc/my": [
+          makeKycDoc({ id: 1, documentType: "passport", status: "approved" }),
+          makeKycDoc({ id: 2, documentType: "national_id", status: "pending" }),
+          makeKycDoc({ id: 3, documentType: "drivers_license", status: "rejected", rejectionReason: "Expired" }),
+        ],
+      });
+      render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      expect(screen.getByText("Approved")).toBeTruthy();
+      expect(screen.getByText("Pending Review")).toBeTruthy();
+      expect(screen.getByText("Rejected")).toBeTruthy();
+      expect(screen.getByText("Expired")).toBeTruthy();
+    });
+  });
+
+  // ─── Full integration ──────────────────────────────────
+  describe("Full Integration", () => {
+    it("renders profile tab with all fields by default", () => {
+      setQueryData({});
+      render(<Profile />);
+      expect(screen.getByRole("heading", { name: "Profile" })).toBeTruthy();
+      expect(screen.getByText("Full Name")).toBeTruthy();
+      expect(screen.getByText("Phone")).toBeTruthy();
+      expect(screen.getByText("Address")).toBeTruthy();
+      expect(screen.getByText("Country")).toBeTruthy();
+      expect(screen.getByText("Save Changes")).toBeTruthy();
+      expect(screen.getByDisplayValue("John Doe")).toBeTruthy();
+      expect(screen.getByDisplayValue("Nigeria")).toBeTruthy();
+    });
+
+    it("loading → data transition works", () => {
+      vi.mocked(useAuth).mockReturnValue({
+        isLoading: false, isAuthenticated: true, user: null as any,
+        error: null, signIn: vi.fn() as any, signOut: vi.fn() as any, refetch: vi.fn() as any,
+      });
+      const { container } = render(<Profile />);
+      expect(container.querySelector(".animate-spin")).toBeTruthy();
+
+      vi.mocked(useAuth).mockReturnValue({
+        isLoading: false, isAuthenticated: true, user: { ...mockUser } as any,
+        error: null, signIn: vi.fn() as any, signOut: vi.fn() as any, refetch: vi.fn() as any,
+      });
+      render(<Profile />);
+      expect(screen.getByDisplayValue("John Doe")).toBeTruthy();
+    });
+
+    it("handles user with minimal data", () => {
+      vi.mocked(useAuth).mockReturnValue({
+        isLoading: false, isAuthenticated: true,
+        user: { id: 2, name: "", email: "minimal@test.com", phone: null, address: null, country: null, role: "user", kycStatus: "unverified" } as any,
+        error: null, signIn: vi.fn() as any, signOut: vi.fn() as any, refetch: vi.fn() as any,
+      });
+      setQueryData({});
+      render(<Profile />);
+      expect(screen.getByText("Full Name")).toBeTruthy();
+      expect(screen.getByText("Save Changes")).toBeTruthy();
+    });
+  });
+});
