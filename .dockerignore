@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+.bun/install/cache/
+
+# Build output
+dist/
+dist-ssr/
+
+# Database files (persisted via volume)
+*.db
+*.db-wal
+*.db-shm
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Tests
+test-results/
+playwright-report/
+coverage/
+
+# Documentation
+*.md
+!README.md
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# OS
+.DS_Store
+Thumbs.db

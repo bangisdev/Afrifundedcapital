@@ -1,0 +1,77 @@
+# ═══════════════════════════════════════════════════════════════
+# AfriFundedCapital — Docker Compose
+# ═══════════════════════════════════════════════════════════════
+#
+# Usage:
+#   Development:  docker compose --profile dev up
+#   Production:   docker compose --profile prod up --build
+#   Both:         docker compose --profile dev --profile prod up
+#
+# ═══════════════════════════════════════════════════════════════
+
+services:
+  # ─── Development (hot-reload) ─────────────────────────────
+  app-dev:
+    profiles: ["dev"]
+    image: oven/bun:1
+    container_name: afc-dev
+    working_dir: /app
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+      - bun-cache:/root/.bun/install/cache
+    environment:
+      - NODE_ENV=development
+      - FLW_PUBLIC_KEY=${FLW_PUBLIC_KEY:-}
+      - FLW_SECRET_KEY=${FLW_SECRET_KEY:-}
+      - FLW_SECRET_HASH=${FLW_SECRET_HASH:-}
+      - FLW_ENCRYPTION_KEY=${FLW_ENCRYPTION_KEY:-}
+      - PAYSTACK_SECRET_KEY=${PAYSTACK_SECRET_KEY:-}
+      - PAYSTACK_PUBLIC_KEY=${PAYSTACK_PUBLIC_KEY:-}
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+    command: sh -c "bun install && bun run dev --host 0.0.0.0"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5173/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ─── Production (pre-built) ───────────────────────────────
+  app-prod:
+    profiles: ["prod"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: afc-prod
+    ports:
+      - "5173:5173"
+    volumes:
+      - afc-data:/app/data
+    environment:
+      - NODE_ENV=production
+      - PORT=5173
+      - DB_PATH=/app/data/afrifundedcapital.db
+      - FLW_PUBLIC_KEY=${FLW_PUBLIC_KEY:-}
+      - FLW_SECRET_KEY=${FLW_SECRET_KEY:-}
+      - FLW_SECRET_HASH=${FLW_SECRET_HASH:-}
+      - FLW_ENCRYPTION_KEY=${FLW_ENCRYPTION_KEY:-}
+      - PAYSTACK_SECRET_KEY=${PAYSTACK_SECRET_KEY:-}
+      - PAYSTACK_PUBLIC_KEY=${PAYSTACK_PUBLIC_KEY:-}
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5173/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  bun-cache:
+    driver: local
+  afc-data:
+    driver: local
