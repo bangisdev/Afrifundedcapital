@@ -1,0 +1,18 @@
+# ═══════════════════════════════════════════════════════════════
+# AfriFundedCapital — Certbot Auto-Renewal Cron
+# ═══════════════════════════════════════════════════════════════
+#
+# Let's Encrypt recommends running renewal twice daily.
+# Certificates are only renewed if they expire within 30 days.
+#
+# Schedule:
+#   • 02:30 AM — first renewal attempt
+#   • 14:30 PM — second renewal attempt
+#
+# ═══════════════════════════════════════════════════════════════
+
+# Run renewal check twice daily
+30 2,14 * * * /etc/certbot/renew.sh >> /var/log/certbot/renewal.log 2>&1
+
+# Clean up old logs weekly (keep last 4 weeks)
+0 3 * * 0 find /var/log/certbot -name "*.log" -mtime +28 -delete 2>/dev/null
