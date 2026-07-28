@@ -40,6 +40,10 @@ Dockerfile
 docker-compose*.yml
 .dockerignore
 
+# Nginx SSL (mounted as volume, not baked into image)
+nginx/ssl/
+nginx/generate-ssl.sh
+
 # OS
 .DS_Store
 Thumbs.db

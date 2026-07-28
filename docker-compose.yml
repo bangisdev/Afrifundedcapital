@@ -5,7 +5,7 @@
 # Usage:
 #   Development:  docker compose --profile dev up
 #   Production:   docker compose --profile prod up --build
-#   Both:         docker compose --profile dev --profile prod up
+#   With Nginx:   docker compose --profile prod --profile nginx up --build
 #
 # ═══════════════════════════════════════════════════════════════
 
@@ -46,8 +46,9 @@ services:
       dockerfile: Dockerfile
       target: production
     container_name: afc-prod
-    ports:
-      - "5173:5173"
+    # Don't expose port directly when using nginx
+    expose:
+      - "5173"
     volumes:
       - afc-data:/app/data
     environment:
@@ -61,8 +62,10 @@ services:
       - PAYSTACK_SECRET_KEY=${PAYSTACK_SECRET_KEY:-}
       - PAYSTACK_PUBLIC_KEY=${PAYSTACK_PUBLIC_KEY:-}
       - RESEND_API_KEY=${RESEND_API_KEY:-}
-      - CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+      - CORS_ORIGINS=http://localhost,https://localhost,http://localhost:8080
     restart: unless-stopped
+    networks:
+      - afc-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5173/api/health"]
       interval: 30s
@@ -70,8 +73,42 @@ services:
       retries: 3
       start_period: 15s
 
+  # ─── Nginx Reverse Proxy ──────────────────────────────────
+  nginx:
+    profiles: ["nginx"]
+    image: nginx:alpine
+    container_name: afc-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx-cache:/var/cache/nginx
+      - nginx-logs:/var/log/nginx
+    depends_on:
+      app-prod:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - afc-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  afc-network:
+    driver: bridge
+
 volumes:
   bun-cache:
     driver: local
   afc-data:
+    driver: local
+  nginx-cache:
+    driver: local
+  nginx-logs:
     driver: local
