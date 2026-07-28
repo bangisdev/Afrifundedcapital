@@ -4,6 +4,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import React from "react";
 
+// ─── Mock: sonner ──────────────────────────────────────────
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
+}));
+
 // ─── Mock: useAuth (admin user) ────────────────────────────
 vi.mock("@/hooks/use-auth", () => ({
   useAuth: vi.fn(() => ({
@@ -19,28 +24,16 @@ vi.mock("@/hooks/use-auth", () => ({
 
 // ─── Mock: useApiQuery ────────────────────────────────────
 const queryDataMap: Record<string, any> = {};
+const mockRefetch = vi.fn();
 
 vi.mock("@/hooks/use-api", () => ({
   useApiQuery: vi.fn((key: string[], path: string, _opts?: any) => {
     const dataKey = `${key.join("/")}`;
     if (queryDataMap[dataKey] === undefined) {
-      return { data: undefined, isLoading: false };
+      return { data: undefined, isLoading: false, refetch: mockRefetch };
     }
-    return { data: queryDataMap[dataKey], isLoading: false };
+    return { data: queryDataMap[dataKey], isLoading: false, refetch: mockRefetch };
   }),
-}));
-
-// ─── Mock: recharts ───────────────────────────────────────
-vi.mock("recharts", () => ({
-  BarChart: Object.assign(({ children }: any) => React.createElement("div", { "data-testid": "bar-chart" }, children), { displayName: "BarChart" }),
-  Bar: (props: any) => React.createElement("div", { "data-testid": "recharts-bar", "data-key": props.dataKey }),
-  LineChart: Object.assign(({ children }: any) => React.createElement("div", { "data-testid": "line-chart" }, children), { displayName: "LineChart" }),
-  Line: (props: any) => React.createElement("div", { "data-testid": "recharts-line", "data-key": props.dataKey }),
-  XAxis: () => React.createElement("div", { "data-testid": "recharts-xaxis" }),
-  YAxis: () => React.createElement("div", { "data-testid": "recharts-yaxis" }),
-  CartesianGrid: () => React.createElement("div", { "data-testid": "recharts-grid" }),
-  ResponsiveContainer: ({ children }: any) => React.createElement("div", { "data-testid": "recharts-responsive-container" }, children),
-  Tooltip: () => React.createElement("div", { "data-testid": "recharts-tooltip" }),
 }));
 
 // ─── Import component after mocks ─────────────────────────
@@ -52,7 +45,7 @@ function clearAllQueryData() {
 }
 
 function setQueryData(updates: Record<string, any>) {
-  Object.keys(queryDataMap).forEach((k) => delete queryDataMap[k]);
+  clearAllQueryData();
   Object.assign(queryDataMap, {
     "admin/userStats": null,
     "admin/challengeStats": null,
@@ -68,9 +61,10 @@ function setQueryData(updates: Record<string, any>) {
 describe("AdminOverview Page", () => {
   beforeEach(() => {
     clearAllQueryData();
+    vi.clearAllMocks();
   });
 
-  // ─── Page header ───────────────────────────────────────
+  // ─── Page Header ────────────────────────────────────────
   describe("Page Header", () => {
     it("renders the Admin Overview title", () => {
       setQueryData({});
@@ -85,7 +79,7 @@ describe("AdminOverview Page", () => {
     });
   });
 
-  // ─── Stat Cards ────────────────────────────────────────
+  // ─── Stat Cards ─────────────────────────────────────────
   describe("Stat Cards", () => {
     it("renders all eight stat cards", () => {
       setQueryData({});
@@ -104,7 +98,6 @@ describe("AdminOverview Page", () => {
       setQueryData({});
       render(<AdminOverview />);
       expect(screen.getByText("Total Users")).toBeTruthy();
-      // All stats show 0 or ₦0 by default
     });
 
     it("displays total users", () => {
@@ -154,6 +147,12 @@ describe("AdminOverview Page", () => {
       render(<AdminOverview />);
       expect(screen.getByText("5")).toBeTruthy();
     });
+
+    it("formats large NGN values with commas", () => {
+      setQueryData({ "admin/paymentStats": { revenue: 123456789 } });
+      render(<AdminOverview />);
+      expect(screen.getByText("₦123,456,789")).toBeTruthy();
+    });
   });
 
   // ─── User Growth section ───────────────────────────────
@@ -178,6 +177,12 @@ describe("AdminOverview Page", () => {
 
     it("hides User Growth when data is null", () => {
       setQueryData({});
+      render(<AdminOverview />);
+      expect(screen.queryByText("User Growth")).toBeNull();
+    });
+
+    it("hides User Growth when data is undefined", () => {
+      setQueryData({ "admin/userGrowth": undefined });
       render(<AdminOverview />);
       expect(screen.queryByText("User Growth")).toBeNull();
     });
@@ -208,6 +213,14 @@ describe("AdminOverview Page", () => {
       render(<AdminOverview />);
       expect(screen.queryByText("Revenue Growth")).toBeNull();
     });
+
+    it("shows zero values for revenue growth", () => {
+      setQueryData({ "admin/revenueGrowth": { thisMonth: 0, lastMonth: 0 } });
+      render(<AdminOverview />);
+      expect(screen.getByText("Revenue Growth")).toBeTruthy();
+      expect(screen.getByText("This Month: ₦0")).toBeTruthy();
+      expect(screen.getByText("Last Month: ₦0")).toBeTruthy();
+    });
   });
 
   // ─── Zero/null data handling ────────────────────────────
@@ -222,7 +235,6 @@ describe("AdminOverview Page", () => {
       render(<AdminOverview />);
       expect(screen.getByText("Total Users")).toBeTruthy();
       expect(screen.getByText("Revenue")).toBeTruthy();
-      // ₦0 appears in both Revenue and Total Paid Out
       const zeros = screen.getAllByText((t) => t.includes("₦") && t.includes("0"));
       expect(zeros.length).toBeGreaterThanOrEqual(2);
     });
@@ -237,9 +249,21 @@ describe("AdminOverview Page", () => {
       render(<AdminOverview />);
       expect(screen.getByText("Total Users")).toBeTruthy();
     });
+
+    it("handles partial null data", () => {
+      setQueryData({
+        "admin/userStats": { totalUsers: 50 },
+        "admin/challengeStats": null,
+        "admin/paymentStats": null,
+        "admin/payoutStats": null,
+      });
+      render(<AdminOverview />);
+      expect(screen.getByText("50")).toBeTruthy();
+      expect(screen.queryByText("User Growth")).toBeNull();
+    });
   });
 
-  // ─── Full integration ──────────────────────────────────
+  // ─── Full Integration ──────────────────────────────────
   describe("Full Integration", () => {
     it("renders complete page with all data", () => {
       setQueryData({
@@ -252,11 +276,8 @@ describe("AdminOverview Page", () => {
       });
       render(<AdminOverview />);
 
-      // Header
       expect(screen.getByText("Admin Overview")).toBeTruthy();
       expect(screen.getByText("Platform statistics and analytics")).toBeTruthy();
-
-      // Stat cards
       expect(screen.getByText("500")).toBeTruthy();
       expect(screen.getByText("150")).toBeTruthy();
       expect(screen.getByText("₦10,000,000")).toBeTruthy();
@@ -265,8 +286,6 @@ describe("AdminOverview Page", () => {
       expect(screen.getByText("300")).toBeTruthy();
       expect(screen.getByText("₦5,000,000")).toBeTruthy();
       expect(screen.getByText("12")).toBeTruthy();
-
-      // Growth sections
       expect(screen.getByText("User Growth")).toBeTruthy();
       expect(screen.getByText("Total: 500")).toBeTruthy();
       expect(screen.getByText("New (30d): 50")).toBeTruthy();
@@ -281,13 +300,73 @@ describe("AdminOverview Page", () => {
         "admin/challengeStats": { total: 20, active: 5, funded: 3 },
       });
       render(<AdminOverview />);
-
       expect(screen.getByText("100")).toBeTruthy();
       expect(screen.getByText("20")).toBeTruthy();
       expect(screen.getByText("5")).toBeTruthy();
       expect(screen.getByText("3")).toBeTruthy();
       expect(screen.queryByText("User Growth")).toBeNull();
       expect(screen.queryByText("Revenue Growth")).toBeNull();
+    });
+
+    it("renders all stat card icons", () => {
+      setQueryData({});
+      const { container } = render(<AdminOverview />);
+      const icons = container.querySelectorAll("svg");
+      expect(icons.length).toBeGreaterThanOrEqual(8);
+    });
+
+    it("shows revenue as default currency NGN", () => {
+      setQueryData({ "admin/paymentStats": { revenue: 500000 } });
+      render(<AdminOverview />);
+      expect(screen.getByText("₦500,000")).toBeTruthy();
+    });
+
+    it("handles very large numbers", () => {
+      setQueryData({
+        "admin/userStats": { totalUsers: 999999 },
+        "admin/paymentStats": { revenue: 999999999999 },
+      });
+      render(<AdminOverview />);
+      expect(screen.getByText((t) => t.includes("999,999"))).toBeTruthy();
+      expect(screen.getByText((t) => t.includes("₦") && t.includes("999,999,999,999"))).toBeTruthy();
+    });
+  });
+
+  // ─── Integration: Data Consistency ─────────────────────
+  describe("Integration: Data Consistency", () => {
+    it("shows consistent data across all sections when all queries return", () => {
+      setQueryData({
+        "admin/userStats": { totalUsers: 1000 },
+        "admin/userGrowth": { totalUsers: 1000, newUsers30d: 100 },
+      });
+      render(<AdminOverview />);
+      // User count should match between stat card and growth section
+      const statCards = document.querySelectorAll(".card-subtle");
+      const userCard = Array.from(statCards).find((c) => c.textContent?.includes("Total Users"));
+      expect(userCard?.textContent).toContain("1000");
+      expect(screen.getByText("Total: 1000")).toBeTruthy();
+    });
+
+    it("shows independent sections when data differs", () => {
+      setQueryData({
+        "admin/userStats": { totalUsers: 100 },
+        "admin/userGrowth": { totalUsers: 90, newUsers30d: 10 },
+      });
+      render(<AdminOverview />);
+      // Different data sources might show slightly different numbers
+      expect(screen.getByText("100")).toBeTruthy();
+      expect(screen.getByText("Total: 90")).toBeTruthy();
+    });
+
+    it("revenue growth shows correct month comparison", () => {
+      setQueryData({
+        "admin/paymentStats": { revenue: 2000000 },
+        "admin/revenueGrowth": { thisMonth: 1200000, lastMonth: 800000 },
+      });
+      render(<AdminOverview />);
+      expect(screen.getByText("₦2,000,000")).toBeTruthy();
+      expect(screen.getByText("This Month: ₦1,200,000")).toBeTruthy();
+      expect(screen.getByText("Last Month: ₦800,000")).toBeTruthy();
     });
   });
 });

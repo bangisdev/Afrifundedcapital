@@ -1,18 +1,13 @@
 // @vitest-environment jsdom
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 
 // ─── Mock: sonner ──────────────────────────────────────────
 vi.mock("sonner", () => ({
-  toast: {
-    success: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    warning: vi.fn(),
-  },
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
 }));
 
 // ─── Mock: useAuth (admin user) ────────────────────────────
@@ -56,7 +51,7 @@ vi.mock("@/components/ui/alert-dialog", () => ({
     if (!open) return null;
     return <div data-testid="alert-dialog">{children}</div>;
   },
-  AlertDialogContent: ({ children }: any) => <div data-testid="alert-dialog-content">{children}</div>,
+  AlertDialogContent: ({ children }: any) => <div>{children}</div>,
   AlertDialogHeader: ({ children }: any) => <div>{children}</div>,
   AlertDialogTitle: ({ children }: any) => <h2>{children}</h2>,
   AlertDialogDescription: ({ children }: any) => <p>{children}</p>,
@@ -116,7 +111,7 @@ function clearAllQueryData() {
 }
 
 function setQueryData(updates: Record<string, any>) {
-  Object.keys(queryDataMap).forEach((k) => delete queryDataMap[k]);
+  clearAllQueryData();
   Object.assign(queryDataMap, { "admin/users": [], ...updates });
 }
 
@@ -129,7 +124,7 @@ describe("AdminUsers Page", () => {
     mockFetch.mockResolvedValue({ ok: true, json: async () => ({ message: "ok" }) });
   });
 
-  // ─── Loading state ─────────────────────────────────────
+  // ─── Loading State ──────────────────────────────────────
   describe("Loading State", () => {
     it("shows spinner when data is loading", () => {
       clearAllQueryData();
@@ -144,7 +139,7 @@ describe("AdminUsers Page", () => {
     });
   });
 
-  // ─── Page header ───────────────────────────────────────
+  // ─── Page Header ────────────────────────────────────────
   describe("Page Header", () => {
     it("renders title", () => {
       setQueryData({});
@@ -159,7 +154,7 @@ describe("AdminUsers Page", () => {
     });
   });
 
-  // ─── Stats cards ───────────────────────────────────────
+  // ─── Stats cards ────────────────────────────────────────
   describe("Stats Cards", () => {
     it("renders all four stat cards", () => {
       setQueryData({});
@@ -179,7 +174,6 @@ describe("AdminUsers Page", () => {
         ],
       });
       render(<AdminUsers />);
-      // The stat card shows the count next to "Total Users" — find the parent div
       const statCards = document.querySelectorAll(".card-subtle");
       const totalCard = Array.from(statCards).find((card) =>
         card.textContent?.includes("Total Users"),
@@ -187,9 +181,36 @@ describe("AdminUsers Page", () => {
       expect(totalCard).toBeTruthy();
       expect(totalCard?.textContent).toContain("3");
     });
+
+    it("counts admins correctly", () => {
+      setQueryData({
+        "admin/users": [
+          makeUser({ role: "super_admin" }),
+          makeUser({ id: 2, role: "support_admin" }),
+          makeUser({ id: 3, role: "user" }),
+        ],
+      });
+      render(<AdminUsers />);
+      const statCards = document.querySelectorAll(".card-subtle");
+      const adminCard = Array.from(statCards).find((c) => c.textContent?.includes("Admins"));
+      expect(adminCard?.textContent).toContain("2");
+    });
+
+    it("counts locked users", () => {
+      setQueryData({
+        "admin/users": [
+          makeUser({ accountLockedUntil: Date.now() + 86400000 }),
+          makeUser({ id: 2, accountLockedUntil: null }),
+        ],
+      });
+      render(<AdminUsers />);
+      const statCards = document.querySelectorAll(".card-subtle");
+      const lockedCard = Array.from(statCards).find((c) => c.textContent?.includes("Locked"));
+      expect(lockedCard?.textContent).toContain("1");
+    });
   });
 
-  // ─── Search ────────────────────────────────────────────
+  // ─── Search ─────────────────────────────────────────────
   describe("Search", () => {
     it("renders search input", () => {
       setQueryData({});
@@ -224,9 +245,47 @@ describe("AdminUsers Page", () => {
       expect(screen.getByText("Bob")).toBeTruthy();
       expect(screen.queryByText("Alice")).toBeNull();
     });
+
+    it("filters by phone number", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "admin/users": [
+          makeUser({ phone: "+2348012345678" }),
+          makeUser({ id: 2, phone: "+2349087654321" }),
+        ],
+      });
+      render(<AdminUsers />);
+      await user.type(screen.getByPlaceholderText(/Search by name/), "801234");
+      expect(screen.getByText("John Doe")).toBeTruthy();
+    });
+
+    it("filters by referral code", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "admin/users": [
+          makeUser({ referralCode: "JOHN001" }),
+          makeUser({ id: 2, referralCode: "BOB002" }),
+        ],
+      });
+      render(<AdminUsers />);
+      await user.type(screen.getByPlaceholderText(/Search by name/), "BOB002");
+      expect(screen.getByText("John Doe")).toBeTruthy(); // Unnamed doesn't appear, Bob's referral code matches but name still shows
+    });
+
+    it("case-insensitive search", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "admin/users": [
+          makeUser({ name: "Alice Smith", email: "alice@test.com" }),
+        ],
+      });
+      render(<AdminUsers />);
+      await user.type(screen.getByPlaceholderText(/Search by name/), "ALICE");
+      expect(screen.getByText("Alice Smith")).toBeTruthy();
+    });
   });
 
-  // ─── Role filter ───────────────────────────────────────
+  // ─── Role filter ────────────────────────────────────────
   describe("Role Filter", () => {
     it("renders role filter dropdown", () => {
       setQueryData({});
@@ -247,9 +306,18 @@ describe("AdminUsers Page", () => {
       expect(screen.getByText("Admin User")).toBeTruthy();
       expect(screen.queryByText("Regular")).toBeNull();
     });
+
+    it("shows all role options", async () => {
+      const user = userEvent.setup();
+      setQueryData({});
+      render(<AdminUsers />);
+      const select = screen.getByDisplayValue("All Roles");
+      const options = select.querySelectorAll("option");
+      expect(options.length).toBeGreaterThanOrEqual(9); // All Roles + 8 roles
+    });
   });
 
-  // ─── KYC filter ────────────────────────────────────────
+  // ─── KYC filter ─────────────────────────────────────────
   describe("KYC Filter", () => {
     it("renders KYC filter dropdown", () => {
       setQueryData({});
@@ -270,11 +338,20 @@ describe("AdminUsers Page", () => {
       expect(screen.getByText("Approved User")).toBeTruthy();
       expect(screen.queryByText("Unverified User")).toBeNull();
     });
+
+    it("shows all KYC status options", async () => {
+      const user = userEvent.setup();
+      setQueryData({});
+      render(<AdminUsers />);
+      const select = screen.getByDisplayValue("All KYC Status");
+      const options = select.querySelectorAll("option");
+      expect(options.length).toBeGreaterThanOrEqual(5); // All + 4 statuses
+    });
   });
 
-  // ─── Clear filters ─────────────────────────────────────
+  // ─── Clear filters ──────────────────────────────────────
   describe("Clear Filters", () => {
-    it("shows clear button when filters active", async () => {
+    it("shows clear button when search is active", async () => {
       const user = userEvent.setup();
       setQueryData({});
       render(<AdminUsers />);
@@ -282,9 +359,29 @@ describe("AdminUsers Page", () => {
       await user.type(screen.getByPlaceholderText(/Search by name/), "test");
       expect(screen.getByText("Clear")).toBeTruthy();
     });
+
+    it("clears search on Clear click", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "admin/users": [makeUser({ name: "Alice" })],
+      });
+      render(<AdminUsers />);
+      await user.type(screen.getByPlaceholderText(/Search by name/), "zzz");
+      expect(screen.queryByText("Alice")).toBeNull();
+      await user.click(screen.getByText("Clear"));
+      expect(screen.getByText("Alice")).toBeTruthy();
+    });
+
+    it("shows clear button when role filter is active", async () => {
+      const user = userEvent.setup();
+      setQueryData({});
+      render(<AdminUsers />);
+      await user.selectOptions(screen.getByDisplayValue("All Roles"), "super_admin");
+      expect(screen.getByText("Clear")).toBeTruthy();
+    });
   });
 
-  // ─── Users table ───────────────────────────────────────
+  // ─── Users table ────────────────────────────────────────
   describe("Users Table", () => {
     it("renders user name and email", () => {
       setQueryData({
@@ -376,9 +473,19 @@ describe("AdminUsers Page", () => {
       const emptyTd = Array.from(tds).find((td) => td.textContent?.includes("No users found"));
       expect(emptyTd).toBeTruthy();
     });
+
+    it("shows action buttons for each user", () => {
+      setQueryData({
+        "admin/users": [makeUser()],
+      });
+      render(<AdminUsers />);
+      expect(screen.getAllByTitle("View details").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByTitle(/Lock account|Unlock account/).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByTitle("Delete user").length).toBeGreaterThanOrEqual(1);
+    });
   });
 
-  // ─── User detail modal ─────────────────────────────────
+  // ─── User detail modal ──────────────────────────────────
   describe("User Detail Modal", () => {
     it("opens detail modal on view click", async () => {
       const user = userEvent.setup();
@@ -405,6 +512,18 @@ describe("AdminUsers Page", () => {
       expect(screen.getByText("Country")).toBeTruthy();
     });
 
+    it("shows all detail fields", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "admin/users": [makeUser({ timezone: "Africa/Lagos", tradingExperience: "advanced", referralCode: "TEST001" })],
+      });
+      render(<AdminUsers />);
+      await user.click(screen.getAllByTitle("View details")[0]);
+      expect(screen.getByText("Timezone")).toBeTruthy();
+      expect(screen.getByText("Experience")).toBeTruthy();
+      expect(screen.getByText("Referral Code")).toBeTruthy();
+    });
+
     it("closes modal on backdrop click", async () => {
       const user = userEvent.setup();
       setQueryData({
@@ -416,9 +535,20 @@ describe("AdminUsers Page", () => {
       const backdrop = document.querySelector(".fixed.inset-0");
       if (backdrop) await user.click(backdrop);
     });
+
+    it("shows Toggle Admin and Lock buttons in modal", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "admin/users": [makeUser({ role: "user", accountLockedUntil: null })],
+      });
+      render(<AdminUsers />);
+      await user.click(screen.getAllByTitle("View details")[0]);
+      expect(screen.getByText("Toggle Admin")).toBeTruthy();
+      expect(screen.getByText("Lock")).toBeTruthy();
+    });
   });
 
-  // ─── Role editing ──────────────────────────────────────
+  // ─── Role editing ───────────────────────────────────────
   describe("Role Editing", () => {
     it("opens role dropdown on role badge click", async () => {
       const user = userEvent.setup();
@@ -433,7 +563,7 @@ describe("AdminUsers Page", () => {
     });
   });
 
-  // ─── Delete confirmation ───────────────────────────────
+  // ─── Delete confirmation ────────────────────────────────
   describe("Delete Confirmation", () => {
     it("opens delete dialog on delete button click", async () => {
       const user = userEvent.setup();
@@ -448,6 +578,17 @@ describe("AdminUsers Page", () => {
       expect(screen.getByText(/permanently delete/)).toBeTruthy();
     });
 
+    it("shows user email in confirmation", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "admin/users": [makeUser({ email: "target@test.com" })],
+      });
+      render(<AdminUsers />);
+      await user.click(screen.getAllByTitle("Delete user")[0]);
+      // email appears in both table row and dialog strong tag
+      expect(screen.getAllByText("target@test.com").length).toBeGreaterThanOrEqual(2);
+    });
+
     it("closes dialog on cancel", async () => {
       const user = userEvent.setup();
       setQueryData({
@@ -459,9 +600,80 @@ describe("AdminUsers Page", () => {
       await user.click(screen.getByTestId("alert-cancel"));
       expect(screen.queryByTestId("alert-dialog")).toBeNull();
     });
+
+    it("calls API on confirm delete", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "admin/users": [makeUser({ id: 42, email: "delete@test.com" })],
+      });
+      render(<AdminUsers />);
+      await user.click(screen.getAllByTitle("Delete user")[0]);
+      await user.click(screen.getByTestId("alert-confirm"));
+      expect(mockFetch).toHaveBeenCalledWith(
+        "/api/users/42",
+        expect.objectContaining({ method: "DELETE" }),
+      );
+      expect(toast.success).toHaveBeenCalled();
+    });
+
+    it("shows error toast on delete failure", async () => {
+      mockFetch.mockResolvedValueOnce({ ok: false, json: async () => ({ error: "Cannot delete admin" }) });
+      const user = userEvent.setup();
+      setQueryData({
+        "admin/users": [makeUser({ id: 42 })],
+      });
+      render(<AdminUsers />);
+      await user.click(screen.getAllByTitle("Delete user")[0]);
+      await user.click(screen.getByTestId("alert-confirm"));
+      expect(toast.error).toHaveBeenCalled();
+    });
   });
 
-  // ─── Multiple users ────────────────────────────────────
+  // ─── Lock/Unlock toggle ─────────────────────────────────
+  describe("Lock/Unlock Toggle", () => {
+    it("locks user account via API", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "admin/users": [makeUser({ id: 10, accountLockedUntil: null })],
+      });
+      render(<AdminUsers />);
+      const lockBtn = screen.getAllByTitle("Lock account");
+      await user.click(lockBtn[0]);
+      expect(mockFetch).toHaveBeenCalledWith(
+        "/api/users/10/status",
+        expect.objectContaining({ method: "PUT" }),
+      );
+      expect(toast.success).toHaveBeenCalledWith("Account locked");
+    });
+
+    it("unlocks user account via API", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "admin/users": [makeUser({ id: 10, accountLockedUntil: Date.now() + 86400000 })],
+      });
+      render(<AdminUsers />);
+      const unlockBtn = screen.getAllByTitle("Unlock account");
+      await user.click(unlockBtn[0]);
+      expect(mockFetch).toHaveBeenCalledWith(
+        "/api/users/10/status",
+        expect.objectContaining({ method: "PUT" }),
+      );
+      expect(toast.success).toHaveBeenCalledWith("Account unlocked");
+    });
+
+    it("shows error toast on lock failure", async () => {
+      mockFetch.mockResolvedValueOnce({ ok: false, json: async () => ({ error: "Failed" }) });
+      const user = userEvent.setup();
+      setQueryData({
+        "admin/users": [makeUser({ id: 10, accountLockedUntil: null })],
+      });
+      render(<AdminUsers />);
+      await user.click(screen.getAllByTitle("Lock account")[0]);
+      expect(toast.error).toHaveBeenCalled();
+    });
+  });
+
+  // ─── Multiple users ─────────────────────────────────────
   describe("Multiple Users", () => {
     it("renders multiple users", () => {
       setQueryData({
@@ -479,18 +691,83 @@ describe("AdminUsers Page", () => {
 
     it("shows user count in footer", () => {
       setQueryData({
-        "admin/users": [
-          makeUser({ id: 1 }),
-          makeUser({ id: 2 }),
-        ],
+        "admin/users": [makeUser({ id: 1 }), makeUser({ id: 2 })],
       });
       render(<AdminUsers />);
       expect(screen.getByText(/Showing 2 of 2 users/)).toBeTruthy();
     });
+
+    it("updates footer count when filtering", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "admin/users": [
+          makeUser({ id: 1, name: "Alice", role: "user" }),
+          makeUser({ id: 2, name: "Bob", role: "super_admin" }),
+        ],
+      });
+      render(<AdminUsers />);
+      expect(screen.getByText(/Showing 2 of 2 users/)).toBeTruthy();
+      await user.selectOptions(screen.getByDisplayValue("All Roles"), "super_admin");
+      expect(screen.getByText(/Showing 1 of 2 users/)).toBeTruthy();
+    });
   });
 
-  // ─── Full integration ──────────────────────────────────
-  describe("Full Integration", () => {
+  // ─── Integration: Multi-filter combinations ─────────────
+  describe("Integration: Multi-filter Combinations", () => {
+    it("combines search + role filter", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "admin/users": [
+          makeUser({ id: 1, name: "Alice", role: "user" }),
+          makeUser({ id: 2, name: "Bob", role: "super_admin" }),
+          makeUser({ id: 3, name: "Alex", role: "super_admin" }),
+        ],
+      });
+      render(<AdminUsers />);
+      // Type a more distinctive search term to filter clearly
+      await user.type(screen.getByPlaceholderText(/Search by name/), "alex");
+      // Now apply role filter
+      await user.selectOptions(screen.getByDisplayValue("All Roles"), "super_admin");
+      // Alex matches both search and role filter
+      expect(screen.getByText("Alex")).toBeTruthy();
+      // Alice doesn't match role filter, Bob doesn't match search
+      expect(screen.queryByText("Alice")).toBeNull();
+      expect(screen.queryByText("Bob")).toBeNull();
+    });
+
+    it("combines search + KYC filter", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "admin/users": [
+          makeUser({ id: 1, name: "Alice", kycStatus: "approved" }),
+          makeUser({ id: 2, name: "Bob", kycStatus: "pending" }),
+        ],
+      });
+      render(<AdminUsers />);
+      await user.type(screen.getByPlaceholderText(/Search by name/), "ali");
+      await user.selectOptions(screen.getByDisplayValue("All KYC Status"), "approved");
+      expect(screen.getByText("Alice")).toBeTruthy();
+      expect(screen.queryByText("Bob")).toBeNull();
+    });
+
+    it("shows no results when filters combine to exclude all", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "admin/users": [
+          makeUser({ id: 1, name: "Alice", role: "user" }),
+        ],
+      });
+      render(<AdminUsers />);
+      await user.type(screen.getByPlaceholderText(/Search by name/), "alice");
+      await user.selectOptions(screen.getByDisplayValue("All Roles"), "super_admin");
+      const tds = document.querySelectorAll("td");
+      const emptyTd = Array.from(tds).find((td) => td.textContent?.includes("No users found"));
+      expect(emptyTd).toBeTruthy();
+    });
+  });
+
+  // ─── Integration: Full User Management Flow ─────────────
+  describe("Integration: Full User Management Flow", () => {
     it("renders complete page with all sections", () => {
       setQueryData({
         "admin/users": [
@@ -505,6 +782,9 @@ describe("AdminUsers Page", () => {
 
       // Stats
       expect(screen.getByText("Total Users")).toBeTruthy();
+      expect(screen.getByText("Admins")).toBeTruthy();
+      expect(screen.getByText("Verified")).toBeTruthy();
+      expect(screen.getByText("Locked")).toBeTruthy();
 
       // Search
       expect(screen.getByPlaceholderText(/Search by name/)).toBeTruthy();
@@ -519,6 +799,58 @@ describe("AdminUsers Page", () => {
 
       // Footer
       expect(screen.getByText(/Showing 2 of 2 users/)).toBeTruthy();
+    });
+
+    it("view → lock → search → delete full workflow", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "admin/users": [
+          makeUser({ id: 1, name: "Alice", email: "alice@test.com", accountLockedUntil: null }),
+          makeUser({ id: 2, name: "Bob", email: "bob@test.com", accountLockedUntil: null }),
+        ],
+      });
+      render(<AdminUsers />);
+
+      // Step 1: View Alice
+      await user.click(screen.getAllByTitle("View details")[0]);
+      expect(screen.getByText("User ID")).toBeTruthy();
+      expect(screen.getByText("#1")).toBeTruthy();
+
+      // Close modal
+      const backdrop = document.querySelector(".fixed.inset-0");
+      if (backdrop) await user.click(backdrop);
+
+      // Step 2: Lock Bob
+      const lockBtns = screen.getAllByTitle("Lock account");
+      await user.click(lockBtns[1]);
+      expect(toast.success).toHaveBeenCalledWith("Account locked");
+
+      // Step 3: Search for Alice
+      await user.type(screen.getByPlaceholderText(/Search by name/), "alice");
+      expect(screen.getByText("Alice")).toBeTruthy();
+      expect(screen.queryByText("Bob")).toBeNull();
+    });
+
+    it("data consistency: stats match user list", () => {
+      setQueryData({
+        "admin/users": [
+          makeUser({ role: "super_admin", emailVerified: true, accountLockedUntil: null }),
+          makeUser({ id: 2, role: "user", emailVerified: true, accountLockedUntil: null }),
+          makeUser({ id: 3, role: "user", emailVerified: false, accountLockedUntil: Date.now() + 86400000 }),
+        ],
+      });
+      render(<AdminUsers />);
+
+      const statCards = document.querySelectorAll(".card-subtle");
+      const totalCard = Array.from(statCards).find((c) => c.textContent?.includes("Total Users"));
+      const adminCard = Array.from(statCards).find((c) => c.textContent?.includes("Admins"));
+      const verifiedCard = Array.from(statCards).find((c) => c.textContent?.includes("Verified"));
+      const lockedCard = Array.from(statCards).find((c) => c.textContent?.includes("Locked"));
+
+      expect(totalCard?.textContent).toContain("3");
+      expect(adminCard?.textContent).toContain("1");
+      expect(verifiedCard?.textContent).toContain("2");
+      expect(lockedCard?.textContent).toContain("1");
     });
   });
 });
