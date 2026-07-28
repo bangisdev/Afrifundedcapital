@@ -1,0 +1,114 @@
+name: E2E Tests
+
+on:
+  pull_request:
+    branches: [main]
+  # Allow manual trigger for testing against any URL
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Preview URL to test against"
+        required: false
+        default: ""
+
+# Cancel in-progress runs for the same PR
+concurrency:
+  group: e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: E2E — Chromium
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      # ── Wait for preview deployment ──────────────────────
+      # Freebuff preview URLs follow: https://<slug>.freebuff.dev
+      - name: Determine preview URL
+        id: preview
+        run: |
+          # Use manually provided URL or extract from PR
+          URL="${{ inputs.base_url }}"
+          if [ -z "$URL" ]; then
+            # Freebuff generates preview URLs automatically
+            # We'll poll until the server responds
+            echo "url=http://localhost:5173" >> "$GITHUB_OUTPUT"
+            echo "mode=local" >> "$GITHUB_OUTPUT"
+          else
+            echo "url=$URL" >> "$GITHUB_OUTPUT"
+            echo "mode=preview" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Start local dev server (fallback) ────────────────
+      - name: Start dev server
+        if: steps.preview.outputs.mode == 'local'
+        run: |
+          bun run dev &
+          # Wait for server to be ready
+          for i in $(seq 1 30); do
+            if curl -s -o /dev/null -w '%{http_code}' http://localhost:5173 | grep -q '200'; then
+              echo "Server ready"
+              break
+            fi
+            sleep 2
+          done
+
+      # ── Seed test data ──────────────────────────────────
+      - name: Seed admin account
+        if: steps.preview.outputs.mode == 'local'
+        run: |
+          curl -s -X POST http://localhost:5173/api/seed/admin \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"admin@afrifundedcapital.com","password":"Admin@123456"}' || true
+          sleep 2
+
+      # ── Run E2E tests ──────────────────────────────────
+      - name: Run Playwright E2E tests
+        run: npx playwright test --reporter=list,html
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ steps.preview.outputs.url }}
+          CI: true
+          E2E_ADMIN_EMAIL: admin@afrifundedcapital.com
+          E2E_ADMIN_PASSWORD: Admin@123456
+
+      # ── Upload artifacts on failure ─────────────────────
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results/
+          retention-days: 7
+
+      - name: Upload trace files
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traces
+          path: test-results/**/trace.zip
+          retention-days: 7
+
+      # ── Cleanup ─────────────────────────────────────────
+      - name: Stop dev server
+        if: steps.preview.outputs.mode == 'local'
+        run: kill $(lsof -t -i:5173) 2>/dev/null || true

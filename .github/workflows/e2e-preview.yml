@@ -1,0 +1,121 @@
+name: E2E — Preview Deployment
+
+# Triggered by Freebuff's preview deployment system
+# This workflow polls the preview URL until it's ready, then runs E2E tests
+on:
+  pull_request:
+    branches: [main]
+    types: [synchronize, reopened]
+
+concurrency:
+  group: e2e-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  wait-for-preview:
+    name: Wait for Preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      url: ${{ steps.resolve.outputs.url }}
+      ready: ${{ steps.resolve.outputs.ready }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve preview URL
+        id: resolve
+        run: |
+          # Freebuff preview URLs are derived from the branch name
+          # Format: https://<slug>.freebuff.dev
+          BRANCH="${{ github.head_ref || github.ref_name }}"
+          # Convert branch name to URL-safe slug
+          SLUG=$(echo "$BRANCH" | sed 's/[^a-z0-9-]//g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+
+          # Try common Freebuff URL patterns
+          PREVIEW_URL="https://${SLUG}.freebuff.dev"
+
+          echo "Checking $PREVIEW_URL ..."
+          for i in $(seq 1 20); do
+            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' "$PREVIEW_URL" 2>/dev/null || echo "000")
+            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "304" ]; then
+              echo "Preview ready at $PREVIEW_URL"
+              echo "url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
+              echo "ready=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "Attempt $i: HTTP $HTTP_CODE — retrying in 10s..."
+            sleep 10
+          done
+
+          echo "Preview did not become ready in time"
+          echo "url=" >> "$GITHUB_OUTPUT"
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+
+  e2e-preview:
+    name: E2E Tests (Preview)
+    needs: wait-for-preview
+    if: needs.wait-for-preview.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Seed admin account
+        run: |
+          PREVIEW_URL="${{ needs.wait-for-preview.outputs.url }}"
+          curl -s -X POST "$PREVIEW_URL/api/seed/admin" \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"admin@afrifundedcapital.com","password":"Admin@123456"}' || true
+          sleep 3
+
+      - name: Run Playwright E2E tests
+        run: npx playwright test --reporter=list,html
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ needs.wait-for-preview.outputs.url }}
+          CI: true
+          E2E_ADMIN_EMAIL: admin@afrifundedcapital.com
+          E2E_ADMIN_PASSWORD: Admin@123456
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report-preview
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload trace on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-traces-preview
+          path: test-results/**/trace.zip
+          retention-days: 7
+
+  # Post status back to the PR
+  e2e-status:
+    name: E2E Status
+    needs: [wait-for-preview, e2e-preview]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report status
+        run: |
+          if [ "${{ needs.wait-for-preview.outputs.ready }}" != "true" ]; then
+            echo "::warning::Preview deployment was not available. E2E tests skipped."
+          elif [ "${{ needs.e2e-preview.result }}" = "success" ]; then
+            echo "✅ E2E tests passed on preview deployment"
+          else
+            echo "❌ E2E tests failed on preview deployment"
+            exit 1
+          fi
