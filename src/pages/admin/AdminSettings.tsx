@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Loader2, Save, CreditCard, Shield, Webhook, Eye, EyeOff,
-  CheckCircle, AlertTriangle, Copy, Database, Zap, Globe, Mail
+  CheckCircle, AlertTriangle, Copy, Database, Zap, Globe, Mail, Users, Settings2
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -73,6 +73,10 @@ export default function AdminSettings() {
   const [savingResend, setSavingResend] = useState(false);
   const [testEmail, setTestEmail] = useState("");
   const [sendingTest, setSendingTest] = useState(false);
+
+  // Affiliate settings state
+  const [affiliateThreshold, setAffiliateThreshold] = useState(50000);
+  const [savingAffiliate, setSavingAffiliate] = useState(false);
 
   const [seeding, setSeeding] = useState(false);
 
@@ -154,6 +158,12 @@ export default function AdminSettings() {
         secretKey: pskSetting.value.secretKey || "",
         isEnabled: pskSetting.value.isEnabled === true,
       });
+    }
+
+    // Load affiliate auto-approve threshold
+    const affThreshold = settings.find((s: any) => s.key === "affiliate_auto_approve_threshold");
+    if (affThreshold?.value) {
+      setAffiliateThreshold(typeof affThreshold.value === "number" ? affThreshold.value : 50000);
     }
   }, [settings]);
 
@@ -291,6 +301,26 @@ export default function AdminSettings() {
       toast.error(e?.message || "Failed to save Paystack config");
     }
     setSavingPsk(false);
+  };
+
+  const saveAffiliateThreshold = async () => {
+    setSavingAffiliate(true);
+    try {
+      await fetch("/api/seed/settings/affiliate_auto_approve_threshold", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          value: affiliateThreshold,
+          group: "affiliate",
+        }),
+      });
+      toast.success(`Affiliate payout auto-approve threshold set to ₦${affiliateThreshold.toLocaleString()}`);
+      refetch();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to save affiliate threshold");
+    }
+    setSavingAffiliate(false);
   };
 
   const handleSeed = async () => {
@@ -471,6 +501,10 @@ export default function AdminSettings() {
           <TabsTrigger value="resend" className="text-xs data-[state=active]:bg-secondary gap-1.5">
             <Mail className="h-3 w-3" />
             Resend
+          </TabsTrigger>
+          <TabsTrigger value="affiliate" className="text-xs data-[state=active]:bg-secondary gap-1.5">
+            <Users className="h-3 w-3" />
+            Affiliate
           </TabsTrigger>
           <TabsTrigger value="webhooks" className="text-xs data-[state=active]:bg-secondary gap-1.5">
             <Webhook className="h-3 w-3" />
@@ -936,6 +970,70 @@ export default function AdminSettings() {
               </div>
             </div>
           )}
+        </TabsContent>
+
+        {/* ─── Affiliate ──────────────────────────── */}
+        <TabsContent value="affiliate" className="space-y-6">
+          <div className="card-subtle p-6 space-y-5">
+            <div className="flex items-center gap-2 mb-1">
+              <Settings2 className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-medium">Payout Auto-Approval</h3>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Configure the threshold below which affiliate payout requests are automatically approved without manual review. Requests above this amount will require admin approval.
+            </p>
+
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Auto-Approve Threshold (₦)</Label>
+              <div className="flex items-center gap-3">
+                <Input
+                  type="number"
+                  min={5000}
+                  step={5000}
+                  value={affiliateThreshold}
+                  onChange={(e) => setAffiliateThreshold(Math.max(5000, parseInt(e.target.value) || 0))}
+                  className="text-sm font-mono w-48"
+                />
+                <div className="text-xs text-muted-foreground">
+                  = ₦{affiliateThreshold.toLocaleString()}
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Minimum: ₦5,000. Payout requests at or below this amount will be instantly approved. Set to ₦0 to disable auto-approval.
+              </p>
+            </div>
+
+            <div className="card-subtle p-4 space-y-3">
+              <div className="text-xs font-medium">How it works</div>
+              <div className="space-y-2 text-xs text-muted-foreground">
+                <div className="flex items-start gap-2">
+                  <div className="h-4 w-4 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                    <CheckCircle className="h-2.5 w-2.5 text-emerald-500" />
+                  </div>
+                  <span>Request ≤ ₦{affiliateThreshold.toLocaleString()} → Auto-approved, user notified immediately</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <div className="h-4 w-4 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                    <AlertTriangle className="h-2.5 w-2.5 text-amber-500" />
+                  </div>
+                  <span>Request &gt; ₦{affiliateThreshold.toLocaleString()} → Pending admin review</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <Button
+                size="sm"
+                className="text-xs"
+                onClick={saveAffiliateThreshold}
+                disabled={savingAffiliate}
+              >
+                {savingAffiliate ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
+                Save Threshold
+              </Button>
+            </div>
+          </div>
         </TabsContent>
 
         {/* ─── Webhooks ─────────────────────────────── */}

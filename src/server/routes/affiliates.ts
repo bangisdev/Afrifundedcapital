@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
-import { affiliates, referrals, commissions, commissionPayouts, users, wallets, walletTransactions } from "../schema";
+import { affiliates, referrals, commissions, commissionPayouts, users, wallets, walletTransactions, settings } from "../schema";
 import { eq, desc, count, sql, and } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification } from "../lib/notifications";
@@ -111,6 +111,8 @@ app.post("/payout-request", requireAuth, async (c) => {
     return c.json({ error: "You already have a pending payout request. Please wait for it to be processed." }, 400);
   }
 
+  // Allow concurrent approved (not yet paid) requests — only block pending
+
   if (!body.paymentMethod) return c.json({ error: "Payment method is required" }, 400);
   if (!body.paymentDetails) return c.json({ error: "Payment details are required" }, 400);
 
@@ -119,27 +121,42 @@ app.post("/payout-request", requireAuth, async (c) => {
     pendingCommissions: affiliate.pendingCommissions - amount,
   }).where(eq(affiliates.id, affiliate.id)).run();
 
+  // Check auto-approve threshold from settings
+  const thresholdSetting = db.select().from(settings).where(eq(settings.key, "affiliate_auto_approve_threshold")).get();
+  const threshold = thresholdSetting ? JSON.parse(thresholdSetting.value) : 50000;
+  const shouldAutoApprove = amount <= threshold;
+
   // Create payout request
   const payout = db.insert(commissionPayouts).values({
     userId,
     affiliateId: affiliate.id,
     amount,
     currency: "NGN",
-    status: "pending",
+    status: shouldAutoApprove ? "approved" : "pending",
     paymentMethod: body.paymentMethod,
     paymentDetails: body.paymentDetails,
     requestedAt: now,
+    ...(shouldAutoApprove ? { processedAt: now } : {}),
   }).returning().get();
 
   // Notify user
-  createNotification(db, userId, {
-    type: "payout",
-    title: "Affiliate Payout Requested",
-    message: `Your payout request of ₦${amount.toLocaleString()} has been submitted and is pending review.`,
-    link: "/dashboard/affiliate",
-  });
+  if (shouldAutoApprove) {
+    createNotification(db, userId, {
+      type: "payout",
+      title: "Affiliate Payout Auto-Approved",
+      message: `Your payout request of ₦${amount.toLocaleString()} has been auto-approved and will be processed shortly. (Under ₦${threshold.toLocaleString()} threshold)`,
+      link: "/dashboard/affiliate",
+    });
+  } else {
+    createNotification(db, userId, {
+      type: "payout",
+      title: "Affiliate Payout Requested",
+      message: `Your payout request of ₦${amount.toLocaleString()} has been submitted and is pending review.`,
+      link: "/dashboard/affiliate",
+    });
+  }
 
-  return c.json(payout);
+  return c.json({ ...payout, autoApproved: shouldAutoApprove, threshold });
 });
 
 // ─── Admin: List all affiliate payout requests ───────────
