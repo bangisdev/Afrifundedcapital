@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getDb, getSqlite } from "../db";
-import { settings, challengeTemplates, accountSizes, users } from "../schema";
+import { settings, challengeTemplates, accountSizes, users, affiliates, wallets } from "../schema";
 import { eq, count } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { scrypt, randomBytes } from "crypto";
@@ -195,6 +195,69 @@ app.post("/seed", requireAuth, requireAdmin, (c) => {
   }
 
   return c.json({ success: true });
+});
+
+// ─── Backfill missing affiliate records + wallets for all existing users ────
+app.post("/backfill-affiliates", requireAuth, requireAdmin, (c) => {
+  const db = getDb();
+  const now = Date.now();
+  const allUsers = db.select().from(users).all();
+
+  let createdAffiliates = 0;
+  let createdWallets = 0;
+  let skipped = 0;
+
+  for (const user of allUsers) {
+    // Check if affiliate record exists
+    const existingAffiliate = db.select().from(affiliates).where(eq(affiliates.userId, user.id)).get();
+    if (!existingAffiliate) {
+      const code = "AFR" + Math.random().toString(36).substring(2, 8).toUpperCase();
+      // Ensure uniqueness
+      const codeExists = db.select().from(affiliates).where(eq(affiliates.referralCode, code)).get();
+      const finalCode = codeExists ? "AFR" + Math.random().toString(36).substring(2, 8).toUpperCase() : code;
+
+      db.insert(affiliates).values({
+        userId: user.id,
+        referralCode: finalCode,
+        totalReferrals: 0,
+        activeReferrals: 0,
+        totalCommissions: 0,
+        pendingCommissions: 0,
+        paidCommissions: 0,
+        commissionRate: 0.10,
+        commissionLevels: 0,
+        isActive: true,
+        joinedAt: now,
+      }).run();
+
+      // Also set referralCode on user record
+      db.update(users).set({ referralCode: finalCode, updatedAt: now }).where(eq(users.id, user.id)).run();
+      createdAffiliates++;
+    }
+
+    // Check if wallet exists
+    const existingWallet = db.select().from(wallets).where(eq(wallets.userId, user.id)).get();
+    if (!existingWallet) {
+      db.insert(wallets).values({
+        userId: user.id,
+        balance: 0,
+        referralBalance: 0,
+        bonusBalance: 0,
+        currency: "NGN",
+        createdAt: now,
+        updatedAt: now,
+      }).run();
+      createdWallets++;
+    }
+  }
+
+  return c.json({
+    success: true,
+    totalUsers: allUsers.length,
+    createdAffiliates,
+    createdWallets,
+    skipped: allUsers.length - createdAffiliates,
+  });
 });
 
 // Get enabled payment providers
