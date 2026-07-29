@@ -90,6 +90,30 @@ app.post("/admin/:id/approve", requireAuth, requireAdmin, async (c) => {
   return c.json({ success: true });
 });
 
+// Admin: Bulk approve payouts
+app.post("/admin/bulk-approve", requireAuth, requireAdmin, async (c) => {
+  const body = await c.req.json();
+  const ids: number[] = body.ids || [];
+  if (!ids.length) return c.json({ error: "No IDs provided" }, 400);
+  const db = getDb();
+  const now = Date.now();
+  let approved = 0;
+  for (const id of ids) {
+    const payout = db.select().from(profitPayouts).where(eq(profitPayouts.id, id)).get();
+    if (payout && payout.status === "pending") {
+      db.update(profitPayouts).set({ status: "approved", processedAt: now }).where(eq(profitPayouts.id, id)).run();
+      createNotification(db, payout.userId, {
+        type: "payout",
+        title: "Payout Approved",
+        message: `Your payout request of ${payout.currency} ${payout.amount.toLocaleString()} has been approved and will be processed shortly.`,
+        link: "/dashboard/payouts",
+      });
+      approved++;
+    }
+  }
+  return c.json({ success: true, approved });
+});
+
 // Admin: Reject payout
 app.post("/admin/:id/reject", requireAuth, requireAdmin, async (c) => {
   const id = parseInt(c.req.param("id"));
