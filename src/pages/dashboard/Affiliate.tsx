@@ -1,16 +1,26 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Copy, Users, TrendingUp, DollarSign, Link2, ExternalLink } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Loader2, Copy, Users, TrendingUp, DollarSign, Link2, ExternalLink, ArrowUpRight, Clock, CheckCircle, XCircle, Banknote } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Affiliate() {
   const { user } = useAuth();
   const { data: affiliate, isLoading } = useApiQuery<any>(["affiliate", "my"], "/api/affiliates/my");
+  const { data: payoutStats } = useApiQuery<any>(["affiliate", "payouts", "stats"], "/api/affiliates/payouts/stats");
+  const { data: payoutHistory } = useApiQuery<any[]>(["affiliate", "payouts"], "/api/affiliates/payouts");
   const generateCode = useApiMutation<any, any>("post", "/api/users/referral-code");
+  const requestPayout = useApiMutation<any, any>("post", "/api/affiliates/payout-request");
+
+  const [showPayoutDialog, setShowPayoutDialog] = useState(false);
+  const [payoutAmount, setPayoutAmount] = useState("");
+  const [payoutMethod, setPayoutMethod] = useState("bank_transfer");
+  const [payoutDetails, setPayoutDetails] = useState("");
 
   // Auto-generate code on mount if user has no affiliate record
   useEffect(() => {
@@ -33,7 +43,6 @@ export default function Affiliate() {
 
   const referralCode = affiliate?.referralCode || user?.referralCode || "N/A";
   const referralLink = typeof window !== "undefined" ? `${window.location.origin}/auth?ref=${referralCode}` : "";
-  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
 
   const stats = [
     { label: "Total Referrals", value: affiliate?.totalReferrals || 0, icon: Users },
@@ -41,6 +50,29 @@ export default function Affiliate() {
     { label: "Total Commissions", value: `₦${(affiliate?.totalCommissions || 0).toLocaleString()}`, icon: DollarSign },
     { label: "Pending Payout", value: `₦${(affiliate?.pendingCommissions || 0).toLocaleString()}`, icon: TrendingUp },
   ];
+
+  const handlePayoutRequest = async () => {
+    const amount = parseFloat(payoutAmount);
+    if (!amount || amount <= 0) { toast.error("Enter a valid amount"); return; }
+    if (amount < 5000) { toast.error("Minimum payout is ₦5,000"); return; }
+    if (!payoutDetails.trim()) { toast.error("Enter your payment details (bank name, account number)"); return; }
+
+    try {
+      await requestPayout.mutateAsync({
+        amount,
+        paymentMethod: payoutMethod,
+        paymentDetails: payoutDetails,
+      });
+      toast.success("Payout request submitted!");
+      setShowPayoutDialog(false);
+      setPayoutAmount("");
+      setPayoutDetails("");
+    } catch (e: any) {
+      toast.error(e.message || "Failed to submit payout request");
+    }
+  };
+
+  const pendingCommission = affiliate?.pendingCommissions || 0;
 
   return (
     <div className="space-y-8">
@@ -115,6 +147,83 @@ export default function Affiliate() {
         </div>
       </div>
 
+      {/* Commission Payout Section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium flex items-center gap-2">
+            <Banknote className="h-4 w-4" />
+            Commission Payouts
+          </h2>
+          <Button
+            size="sm"
+            className="text-xs"
+            onClick={() => setShowPayoutDialog(true)}
+            disabled={pendingCommission < 5000}
+          >
+            <ArrowUpRight className="h-3 w-3 mr-1" /> Withdraw
+          </Button>
+        </div>
+
+        {/* Payout Stats */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="card-subtle p-3">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Available</div>
+            <div className="text-sm font-semibold mt-1">₦{pendingCommission.toLocaleString()}</div>
+          </div>
+          <div className="card-subtle p-3">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Paid Out</div>
+            <div className="text-sm font-semibold mt-1">₦{(payoutStats?.paid || 0).toLocaleString()}</div>
+          </div>
+          <div className="card-subtle p-3">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Requests</div>
+            <div className="text-sm font-semibold mt-1">{payoutStats?.totalRequested || 0}</div>
+          </div>
+        </div>
+
+        {pendingCommission < 5000 && (
+          <p className="text-[10px] text-muted-foreground">Minimum withdrawal is ₦5,000. You need ₦{(5000 - pendingCommission).toLocaleString()} more to request a payout.</p>
+        )}
+
+        {/* Payout History */}
+        {payoutHistory && payoutHistory.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-xs font-medium text-muted-foreground">Recent Requests</h3>
+            {payoutHistory.map((p: any) => (
+              <div key={p.id} className="card-subtle p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center">
+                    {p.status === "paid" ? (
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                    ) : p.status === "rejected" ? (
+                      <XCircle className="h-4 w-4 text-red-500" />
+                    ) : (
+                      <Clock className="h-4 w-4 text-amber-500" />
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium">₦{p.amount.toLocaleString()}</div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {p.paymentMethod} · {p.requestedAt ? new Date(p.requestedAt).toLocaleDateString() : ""}
+                    </div>
+                  </div>
+                </div>
+                <Badge
+                  variant={
+                    p.status === "paid" ? "default"
+                    : p.status === "rejected" ? "destructive"
+                    : p.status === "approved" ? "secondary"
+                    : "outline"
+                  }
+                  className="text-[10px]"
+                >
+                  {p.status}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* How It Works */}
       <div className="card-subtle p-6">
         <h2 className="text-sm font-medium mb-4">How It Works</h2>
@@ -123,7 +232,7 @@ export default function Affiliate() {
             { step: 1, text: "Share your referral link or code with friends" },
             { step: 2, text: "They sign up using your link and purchase a challenge" },
             { step: 3, text: "You earn commission on their first purchase (10%)" },
-            { step: 4, text: "Withdraw your earnings from the Payouts page" },
+            { step: 4, text: "Withdraw your earnings once you reach ₦5,000" },
           ].map((item) => (
             <div key={item.step} className="flex items-start gap-3">
               <div className="h-5 w-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-semibold shrink-0 mt-0.5">
@@ -134,6 +243,73 @@ export default function Affiliate() {
           ))}
         </div>
       </div>
+
+      {/* Payout Request Dialog */}
+      <Dialog open={showPayoutDialog} onOpenChange={setShowPayoutDialog}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base font-medium">Request Commission Payout</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Available balance: ₦{pendingCommission.toLocaleString()}. Minimum withdrawal: ₦5,000.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Amount (NGN)</label>
+              <Input
+                type="number"
+                value={payoutAmount}
+                onChange={(e) => setPayoutAmount(e.target.value)}
+                placeholder="Enter amount"
+                className="text-xs h-9"
+                min={5000}
+                max={pendingCommission}
+              />
+              <div className="flex justify-between mt-1">
+                <span className="text-[10px] text-muted-foreground">Min: ₦5,000</span>
+                <button
+                  className="text-[10px] text-primary hover:underline"
+                  onClick={() => setPayoutAmount(String(pendingCommission))}
+                >
+                  Max: ₦{pendingCommission.toLocaleString()}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Payment Method</label>
+              <select
+                value={payoutMethod}
+                onChange={(e) => setPayoutMethod(e.target.value)}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs"
+              >
+                <option value="bank_transfer">Bank Transfer</option>
+                <option value="mobile_money">Mobile Money</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Payment Details</label>
+              <Input
+                value={payoutDetails}
+                onChange={(e) => setPayoutDetails(e.target.value)}
+                placeholder="Bank name, account name, account number"
+                className="text-xs h-9"
+              />
+            </div>
+            <Button
+              className="w-full text-xs"
+              size="sm"
+              onClick={handlePayoutRequest}
+              disabled={requestPayout.isPending || !payoutAmount || !payoutDetails.trim()}
+            >
+              {requestPayout.isPending ? (
+                <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Processing...</>
+              ) : (
+                "Submit Request"
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
