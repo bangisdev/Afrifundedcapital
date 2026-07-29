@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
-import { payments, paymentLogs, flutterwaveTransactions, challengeTemplates, accountSizes, userChallenges, mt5Accounts, settings, coupons, couponRedemptions, users } from "../schema";
+import { payments, paymentLogs, flutterwaveTransactions, challengeTemplates, accountSizes, userChallenges, mt5Accounts, settings, coupons, couponRedemptions, users, referrals, affiliates, commissions } from "../schema";
 import { eq, desc, count, and, sql } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { notify } from "../lib/notifications";
@@ -287,6 +287,58 @@ app.post("/verify", requireAuth, async (c) => {
       email: paymentConfirmationEmail(payerName, payment.amount, payment.currency, payment.description || "Challenge Purchase"),
     });
 
+    // ── Notify referrer if this user was referred ────────
+    try {
+      const referral = db.select().from(referrals).where(eq(referrals.referredId, userId)).get();
+      if (referral) {
+        const referrerAffiliate = db.select().from(affiliates).where(eq(affiliates.id, referral.affiliateId)).get();
+        if (referrerAffiliate) {
+          const referrerUser = db.select().from(users).where(eq(users.id, referrerAffiliate.userId)).get();
+          if (referrerUser) {
+            // Update referral status to converted
+            db.update(referrals).set({ status: "converted", convertedAt: now }).where(eq(referrals.id, referral.id)).run();
+
+            // Create commission record (10% of purchase)
+            const commissionAmount = payment.amount * 0.10;
+            db.insert(commissions).values({
+              affiliateId: referrerAffiliate.id,
+              userId: referrerAffiliate.userId,
+              referralId: referral.id,
+              amount: commissionAmount,
+              level: 1,
+              status: "pending",
+              source: "challenge_purchase",
+              description: `Commission from ${payerName}'s challenge purchase`,
+              createdAt: now,
+            }).run();
+
+            // Update affiliate commission totals
+            db.update(affiliates).set({
+              totalCommissions: referrerAffiliate.totalCommissions + commissionAmount,
+              pendingCommissions: referrerAffiliate.pendingCommissions + commissionAmount,
+            }).where(eq(affiliates.id, referrerAffiliate.id)).run();
+
+            // Notify referrer (dashboard + email)
+            const { referralPurchaseEmail } = await import("../lib/email");
+            notify(db, referrerUser.id, {
+              type: "referral",
+              title: "Referral Commission Earned!",
+              message: `${payerName} just purchased a challenge! You earned ${payment.currency} ${commissionAmount.toLocaleString()} commission.`,
+              link: "/dashboard/affiliate",
+              email: referralPurchaseEmail(
+                referrerUser.name || referrerUser.email || "Trader",
+                payerName,
+                payment.amount,
+                payment.currency,
+              ),
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("[Payments] Failed to process referral commission:", e);
+    }
+
     return c.json({ status: "completed", message: "Payment verified and challenge created" });
   }
 
@@ -412,6 +464,58 @@ app.post("/webhook/flutterwave", async (c) => {
           link: "/dashboard/challenges",
           email: paymentConfirmationEmail(webhookPayerName, payment.amount, payment.currency, payment.description || "Challenge Purchase"),
         });
+
+        // ── Notify referrer if this user was referred ────────
+        try {
+          const webhookReferral = db.select().from(referrals).where(eq(referrals.referredId, payment.userId)).get();
+          if (webhookReferral) {
+            const webhookReferrerAffiliate = db.select().from(affiliates).where(eq(affiliates.id, webhookReferral.affiliateId)).get();
+            if (webhookReferrerAffiliate) {
+              const webhookReferrerUser = db.select().from(users).where(eq(users.id, webhookReferrerAffiliate.userId)).get();
+              if (webhookReferrerUser) {
+                // Update referral status to converted
+                db.update(referrals).set({ status: "converted", convertedAt: now }).where(eq(referrals.id, webhookReferral.id)).run();
+
+                // Create commission record (10% of purchase)
+                const webhookCommissionAmount = payment.amount * 0.10;
+                db.insert(commissions).values({
+                  affiliateId: webhookReferrerAffiliate.id,
+                  userId: webhookReferrerAffiliate.userId,
+                  referralId: webhookReferral.id,
+                  amount: webhookCommissionAmount,
+                  level: 1,
+                  status: "pending",
+                  source: "challenge_purchase",
+                  description: `Commission from ${webhookPayerName}'s challenge purchase`,
+                  createdAt: now,
+                }).run();
+
+                // Update affiliate commission totals
+                db.update(affiliates).set({
+                  totalCommissions: webhookReferrerAffiliate.totalCommissions + webhookCommissionAmount,
+                  pendingCommissions: webhookReferrerAffiliate.pendingCommissions + webhookCommissionAmount,
+                }).where(eq(affiliates.id, webhookReferrerAffiliate.id)).run();
+
+                // Notify referrer (dashboard + email)
+                const { referralPurchaseEmail } = await import("../lib/email");
+                notify(db, webhookReferrerUser.id, {
+                  type: "referral",
+                  title: "Referral Commission Earned!",
+                  message: `${webhookPayerName} just purchased a challenge! You earned ${payment.currency} ${webhookCommissionAmount.toLocaleString()} commission.`,
+                  link: "/dashboard/affiliate",
+                  email: referralPurchaseEmail(
+                    webhookReferrerUser.name || webhookReferrerUser.email || "Trader",
+                    webhookPayerName,
+                    payment.amount,
+                    payment.currency,
+                  ),
+                });
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("[Payments] Failed to process referral commission (webhook):", e);
+        }
       }
     }
   }
