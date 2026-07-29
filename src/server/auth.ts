@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getDb, getSqlite } from "./db";
-import { users, sessions, affiliates, wallets } from "./schema";
+import { users, sessions, affiliates, wallets, referrals, walletTransactions } from "./schema";
 import { eq, and, gt } from "drizzle-orm";
 import { hash, verify } from "@node-rs/argon2";
 import { randomBytes } from "crypto";
@@ -94,10 +94,11 @@ authRouter.post("/sign-up/email", async (c) => {
   }
 
   // Create wallet for new user
+  let newWalletId: number | null = null;
   try {
     const existingWallet = db.select().from(wallets).where(eq(wallets.userId, user.id)).get();
     if (!existingWallet) {
-      db.insert(wallets).values({
+      const w = db.insert(wallets).values({
         userId: user.id,
         balance: 0,
         referralBalance: 0,
@@ -105,10 +106,70 @@ authRouter.post("/sign-up/email", async (c) => {
         currency: "NGN",
         createdAt: now,
         updatedAt: now,
-      }).run();
+      }).returning().get();
+      newWalletId = w.id;
+    } else {
+      newWalletId = existingWallet.id;
     }
   } catch (e) {
     console.warn("[Auth] Failed to create wallet:", e);
+  }
+
+  // ── Process referral (if ?ref=AFRxxxx was provided) ──────
+  const refParam = (body.referralCode as string)?.trim();
+  if (refParam) {
+    try {
+      const referrerAffiliate = db.select().from(affiliates).where(eq(affiliates.referralCode, refParam)).get();
+      if (referrerAffiliate && referrerAffiliate.userId !== user.id) {
+        // 1. Set referredBy on the new user
+        db.update(users).set({ referredBy: referrerAffiliate.userId, updatedAt: now }).where(eq(users.id, user.id)).run();
+
+        // 2. Create a referral record
+        const referralRecord = db.insert(referrals).values({
+          referrerId: referrerAffiliate.userId,
+          referredId: user.id,
+          affiliateId: referrerAffiliate.id,
+          status: "active",
+          createdAt: now,
+        }).returning().get();
+
+        // 3. Increment the referrer's affiliate stats
+        db.update(affiliates).set({
+          totalReferrals: referrerAffiliate.totalReferrals + 1,
+          activeReferrals: referrerAffiliate.activeReferrals + 1,
+        }).where(eq(affiliates.id, referrerAffiliate.id)).run();
+
+        // 4. Credit a ₦5,000 referral bonus to the new user's wallet
+        const REFERRAL_BONUS = 5000;
+        if (newWalletId) {
+          const wallet = db.select().from(wallets).where(eq(wallets.userId, user.id)).get();
+          if (wallet) {
+            db.update(wallets).set({
+              referralBalance: wallet.referralBalance + REFERRAL_BONUS,
+              bonusBalance: wallet.bonusBalance + REFERRAL_BONUS,
+              updatedAt: now,
+            }).where(eq(wallets.id, wallet.id)).run();
+
+            // Log the wallet transaction
+            db.insert(walletTransactions).values({
+              walletId: wallet.id,
+              userId: user.id,
+              type: "referral_bonus",
+              amount: REFERRAL_BONUS,
+              balanceBefore: wallet.balance,
+              balanceAfter: wallet.balance,
+              description: `Referral bonus from ${referrerAffiliate.referralCode}`,
+              reference: `ref_${referralRecord.id}`,
+              createdAt: now,
+            }).run();
+          }
+        }
+
+        console.log(`[Auth] Referral tracked: user ${user.id} referred by affiliate ${referrerAffiliate.id} (${refParam})`);
+      }
+    } catch (e) {
+      console.warn("[Auth] Failed to process referral:", e);
+    }
   }
 
   // Create session

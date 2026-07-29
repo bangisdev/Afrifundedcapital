@@ -12,8 +12,8 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
 import logo from "@/assets/logo.svg";
 import { ArrowRight, Loader2, Mail, Lock, UserIcon, AlertCircle } from "lucide-react";
-import { Suspense, useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 
@@ -26,7 +26,9 @@ interface AuthProps {
 function Auth({ redirectAfterAuth }: AuthProps = {}) {
   const { isLoading: authLoading, isAuthenticated, signIn, error: authError } = useAuth();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
+  const [searchParams] = useSearchParams();
+  const refCode = useMemo(() => searchParams.get("ref") || null, [searchParams]);
+  const [mode, setMode] = useState<"sign-in" | "sign-up">(refCode ? "sign-up" : "sign-in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -73,7 +75,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name, email, password, referralCode: refCode }),
       });
 
       if (!res.ok) {
