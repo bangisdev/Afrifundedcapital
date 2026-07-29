@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getDb, getSqlite } from "./db";
-import { users, sessions } from "./schema";
+import { users, sessions, affiliates, wallets } from "./schema";
 import { eq, and, gt } from "drizzle-orm";
 import { hash, verify } from "@node-rs/argon2";
 import { randomBytes } from "crypto";
@@ -66,6 +66,49 @@ authRouter.post("/sign-up/email", async (c) => {
     ).run(String(user.id), String(user.id), "email", hashedPassword);
   } catch (e) {
     console.warn("[Auth] Could not store password in accounts table:", e);
+  }
+
+  // Generate unique referral code for the new user
+  const referralCode = "AFR" + Math.random().toString(36).substring(2, 8).toUpperCase();
+
+  // Update user with referral code
+  db.update(users).set({ referralCode, updatedAt: now }).where(eq(users.id, user.id)).run();
+
+  // Create affiliate record automatically
+  try {
+    db.insert(affiliates).values({
+      userId: user.id,
+      referralCode,
+      totalReferrals: 0,
+      activeReferrals: 0,
+      totalCommissions: 0,
+      pendingCommissions: 0,
+      paidCommissions: 0,
+      commissionRate: 0.10,
+      commissionLevels: 0,
+      isActive: true,
+      joinedAt: now,
+    }).run();
+  } catch (e) {
+    console.warn("[Auth] Failed to create affiliate record:", e);
+  }
+
+  // Create wallet for new user
+  try {
+    const existingWallet = db.select().from(wallets).where(eq(wallets.userId, user.id)).get();
+    if (!existingWallet) {
+      db.insert(wallets).values({
+        userId: user.id,
+        balance: 0,
+        referralBalance: 0,
+        bonusBalance: 0,
+        currency: "NGN",
+        createdAt: now,
+        updatedAt: now,
+      }).run();
+    }
+  } catch (e) {
+    console.warn("[Auth] Failed to create wallet:", e);
   }
 
   // Create session

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
-import { users, sessions, auditLogs, settings, wallets } from "../schema";
+import { users, sessions, auditLogs, settings, wallets, affiliates } from "../schema";
 import { eq, desc, like, count, sql, and } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification } from "../lib/notifications";
@@ -74,9 +74,34 @@ app.put("/preferences", requireAuth, async (c) => {
 app.post("/referral-code", requireAuth, async (c) => {
   const userId = c.get("userId");
   const db = getDb();
-  const code = "AFR" + Math.random().toString(36).substring(2, 8).toUpperCase();
 
-  db.update(users).set({ referralCode: code, updatedAt: Date.now() }).where(eq(users.id, userId)).run();
+  // Check if user already has an affiliate record
+  const existing = db.select().from(affiliates).where(eq(affiliates.userId, userId)).get();
+  if (existing) {
+    return c.json({ referralCode: existing.referralCode });
+  }
+
+  // Generate unique code
+  const code = "AFR" + Math.random().toString(36).substring(2, 8).toUpperCase();
+  const now = Date.now();
+
+  // Update user record
+  db.update(users).set({ referralCode: code, updatedAt: now }).where(eq(users.id, userId)).run();
+
+  // Create affiliate record
+  db.insert(affiliates).values({
+    userId,
+    referralCode: code,
+    totalReferrals: 0,
+    activeReferrals: 0,
+    totalCommissions: 0,
+    pendingCommissions: 0,
+    paidCommissions: 0,
+    commissionRate: 0.10,
+    commissionLevels: 0,
+    isActive: true,
+    joinedAt: now,
+  }).run();
 
   return c.json({ referralCode: code });
 });
