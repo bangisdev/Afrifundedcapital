@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { getDb, getSqlite } from "./db";
 import { users, sessions, affiliates, wallets, referrals, walletTransactions } from "./schema";
+import { notify } from "./lib/notifications";
+import { referralSignupEmail } from "./lib/email";
 import { eq, and, gt } from "drizzle-orm";
 import { hash, verify } from "@node-rs/argon2";
 import { randomBytes } from "crypto";
@@ -166,6 +168,22 @@ authRouter.post("/sign-up/email", async (c) => {
         }
 
         console.log(`[Auth] Referral tracked: user ${user.id} referred by affiliate ${referrerAffiliate.id} (${refParam})`);
+
+        // 5. Notify the referrer (dashboard + email)
+        const referrerUser = db.select().from(users).where(eq(users.id, referrerAffiliate.userId)).get();
+        if (referrerUser) {
+          notify(db, referrerUser.id, {
+            type: "referral",
+            title: "New Referral Signup!",
+            message: `${user.name || user.email} signed up using your referral link. You'll earn commission when they purchase a challenge.`,
+            link: "/dashboard/affiliate",
+            email: referralSignupEmail(
+              referrerUser.name || referrerUser.email || "Trader",
+              user.name || user.email?.split("@")[0] || "New User",
+              user.email || "",
+            ),
+          }).catch(() => {});
+        }
       }
     } catch (e) {
       console.warn("[Auth] Failed to process referral:", e);

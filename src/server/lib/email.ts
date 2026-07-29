@@ -318,3 +318,51 @@ export function payoutRejectedEmail(userName: string, amount: number, currency: 
     `),
   };
 }
+
+// ─── Referral Emails ────────────────────────────────
+
+export function referralSignupEmail(referrerName: string, referredName: string, referredEmail: string): SendEmailParams & { subject: string; html: string } {
+  return {
+    to: "",
+    subject: "New Referral Signup! 🎉 — AfriFundedCapital",
+    html: wrapLayout(`
+      <h2 style="font-size: 18px; font-weight: 600; margin: 0 0 12px;">New Referral Signup! 🎉</h2>
+      <p style="font-size: 14px; color: #444;">Hi ${referrerName},</p>
+      <p style="font-size: 14px; color: #444;">
+        Great news! Someone just signed up using your referral link.
+      </p>
+      <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 12px 16px; margin: 16px 0;">
+        <p style="font-size: 13px; color: #166534; margin: 0;"><strong>Name:</strong> ${referredName}</p>
+        <p style="font-size: 13px; color: #166534; margin: 4px 0 0;"><strong>Email:</strong> ${referredEmail}</p>
+      </div>
+      <p style="font-size: 14px; color: #444;">
+        When they purchase a challenge, you'll earn commission on their first purchase.
+        Keep sharing your referral link to earn more!
+      </p>
+      ${button(`${APP_URL}/dashboard/affiliate`, "View Affiliate Dashboard")}
+    `),
+  };
+}
+
+export function referralPurchaseEmail(referrerName: string, referredName: string, purchaseAmount: number, currency: string): SendEmailParams & { subject: string; html: string } {
+  return {
+    to: "",
+    subject: "Referral Commission Earned! 💰 — AfriFundedCapital",
+    html: wrapLayout(`
+      <h2 style="font-size: 18px; font-weight: 600; margin: 0 0 12px;">Commission Earned! 💰</h2>
+      <p style="font-size: 14px; color: #444;">Hi ${referrerName},</p>
+      <p style="font-size: 14px; color: #444;">
+        Your referral <strong>${referredName}</strong> just purchased a challenge!
+      </p>
+      <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 12px 16px; margin: 16px 0;">
+        <p style="font-size: 13px; color: #166534; margin: 0;"><strong>Purchase Amount:</strong> ${currency} ${purchaseAmount.toLocaleString()}</p>
+        <p style="font-size: 13px; color: #166534; margin: 4px 0 0;"><strong>Commission Rate:</strong> 10%</p>
+        <p style="font-size: 13px; color: #166534; margin: 4px 0 0;"><strong>Earned:</strong> ${currency} ${(purchaseAmount * 0.10).toLocaleString()}</p>
+      </div>
+      <p style="font-size: 14px; color: #444;">
+        Your commission will be available for payout once approved by our team.
+      </p>
+      ${button(`${APP_URL}/dashboard/affiliate`, "View Affiliate Dashboard")}
+    `),
+  };
+}
