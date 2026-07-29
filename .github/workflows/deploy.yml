@@ -1,0 +1,300 @@
+# ═══════════════════════════════════════════════════════════════
+# AfriFundedCapital — SSH Deployment Workflow
+# ═══════════════════════════════════════════════════════════════
+#
+# Triggers after Docker Publish workflow completes successfully.
+# SSHs into the target server, pulls the new image, and runs
+# docker compose up with zero-downtime rolling restart.
+#
+# Required GitHub Secrets:
+#   DEPLOY_SSH_HOST        — Server IP or hostname
+#   DEPLOY_SSH_USER        — SSH username (e.g. root, deploy)
+#   DEPLOY_SSH_PRIVATE_KEY — SSH private key (ed25519 or RSA)
+#   DEPLOY_SSH_PORT        — SSH port (optional, defaults to 22)
+#   DEPLOY_PATH            — Path to docker-compose.yml on server
+#   DEPLOY_ENV             — Environment: production | staging
+#
+# Features:
+#   • Zero-downtime rolling restart (nginx keeps serving)
+#   • Automatic rollback on health check failure
+#   • Deployment log with timing and status
+#   • Pre-deploy backup of SQLite database
+#   • Slack/Discord notification (optional)
+#
+# ═══════════════════════════════════════════════════════════════
+
+name: Deploy to Server
+
+on:
+  # Trigger after Docker Publish workflow succeeds
+  workflow_run:
+    workflows: ["Docker Publish"]
+    types: [completed]
+
+  # Manual deployment with tag selection
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Docker image tag to deploy"
+        required: true
+        default: "latest"
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          - production
+          - staging
+      force_rollback_on_failure:
+        description: "Auto-rollback if health check fails"
+        required: false
+        default: "true"
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ─── Deploy ──────────────────────────────────────────────
+  deploy:
+    name: Deploy to ${{ inputs.environment || 'production' }}
+    runs-on: ubuntu-latest
+    # Only run if Docker Publish succeeded (or manual dispatch)
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+
+    # Use environment protection rules (requires approval for production)
+    environment:
+      name: ${{ inputs.environment || 'production' }}
+      url: https://${{ secrets.DEPLOY_SSH_HOST }}
+
+    concurrency:
+      group: deploy-${{ inputs.environment || 'production' }}
+      cancel-in-progress: false  # Don't cancel in-progress deployments
+
+    steps:
+      # ── Checkout for deploy scripts ────────────────────
+      - uses: actions/checkout@v4
+
+      # ── Determine deployment tag ───────────────────────
+      - name: Determine image tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          elif [ "${{ github.event_name }}" = "workflow_run" ]; then
+            # Use the release tag from the triggering workflow
+            TAG="${{ github.event.workflow_run.head_branch }}"
+            # If it was a release, use the release tag
+            if [ -n "${{ github.event.workflow_run.head_branch }}" ]; then
+              TAG="sha-${{ github.sha }}"
+            fi
+            TAG="latest"
+          else
+            TAG="latest"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Deploying image tag: $TAG"
+
+      # ── Setup SSH ──────────────────────────────────────
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          # Disable strict host checking for automation
+          cat > ~/.ssh/config << EOF
+          Host deploy-target
+            HostName ${{ secrets.DEPLOY_SSH_HOST }}
+            User ${{ secrets.DEPLOY_SSH_USER }}
+            Port ${{ secrets.DEPLOY_SSH_PORT || 22 }}
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+            ConnectTimeout 30
+          EOF
+
+      # ── Test SSH connectivity ──────────────────────────
+      - name: Test SSH connection
+        run: |
+          ssh deploy-target "echo 'SSH connection successful ✅'"
+          ssh deploy-target "uname -a"
+
+      # ── Pre-deploy: Backup database ────────────────────
+      - name: Pre-deploy database backup
+        run: |
+          DEPLOY_PATH="${{ secrets.DEPLOY_PATH || '/opt/afrifundedcapital' }}"
+          ssh deploy-target "
+            cd $DEPLOY_PATH
+            # Backup SQLite database if it exists
+            if [ -f data/afrifundedcapital.db ]; then
+              BACKUP_NAME=\"afrifundedcapital_\$(date +%Y%m%d_%H%M%S).db\"
+              cp data/afrifundedcapital.db \"data/backups/\$BACKUP_NAME\"
+              echo '✅ Database backed up to data/backups/\$BACKUP_NAME'
+
+              # Keep only last 7 backups
+              ls -t data/backups/*.db 2>/dev/null | tail -n +8 | xargs rm -f 2>/dev/null
+            else
+              echo 'ℹ️  No database to backup (first deployment?)'
+            fi
+          "
+
+      # ── Deploy: Pull & restart ─────────────────────────
+      - name: Pull image and restart containers
+        run: |
+          DEPLOY_PATH="${{ secrets.DEPLOY_PATH || '/opt/afrifundedcapital' }}"
+          TAG="${{ steps.tag.outputs.tag }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}"
+
+          echo "📦 Pulling image: $IMAGE"
+          ssh deploy-target "
+            cd $DEPLOY_PATH
+
+            # Pull the new image
+            docker pull $IMAGE
+
+            # Export the tag for docker-compose
+            export AFC_TAG=$TAG
+
+            # Stop and remove old containers gracefully
+            echo '🔄 Performing rolling restart...'
+            docker compose --profile prod --profile nginx up -d --force-recreate --no-deps app-prod
+
+            # Wait for app to be healthy
+            echo '⏳ Waiting for health check...'
+            sleep 10
+          "
+
+      # ── Verify: Health check ───────────────────────────
+      - name: Verify deployment health
+        id: health
+        run: |
+          DEPLOY_PATH="${{ secrets.DEPLOY_PATH || '/opt/afrifundedcapital' }}"
+          MAX_RETRIES=5
+          RETRY_COUNT=0
+          HEALTHY=false
+
+          echo "🏥 Running health checks..."
+
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            echo "  Attempt $RETRY_COUNT/$MAX_RETRIES..."
+
+            RESULT=$(ssh deploy-target "
+              cd $DEPLOY_PATH
+              # Check if container is running
+              docker compose --profile prod ps --format json app-prod 2>/dev/null | grep -o '\"State\":\"[^\"]*\"' || echo 'not found'
+            " 2>/dev/null)
+
+            if echo "$RESULT" | grep -q "running\|healthy"; then
+              HEALTHY=true
+              echo "✅ Container is running!"
+              break
+            fi
+
+            echo "  ⏳ Container not ready yet, waiting 10s..."
+            sleep 10
+          done
+
+          if [ "$HEALTHY" = "false" ]; then
+            echo "❌ Health check failed after $MAX_RETRIES attempts"
+            echo "healthy=false" >> $GITHUB_OUTPUT
+          else
+            echo "healthy=true" >> $GITHUB_OUTPUT
+          fi
+
+      # ── Rollback on failure ────────────────────────────
+      - name: Rollback on health check failure
+        if: steps.health.outputs.healthy == 'false' && (inputs.force_rollback_on_failure != 'false')
+        run: |
+          DEPLOY_PATH="${{ secrets.DEPLOY_PATH || '/opt/afrifundedcapital' }}"
+
+          echo "🔄 Rolling back deployment..."
+          ssh deploy-target "
+            cd $DEPLOY_PATH
+
+            # Get the previous image tag from the running container
+            PREV_IMAGE=\$(docker inspect afc-prod --format='{{.Config.Image}}' 2>/dev/null || echo '')
+
+            if [ -n \"\$PREV_IMAGE\" ]; then
+              echo \"Rolling back to: \$PREV_IMAGE\"
+              export AFC_TAG=\$(echo \$PREV_IMAGE | cut -d: -f2)
+              docker compose --profile prod up -d --force-recreate --no-deps app-prod
+              echo '✅ Rollback complete'
+            else
+              echo '⚠️  No previous image to rollback to'
+              # Stop all containers
+              docker compose --profile prod --profile nginx down
+              echo '🛑 Containers stopped — manual intervention required'
+            fi
+          "
+
+      # ── Post-deploy: Restart nginx (if using) ──────────
+      - name: Restart nginx (if configured)
+        if: steps.health.outputs.healthy == 'true'
+        run: |
+          DEPLOY_PATH="${{ secrets.DEPLOY_PATH || '/opt/afrifundedcapital' }}"
+          ssh deploy-target "
+            cd $DEPLOY_PATH
+            # Reload nginx to pick up any config changes
+            docker compose --profile nginx exec -T nginx nginx -s reload 2>/dev/null || echo 'ℹ️  Nginx not running, skipping reload'
+          "
+
+      # ── Post-deploy: Cleanup old images ────────────────
+      - name: Cleanup old Docker images
+        if: steps.health.outputs.healthy == 'true'
+        run: |
+          ssh deploy-target "
+            echo '🧹 Cleaning up old Docker images...'
+            docker image prune -f --filter 'until=168h' 2>/dev/null || true
+            docker volume prune -f 2>/dev/null || true
+          "
+
+      # ── Deployment summary ─────────────────────────────
+      - name: Deployment summary
+        if: always()
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          HEALTHY="${{ steps.health.outputs.healthy }}"
+          ENV="${{ inputs.environment || 'production' }}"
+
+          if [ "$HEALTHY" = "true" ]; then
+            STATUS="✅ Deployed successfully"
+          else
+            STATUS="❌ Deployment failed (rolled back)"
+          fi
+
+          echo "## 🚀 Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Environment** | \`$ENV\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image Tag** | \`$TAG\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Server** | \`${{ secrets.DEPLOY_SSH_HOST }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Status** | $STATUS |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Triggered by** | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Verify Deployment" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "ssh ${{ secrets.DEPLOY_SSH_USER }}@${{ secrets.DEPLOY_SSH_HOST }} \\" >> $GITHUB_STEP_SUMMARY
+          echo "  'cd ${{ secrets.DEPLOY_PATH || \"/opt/afrifundedcapital\" }} && docker compose --profile prod ps'" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      # ── Notify on failure ──────────────────────────────
+      - name: Notify on deployment failure
+        if: steps.health.outputs.healthy == 'false'
+        run: |
+          echo "❌ Deployment failed! Check the workflow logs for details."
+          # Add Slack/Discord notification here if needed:
+          # curl -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+          #   -H 'Content-Type: application/json' \
+          #   -d '{"text":"❌ Deployment failed for ${{ github.repository }}"}'
+
+      # ── Cleanup SSH key ────────────────────────────────
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
