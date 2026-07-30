@@ -180,21 +180,37 @@ app.get("/admin/by-user", requireAuth, requireAdmin, (c) => {
   return c.json(breakdown);
 });
 
-// Admin: List all payouts (supports ?startDate=&endDate= in ms timestamps, ?status= filter)
+// Admin: List all payouts (supports ?startDate=&endDate=, ?status=, ?userId= filters)
 app.get("/admin/all", requireAuth, requireAdmin, (c) => {
   const db = getDb();
   const startDate = c.req.query("startDate");
   const endDate = c.req.query("endDate");
   const status = c.req.query("status");
+  const userIdParam = c.req.query("userId");
   const conditions: ReturnType<typeof eq | typeof sql>[] = [];
   if (startDate) conditions.push(sql`${profitPayouts.requestedAt} >= ${parseInt(startDate)}`);
   if (endDate) conditions.push(sql`${profitPayouts.requestedAt} <= ${parseInt(endDate)}`);
   if (status) conditions.push(eq(profitPayouts.status, status));
+  if (userIdParam) conditions.push(eq(profitPayouts.userId, parseInt(userIdParam)));
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   const items = where
     ? db.select().from(profitPayouts).where(where).orderBy(desc(profitPayouts.requestedAt)).all()
     : db.select().from(profitPayouts).orderBy(desc(profitPayouts.requestedAt)).all();
   return c.json(items);
+});
+
+// Admin: Search users by name or email for the user filter autocomplete
+app.get("/admin/search-users", requireAuth, requireAdmin, (c) => {
+  const db = getDb();
+  const q = c.req.query("q") || "";
+  if (!q || q.length < 1) return c.json([]);
+  const pattern = `%${q}%`;
+  const results = db.select({ id: users.id, name: users.name, email: users.email })
+    .from(users)
+    .where(sql`(${users.name} LIKE ${pattern}) OR (${users.email} LIKE ${pattern}) OR (CAST(${users.id} AS TEXT) LIKE ${pattern})`)
+    .limit(15)
+    .all();
+  return c.json(results);
 });
 
 // Admin: Approve payout

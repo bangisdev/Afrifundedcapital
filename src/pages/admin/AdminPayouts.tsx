@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Loader2, CheckCircle, XCircle, CheckCheck, Trash2, DollarSign, Calendar, X, Users } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, CheckCheck, Trash2, DollarSign, Calendar, X, Users, Search } from "lucide-react";
 import { toast } from "sonner";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 
 const REJECTION_PRESETS = [
   "Incomplete documentation",
@@ -45,15 +45,51 @@ export default function AdminPayouts() {
   const [endDate, setEndDate] = useState("");
   const [activePreset, setActivePreset] = useState("All Time");
   const [statusFilter, setStatusFilter] = useState("");
+  const [userFilter, setUserFilter] = useState<{ id: number; name: string; email: string } | null>(null);
+  const [userSearch, setUserSearch] = useState("");
+  const [userSearchResults, setUserSearchResults] = useState<{ id: number; name: string; email: string }[]>([]);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const userSearchTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const userDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Debounced user search
+  useEffect(() => {
+    if (userSearchTimeout.current) clearTimeout(userSearchTimeout.current);
+    if (userSearch.length < 1) {
+      setUserSearchResults([]);
+      return;
+    }
+    userSearchTimeout.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/payouts/admin/search-users?q=${encodeURIComponent(userSearch)}`);
+        const data = await res.json();
+        setUserSearchResults(data);
+        setShowUserDropdown(true);
+      } catch { /* ignore */ }
+    }, 250);
+    return () => { if (userSearchTimeout.current) clearTimeout(userSearchTimeout.current); };
+  }, [userSearch]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (userDropdownRef.current && !userDropdownRef.current.contains(e.target as Node)) {
+        setShowUserDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   const buildQueryParams = useCallback(() => {
     const params = new URLSearchParams();
     if (startDate) params.set("startDate", String(toStartOfDay(startDate)));
     if (endDate) params.set("endDate", String(toEndOfDay(endDate)));
     if (statusFilter) params.set("status", statusFilter);
+    if (userFilter) params.set("userId", String(userFilter.id));
     const qs = params.toString();
     return qs ? `?${qs}` : "";
-  }, [startDate, endDate, statusFilter]);
+  }, [startDate, endDate, statusFilter, userFilter]);
 
   const allQueryParams = buildQueryParams();
   const { data: payouts, isLoading, refetch } = useApiQuery<any[]>(["admin", "payouts", allQueryParams], `/api/payouts/admin/all${allQueryParams}`);
@@ -85,8 +121,10 @@ export default function AdminPayouts() {
     setEndDate("");
     setActivePreset("All Time");
     setStatusFilter("");
+    setUserFilter(null);
+    setUserSearch("");
   };
-  const hasActiveFilters = startDate || endDate || statusFilter;
+  const hasActiveFilters = startDate || endDate || statusFilter || userFilter;
 
   const allPending = useMemo(() => (payouts || []).filter((p: any) => p.status === "pending"), [payouts]);
   const allApproved = useMemo(() => (payouts || []).filter((p: any) => p.status === "approved"), [payouts]);
@@ -305,6 +343,52 @@ export default function AdminPayouts() {
               <option value="paid">Paid</option>
               <option value="rejected">Rejected</option>
             </select>
+          </div>
+          {/* User search filter */}
+          <div className="space-y-1 relative" ref={userDropdownRef}>
+            <label className="text-[10px] text-muted-foreground">User</label>
+            {userFilter ? (
+              <div className="flex items-center gap-1 h-8 rounded-md border border-border bg-muted px-2">
+                <span className="text-xs font-medium truncate max-w-[150px]">{userFilter.name || userFilter.email}</span>
+                <span className="text-[10px] text-muted-foreground">#{userFilter.id}</span>
+                <button
+                  onClick={() => { setUserFilter(null); setUserSearch(""); }}
+                  className="ml-auto p-0.5 hover:bg-background rounded"
+                >
+                  <X className="h-3 w-3 text-muted-foreground" />
+                </button>
+              </div>
+            ) : (
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search name, email, or ID..."
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  onFocus={() => userSearchResults.length > 0 && setShowUserDropdown(true)}
+                  className="h-8 w-48 rounded-md border border-input bg-background pl-7 pr-2 text-xs"
+                />
+                {showUserDropdown && userSearchResults.length > 0 && (
+                  <div className="absolute z-50 top-full mt-1 w-full max-h-48 overflow-y-auto rounded-md border border-border bg-background shadow-md">
+                    {userSearchResults.map((u) => (
+                      <button
+                        key={u.id}
+                        onClick={() => {
+                          setUserFilter(u);
+                          setUserSearch("");
+                          setShowUserDropdown(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-muted transition-colors flex items-center justify-between"
+                      >
+                        <span className="font-medium truncate">{u.name || "Unnamed"}</span>
+                        <span className="text-muted-foreground ml-2">{u.email} · #{u.id}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
         {hasActiveFilters && (
