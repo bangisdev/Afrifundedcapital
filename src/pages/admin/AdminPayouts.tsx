@@ -528,7 +528,23 @@ export default function AdminPayouts() {
               <div>
                 <div className="text-sm font-medium">₦{(p.amount || 0).toLocaleString()}</div>
                 <div className="text-xs text-muted-foreground">
-                  User {p.userId} · {p.paymentMethod || "bank"} · {p.requestedAt ? new Date(p.requestedAt).toLocaleDateString() : ""}
+                  <button
+                    type="button"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (userFilter?.id === p.userId) return;
+                      try {
+                        const res = await fetch(`/api/payouts/admin/search-users?q=${p.userId}`);
+                        const users = await res.json();
+                        const match = users.find((u: any) => u.id === p.userId);
+                        if (match) setUserFilter(match);
+                      } catch { /* ignore */ }
+                    }}
+                    className={`hover:text-foreground hover:underline transition-colors ${userFilter?.id === p.userId ? 'text-foreground font-medium' : ''}`}
+                  >
+                    User {p.userId}
+                  </button>
+                  {' '}· {p.paymentMethod || "bank"} · {p.requestedAt ? new Date(p.requestedAt).toLocaleDateString() : ""}
                 </div>
                 {p.status === "rejected" && p.rejectionReason && (
                   <div className="text-[10px] text-destructive mt-1">
