@@ -4,7 +4,7 @@ import { profitPayouts, fundedAccounts, userChallenges, users } from "../schema"
 import { eq, desc, and, count, sql } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification } from "../lib/notifications";
-import { sendEmail, payoutApprovedEmail, payoutRejectedEmail } from "../lib/email";
+import { sendEmail, payoutApprovedEmail, payoutRejectedEmail, payoutPaidEmail } from "../lib/email";
 
 const app = new Hono();
 
@@ -139,6 +139,29 @@ app.post("/admin/:id/reject", requireAuth, requireAdmin, async (c) => {
     const user = db.select().from(users).where(eq(users.id, payout.userId)).get();
     if (user?.email) {
       const email = payoutRejectedEmail(user.name || "Trader", payout.amount, payout.currency, body.reason || "No reason provided");
+      sendEmail({ ...email, to: user.email }).catch(() => {});
+    }
+  }
+  return c.json({ success: true });
+});
+
+// Admin: Mark payout as paid
+app.post("/admin/:id/mark-paid", requireAuth, requireAdmin, async (c) => {
+  const id = parseInt(c.req.param("id"));
+  const db = getDb();
+  const payout = db.select().from(profitPayouts).where(eq(profitPayouts.id, id)).get();
+  db.update(profitPayouts).set({ status: "paid", processedAt: Date.now() }).where(eq(profitPayouts.id, id)).run();
+  if (payout) {
+    createNotification(db, payout.userId, {
+      type: "payout",
+      title: "Payout Sent",
+      message: `Your payout of ${payout.currency} ${payout.amount.toLocaleString()} has been sent to your account.`,
+      link: "/dashboard/payouts",
+    });
+    // Send email notification
+    const user = db.select().from(users).where(eq(users.id, payout.userId)).get();
+    if (user?.email) {
+      const email = payoutPaidEmail(user.name || "Trader", payout.amount, payout.currency);
       sendEmail({ ...email, to: user.email }).catch(() => {});
     }
   }

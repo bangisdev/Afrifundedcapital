@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Loader2, CheckCircle, XCircle, CheckCheck, Trash2 } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, CheckCheck, Trash2, DollarSign } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useMemo } from "react";
 
@@ -26,6 +26,7 @@ export default function AdminPayouts() {
   const approvePayout = useApiMutation<any, any>("post", "/api/payouts/admin/${id}/approve");
   const rejectPayout = useApiMutation<any, any>("post", "/api/payouts/admin/${id}/reject");
   const bulkApprove = useApiMutation<any, any>("post", "/api/payouts/admin/bulk-approve");
+  const markPaid = useApiMutation<any, any>("post", "/api/payouts/admin/${id}/mark-paid");
 
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
@@ -219,6 +220,20 @@ export default function AdminPayouts() {
                     <XCircle className="h-3 w-3 mr-1" /> Reject
                   </Button>
                 </>
+              )}
+              {p.status === "approved" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-[10px] text-emerald-600"
+                  onClick={async () => {
+                    await markPaid.mutateAsync({ id: p.id });
+                    toast.success("Marked as paid — user notified");
+                    refetch();
+                  }}
+                >
+                  <DollarSign className="h-3 w-3 mr-1" /> Mark Paid
+                </Button>
               )}
             </div>
           </div>

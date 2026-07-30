@@ -319,6 +319,28 @@ export function payoutRejectedEmail(userName: string, amount: number, currency: 
   };
 }
 
+export function payoutPaidEmail(userName: string, amount: number, currency: string): SendEmailParams & { subject: string; html: string } {
+  return {
+    to: "",
+    subject: "Payout Sent — AfriFundedCapital",
+    html: wrapLayout(`
+      <h2 style="font-size: 18px; font-weight: 600; margin: 0 0 12px;">Payout Sent ✓</h2>
+      <p style="font-size: 14px; color: #444;">Hi ${userName},</p>
+      <p style="font-size: 14px; color: #444;">
+        Your payout of <strong>${currency} ${amount.toLocaleString()}</strong> has been sent to your account.
+      </p>
+      <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 12px 16px; margin: 16px 0;">
+        <p style="font-size: 13px; color: #166534; margin: 0;"><strong>Amount:</strong> ${currency} ${amount.toLocaleString()}</p>
+        <p style="font-size: 13px; color: #166534; margin: 4px 0 0;"><strong>Status:</strong> Funds have been transferred</p>
+      </div>
+      <p style="font-size: 14px; color: #444;">
+        Depending on your payment method, funds should arrive within 1–3 business days.
+      </p>
+      ${button(`${APP_URL}/dashboard/payouts`, "View Payouts")}
+    `),
+  };
+}
+
 // ─── Referral Emails ────────────────────────────────
 
 export function referralSignupEmail(referrerName: string, referredName: string, referredEmail: string): SendEmailParams & { subject: string; html: string } {
