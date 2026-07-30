@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getDb, getSqlite } from "../db";
-import { settings, challengeTemplates, accountSizes, users, affiliates, wallets } from "../schema";
+import { settings, challengeTemplates, accountSizes, users, affiliates, wallets, fundedAccounts, mt5Accounts, tradingMetrics, userChallenges } from "../schema";
 import { eq, count } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { scrypt, randomBytes } from "crypto";
@@ -311,6 +311,163 @@ app.get("/admin/status", (c) => {
   return c.json({
     seeded: !!existing,
     email: existing?.email || null,
+  });
+});
+
+// ─── Seed sample funded accounts, MT5 accounts & trading metrics ────
+app.post("/funded", requireAuth, requireAdmin, (c) => {
+  const db = getDb();
+  const now = Date.now();
+  const userId = c.get("userId");
+
+  // Check if funded accounts already seeded for this user
+  const existingFunded = db.select().from(fundedAccounts).where(eq(fundedAccounts.userId, userId)).get();
+  if (existingFunded) {
+    return c.json({ success: true, message: "Funded accounts already seeded for this user", skipped: true });
+  }
+
+  // Pick the first template + account size to use
+  const template = db.select().from(challengeTemplates).limit(1).get();
+  if (!template) {
+    return c.json({ error: "No challenge templates found. Run /api/seed/seed first." }, 400);
+  }
+  const accountSize = db.select().from(accountSizes).where(eq(accountSizes.templateId, template.id)).limit(1).get();
+  if (!accountSize) {
+    return c.json({ error: "No account sizes found. Run /api/seed/seed first." }, 400);
+  }
+
+  const results = {
+    mt5Accounts: 0,
+    challenges: 0,
+    fundedAccounts: 0,
+    metricsPoints: 0,
+  };
+
+  // Create 3 sample funded accounts with different sizes
+  const sampleConfigs = [
+    { size: 10000, login: "AFC-" + String(100000 + userId).padStart(6, "0"), leverage: 100 },
+    { size: 25000, login: "AFC-" + String(200000 + userId).padStart(6, "0"), leverage: 100 },
+    { size: 50000, login: "AFC-" + String(300000 + userId).padStart(6, "0"), leverage: 50 },
+  ];
+
+  for (const cfg of sampleConfigs) {
+    // Create MT5 account
+    const mt5 = db.insert(mt5Accounts).values({
+      userId,
+      login: cfg.login,
+      password: "Demo@" + cfg.login.slice(-4),
+      investorPassword: "Investor@" + cfg.login.slice(-4),
+      server: "AfriFundedCapital-Demo",
+      group: "DEMO\\AFC",
+      leverage: cfg.leverage,
+      balance: cfg.size,
+      equity: cfg.size,
+      currency: "USD",
+      isActive: true,
+      isSuspended: false,
+      lastSyncAt: now,
+      createdAt: now,
+      metadata: JSON.stringify({ seeded: true, accountSize: cfg.size }),
+    }).returning().get();
+    results.mt5Accounts++;
+
+    // Create user challenge in funded status
+    const challenge = db.insert(userChallenges).values({
+      userId,
+      templateId: template.id,
+      accountSizeId: accountSize.id,
+      status: "funded",
+      accountSize: cfg.size,
+      currency: "USD",
+      profitTarget: template.profitTarget,
+      dailyDrawdown: template.dailyDrawdown,
+      maxDrawdown: template.maxDrawdown,
+      maxLeverage: cfg.leverage,
+      minTradingDays: template.minTradingDays,
+      startedAt: now - 30 * 86400000,
+      phase1PassedAt: now - 20 * 86400000,
+      phase2PassedAt: now - 10 * 86400000,
+      fundedAt: now - 5 * 86400000,
+      expiresAt: now + 90 * 86400000,
+      amountPaid: 0,
+      mt5AccountId: mt5.id,
+      currentPhase: 3,
+      createdAt: now - 30 * 86400000,
+      updatedAt: now,
+    }).returning().get();
+    results.challenges++;
+
+    // Create funded account record
+    const funded = db.insert(fundedAccounts).values({
+      userId,
+      challengeId: challenge.id,
+      mt5AccountId: mt5.id,
+      accountSize: cfg.size,
+      currency: "USD",
+      profitSharePercent: 80,
+      isActive: true,
+      activatedAt: now - 5 * 86400000,
+      totalPayouts: 0,
+    }).returning().get();
+    results.fundedAccounts++;
+
+    // Generate 30 days of trading metrics history
+    let balance = cfg.size;
+    let peakBalance = cfg.size;
+
+    for (let day = 29; day >= 0; day--) {
+      const dayTs = now - day * 86400000;
+      // Simulate realistic P&L: small daily swings
+      const dailyPnL = (Math.random() - 0.45) * cfg.size * 0.02; // Slight upward bias
+      const floatingPL = (Math.random() - 0.5) * cfg.size * 0.01;
+      balance = Math.max(balance + dailyPnL, cfg.size * 0.85); // Never drop below 15%
+      peakBalance = Math.max(peakBalance, balance);
+      const equity = balance + floatingPL;
+      const totalProfit = balance - cfg.size;
+      const currentDD = ((peakBalance - equity) / peakBalance) * 100;
+      const dailyDD = dailyPnL < 0 ? Math.abs(dailyPnL / balance) * 100 : 0;
+      const remainingDD = template.maxDrawdown - currentDD;
+      const profitProgress = Math.max(0, Math.min(100, (totalProfit / (cfg.size * template.profitTarget / 100)) * 100));
+
+      db.insert(tradingMetrics).values({
+        mt5AccountId: mt5.id,
+        challengeId: challenge.id,
+        balance: Math.round(balance * 100) / 100,
+        equity: Math.round(equity * 100) / 100,
+        floatingPL: Math.round(floatingPL * 100) / 100,
+        dailyPL: Math.round(dailyPnL * 100) / 100,
+        totalProfit: Math.round(totalProfit * 100) / 100,
+        currentDrawdown: Math.round(currentDD * 100) / 100,
+        dailyDrawdown: Math.round(dailyDD * 100) / 100,
+        trailingDrawdown: Math.round(currentDD * 100) / 100,
+        relativeDrawdown: Math.round(currentDD * 100) / 100,
+        absoluteDrawdown: Math.round(Math.max(0, (cfg.size - equity)) / cfg.size * 100 * 100) / 100,
+        remainingDrawdown: Math.round(Math.max(0, remainingDD) * 100) / 100,
+        profitTargetProgress: Math.round(profitProgress * 100) / 100,
+        tradingDaysCount: 30 - day,
+        openPositions: Math.floor(Math.random() * 5),
+        closedTrades: (30 - day) * Math.floor(Math.random() * 8 + 2),
+        winRate: Math.round((50 + Math.random() * 20) * 100) / 100,
+        lossRate: Math.round((30 + Math.random() * 20) * 100) / 100,
+        averageRR: Math.round((1.2 + Math.random() * 1.5) * 100) / 100,
+        profitFactor: Math.round((1.0 + Math.random() * 1.5) * 100) / 100,
+        expectancy: Math.round((10 + Math.random() * 50) * 100) / 100,
+        largestWin: Math.round(cfg.size * 0.03 * Math.random() * 100) / 100,
+        largestLoss: Math.round(-cfg.size * 0.02 * Math.random() * 100) / 100,
+        consecutiveWins: Math.floor(Math.random() * 8) + 1,
+        consecutiveLosses: Math.floor(Math.random() * 4) + 1,
+        riskScore: Math.round((2 + Math.random() * 6) * 100) / 100,
+        healthScore: Math.round((60 + Math.random() * 35) * 100) / 100,
+        recordedAt: dayTs,
+      }).run();
+      results.metricsPoints++;
+    }
+  }
+
+  return c.json({
+    success: true,
+    message: "Sample funded accounts seeded successfully",
+    ...results,
   });
 });
 
