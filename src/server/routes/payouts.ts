@@ -57,22 +57,39 @@ app.post("/request", requireAuth, async (c) => {
   return c.json(result);
 });
 
-// Admin: Payout stats
+// Admin: Payout stats (supports ?startDate=&endDate= in ms timestamps)
 app.get("/admin/stats", requireAuth, requireAdmin, (c) => {
   const db = getDb();
-  const now = Date.now();
+  const startDate = c.req.query("startDate");
+  const endDate = c.req.query("endDate");
+  const startTs = startDate ? parseInt(startDate) : undefined;
+  const endTs = endDate ? parseInt(endDate) : undefined;
+
+  // Build date filter conditions
+  const dateConditions: ReturnType<typeof sql>[] = [];
+  if (startTs) dateConditions.push(sql`${profitPayouts.requestedAt} >= ${startTs}`);
+  if (endTs) dateConditions.push(sql`${profitPayouts.requestedAt} <= ${endTs}`);
+  const dateFilter = dateConditions.length > 0 ? and(...dateConditions) : undefined;
+
+  // Default period (this month) for the stats cards
   const startOfMonth = new Date();
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
   const startOfMonthTs = startOfMonth.getTime();
 
-  const total = db.select({ count: count() }).from(profitPayouts).get();
-  const pending = db.select({ count: count() }).from(profitPayouts).where(eq(profitPayouts.status, "pending")).get();
-  const approved = db.select({ count: count() }).from(profitPayouts).where(eq(profitPayouts.status, "approved")).get();
-  const approvedAmount = db.select({ total: sql<number>`coalesce(sum(amount), 0)` })
-    .from(profitPayouts).where(eq(profitPayouts.status, "approved")).get();
-  const totalPaid = db.select({ total: sql<number>`coalesce(sum(amount), 0)` })
-    .from(profitPayouts).where(eq(profitPayouts.status, "paid")).get();
+  const total = dateFilter
+    ? db.select({ count: count() }).from(profitPayouts).where(dateFilter).get()
+    : db.select({ count: count() }).from(profitPayouts).get();
+  const pending = dateFilter
+    ? db.select({ count: count() }).from(profitPayouts).where(and(eq(profitPayouts.status, "pending"), ...dateConditions)).get()
+    : db.select({ count: count() }).from(profitPayouts).where(eq(profitPayouts.status, "pending")).get();
+  const approved = dateFilter
+    ? db.select({ count: count() }).from(profitPayouts).where(and(eq(profitPayouts.status, "approved"), ...dateConditions)).get()
+    : db.select({ count: count() }).from(profitPayouts).where(eq(profitPayouts.status, "approved")).get();
+  const approvedAmount = dateFilter
+    ? db.select({ total: sql<number>`coalesce(sum(amount), 0)` }).from(profitPayouts).where(and(eq(profitPayouts.status, "approved"), ...dateConditions)).get()
+    : db.select({ total: sql<number>`coalesce(sum(amount), 0)` }).from(profitPayouts).where(eq(profitPayouts.status, "approved")).get();
+  const totalPaid = db.select({ total: sql<number>`coalesce(sum(amount), 0)` }).from(profitPayouts).where(eq(profitPayouts.status, "paid")).get();
   const paidThisMonth = db.select({ total: sql<number>`coalesce(sum(amount), 0)` })
     .from(profitPayouts).where(and(eq(profitPayouts.status, "paid"), sql`${profitPayouts.processedAt} >= ${startOfMonthTs}`)).get();
   const paidCount = db.select({ count: count() })
@@ -88,10 +105,20 @@ app.get("/admin/stats", requireAuth, requireAdmin, (c) => {
   });
 });
 
-// Admin: List all payouts
+// Admin: List all payouts (supports ?startDate=&endDate= in ms timestamps, ?status= filter)
 app.get("/admin/all", requireAuth, requireAdmin, (c) => {
   const db = getDb();
-  const items = db.select().from(profitPayouts).orderBy(desc(profitPayouts.requestedAt)).all();
+  const startDate = c.req.query("startDate");
+  const endDate = c.req.query("endDate");
+  const status = c.req.query("status");
+  const conditions: ReturnType<typeof eq | typeof sql>[] = [];
+  if (startDate) conditions.push(sql`${profitPayouts.requestedAt} >= ${parseInt(startDate)}`);
+  if (endDate) conditions.push(sql`${profitPayouts.requestedAt} <= ${parseInt(endDate)}`);
+  if (status) conditions.push(eq(profitPayouts.status, status));
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const items = where
+    ? db.select().from(profitPayouts).where(where).orderBy(desc(profitPayouts.requestedAt)).all()
+    : db.select().from(profitPayouts).orderBy(desc(profitPayouts.requestedAt)).all();
   return c.json(items);
 });
 

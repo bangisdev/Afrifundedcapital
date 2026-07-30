@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Loader2, CheckCircle, XCircle, CheckCheck, Trash2, DollarSign } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, CheckCheck, Trash2, DollarSign, Calendar, X } from "lucide-react";
 import { toast } from "sonner";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 
 const REJECTION_PRESETS = [
   "Incomplete documentation",
@@ -20,9 +20,44 @@ const REJECTION_PRESETS = [
   "Insufficient profit evidence",
 ];
 
+function toStartOfDay(dateStr: string): number {
+  const d = new Date(dateStr);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+function toEndOfDay(dateStr: string): number {
+  const d = new Date(dateStr);
+  d.setHours(23, 59, 59, 999);
+  return d.getTime();
+}
+
+const PRESETS: { label: string; getRange: () => { start: string; end: string } }[] = [
+  { label: "Today", getRange: () => { const d = new Date().toISOString().slice(0, 10); return { start: d, end: d }; } },
+  { label: "This Month", getRange: () => { const now = new Date(); return { start: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`, end: now.toISOString().slice(0, 10) }; } },
+  { label: "Last Month", getRange: () => { const d = new Date(); d.setMonth(d.getMonth() - 1); return { start: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`, end: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()}` }; } },
+  { label: "This Year", getRange: () => { const y = new Date().getFullYear(); return { start: `${y}-01-01`, end: `${y}-12-31` }; } },
+  { label: "Last 30 Days", getRange: () => { const end = new Date(); const start = new Date(); start.setDate(start.getDate() - 30); return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) }; } },
+  { label: "All Time", getRange: () => ({ start: "", end: "" }) },
+];
+
 export default function AdminPayouts() {
-  const { data: payouts, isLoading, refetch } = useApiQuery<any[]>(["admin", "payouts"], "/api/payouts/admin/all");
-  const { data: stats } = useApiQuery<any>(["admin", "payout-stats"], "/api/payouts/admin/stats");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [activePreset, setActivePreset] = useState("All Time");
+  const [statusFilter, setStatusFilter] = useState("");
+
+  const buildQueryParams = useCallback(() => {
+    const params = new URLSearchParams();
+    if (startDate) params.set("startDate", String(toStartOfDay(startDate)));
+    if (endDate) params.set("endDate", String(toEndOfDay(endDate)));
+    if (statusFilter) params.set("status", statusFilter);
+    const qs = params.toString();
+    return qs ? `?${qs}` : "";
+  }, [startDate, endDate, statusFilter]);
+
+  const allQueryParams = buildQueryParams();
+  const { data: payouts, isLoading, refetch } = useApiQuery<any[]>(["admin", "payouts", allQueryParams], `/api/payouts/admin/all${allQueryParams}`);
+  const { data: stats } = useApiQuery<any>(["admin", "payout-stats", allQueryParams], `/api/payouts/admin/stats${allQueryParams}`);
   const approvePayout = useApiMutation<any, any>("post", "/api/payouts/admin/${id}/approve");
   const rejectPayout = useApiMutation<any, any>("post", "/api/payouts/admin/${id}/reject");
   const bulkApprove = useApiMutation<any, any>("post", "/api/payouts/admin/bulk-approve");
@@ -37,6 +72,20 @@ export default function AdminPayouts() {
   const [rejectReason, setRejectReason] = useState("");
   const [reasonPreset, setReasonPreset] = useState("");
   const [individualRejectId, setIndividualRejectId] = useState<number | null>(null);
+
+  const applyPreset = (preset: typeof PRESETS[number]) => {
+    const range = preset.getRange();
+    setStartDate(range.start);
+    setEndDate(range.end);
+    setActivePreset(preset.label);
+  };
+  const clearFilters = () => {
+    setStartDate("");
+    setEndDate("");
+    setActivePreset("All Time");
+    setStatusFilter("");
+  };
+  const hasActiveFilters = startDate || endDate || statusFilter;
 
   const allPending = useMemo(() => (payouts || []).filter((p: any) => p.status === "pending"), [payouts]);
   const allApproved = useMemo(() => (payouts || []).filter((p: any) => p.status === "approved"), [payouts]);
@@ -136,6 +185,76 @@ export default function AdminPayouts() {
           </div>
         </div>
       )}
+
+      {/* Date Range Filter */}
+      <div className="card-subtle p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Calendar className="h-4 w-4 text-muted-foreground" />
+          <span className="text-xs font-medium text-muted-foreground">Filter by Date</span>
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" className="h-6 text-[10px] ml-auto" onClick={clearFilters}>
+              <X className="h-3 w-3 mr-1" /> Clear
+            </Button>
+          )}
+        </div>
+        {/* Preset buttons */}
+        <div className="flex flex-wrap gap-1.5">
+          {PRESETS.map((p) => (
+            <button
+              key={p.label}
+              onClick={() => applyPreset(p)}
+              className={`px-2.5 py-1 text-[10px] rounded-md border transition-colors ${
+                activePreset === p.label
+                  ? "bg-foreground text-background border-foreground"
+                  : "bg-background text-muted-foreground border-border hover:bg-muted"
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        {/* Custom date inputs */}
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground">From</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => { setStartDate(e.target.value); setActivePreset(""); }}
+              className="h-8 w-36 rounded-md border border-input bg-background px-2 text-xs"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground">To</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => { setEndDate(e.target.value); setActivePreset(""); }}
+              className="h-8 w-36 rounded-md border border-input bg-background px-2 text-xs"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="h-8 w-32 rounded-md border border-input bg-background px-2 text-xs"
+            >
+              <option value="">All statuses</option>
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="paid">Paid</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </div>
+        </div>
+        {hasActiveFilters && (
+          <div className="text-[10px] text-muted-foreground">
+            Showing {(payouts || []).length} result{(payouts || []).length !== 1 ? 's' : ''}
+            {startDate ? ` from ${startDate}` : ''}{endDate ? ` to ${endDate}` : ''}{statusFilter ? ` · ${statusFilter}` : ''}
+          </div>
+        )}
+      </div>
 
       {/* Bulk Actions — Pending */}
       {allPending.length > 0 && (
