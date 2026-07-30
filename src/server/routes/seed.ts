@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getDb, getSqlite } from "../db";
-import { settings, challengeTemplates, accountSizes, users, affiliates, wallets, fundedAccounts, mt5Accounts, tradingMetrics, userChallenges } from "../schema";
+import { settings, challengeTemplates, accountSizes, users, affiliates, wallets, fundedAccounts, mt5Accounts, tradingMetrics, userChallenges, profitPayouts } from "../schema";
 import { eq, count } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { scrypt, randomBytes } from "crypto";
@@ -341,6 +341,7 @@ app.post("/funded", requireAuth, requireAdmin, (c) => {
     challenges: 0,
     fundedAccounts: 0,
     metricsPoints: 0,
+    payoutRequests: 0,
   };
 
   // Create 3 sample funded accounts with different sizes
@@ -410,6 +411,40 @@ app.post("/funded", requireAuth, requireAdmin, (c) => {
       totalPayouts: 0,
     }).returning().get();
     results.fundedAccounts++;
+
+    // Create sample payout requests with various statuses
+    const payoutStatuses = [
+      { status: "pending", daysAgo: 2, amount: cfg.size * 0.08 },
+      { status: "approved", daysAgo: 7, amount: cfg.size * 0.05 },
+      { status: "paid", daysAgo: 14, amount: cfg.size * 0.10 },
+      { status: "rejected", daysAgo: 21, amount: cfg.size * 0.03 },
+    ];
+
+    for (const p of payoutStatuses) {
+      const requestedAt = now - p.daysAgo * 86400000;
+      const processedAt = p.status !== "pending" ? requestedAt + 2 * 86400000 : null;
+
+      db.insert(profitPayouts).values({
+        userId,
+        fundedAccountId: funded.id,
+        challengeId: challenge.id,
+        amount: Math.round(p.amount * 100) / 100,
+        currency: "USD",
+        status: p.status,
+        paymentMethod: "bank_transfer",
+        paymentDetails: JSON.stringify({
+          bankName: "Access Bank",
+          accountNumber: "0123456789",
+          accountName: "AfriFunded Test User",
+        }),
+        processedBy: p.status !== "pending" ? userId : null,
+        notes: p.status === "rejected" ? "Incomplete banking details" : null,
+        rejectionReason: p.status === "rejected" ? "Please update your bank account information" : null,
+        requestedAt,
+        processedAt,
+      }).run();
+      results.payoutRequests++;
+    }
 
     // Generate 30 days of trading metrics history
     let balance = cfg.size;
