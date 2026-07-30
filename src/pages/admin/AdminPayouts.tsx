@@ -3,6 +3,7 @@ import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Loader2, CheckCircle, XCircle, CheckCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useMemo } from "react";
@@ -16,6 +17,8 @@ export default function AdminPayouts() {
 
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [confirmApprove, setConfirmApprove] = useState(false);
+  const [confirmReject, setConfirmReject] = useState(false);
 
   const allPending = useMemo(() => (payouts || []).filter((p: any) => p.status === "pending"), [payouts]);
   const allSelected = allPending.length > 0 && allPending.every((p: any) => selected.has(p.id));
@@ -118,7 +121,7 @@ export default function AdminPayouts() {
                 size="sm"
                 className="h-7 text-[10px] text-emerald-600"
                 disabled={bulkLoading}
-                onClick={handleBulkApprove}
+                onClick={() => setConfirmApprove(true)}
               >
                 {bulkLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <CheckCheck className="h-3 w-3 mr-1" />}
                 Approve {selected.size}
@@ -128,7 +131,7 @@ export default function AdminPayouts() {
                 size="sm"
                 className="h-7 text-[10px] text-destructive"
                 disabled={bulkLoading}
-                onClick={handleBulkReject}
+                onClick={() => setConfirmReject(true)}
               >
                 <Trash2 className="h-3 w-3 mr-1" />
                 Reject {selected.size}
@@ -206,6 +209,81 @@ export default function AdminPayouts() {
           </div>
         ))}
       </div>
+
+      {/* Confirmation Dialogs */}
+      <AlertDialog open={confirmApprove} onOpenChange={setConfirmApprove}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Approve {selected.size} Payout{selected.size !== 1 ? 's' : ''}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will approve {selected.size} pending payout request{selected.size !== 1 ? 's' : ''} and credit the funds to the users' wallets. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={bulkLoading}
+              className="bg-emerald-600 hover:bg-emerald-700"
+              onClick={async () => {
+                setBulkLoading(true);
+                try {
+                  const result = await bulkApprove.mutateAsync({ ids: Array.from(selected) });
+                  toast.success(`Approved ${result?.approved || selected.size} payouts`);
+                  setSelected(new Set());
+                  refetch();
+                } catch {
+                  toast.error("Bulk approve failed");
+                } finally {
+                  setBulkLoading(false);
+                  setConfirmApprove(false);
+                }
+              }}
+            >
+              {bulkLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+              Confirm Approve
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmReject} onOpenChange={setConfirmReject}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reject {selected.size} Payout{selected.size !== 1 ? 's' : ''}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will reject {selected.size} pending payout request{selected.size !== 1 ? 's' : ''}. Users will be notified. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={bulkLoading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async () => {
+                setBulkLoading(true);
+                try {
+                  let rejected = 0;
+                  for (const id of selected) {
+                    try {
+                      await rejectPayout.mutateAsync({ id, reason: "Bulk rejection by admin" });
+                      rejected++;
+                    } catch { /* skip */ }
+                  }
+                  toast.success(`Rejected ${rejected} payouts`);
+                  setSelected(new Set());
+                  refetch();
+                } finally {
+                  setBulkLoading(false);
+                  setConfirmReject(false);
+                }
+              }}
+            >
+              {bulkLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+              Confirm Reject
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
