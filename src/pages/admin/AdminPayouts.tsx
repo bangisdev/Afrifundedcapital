@@ -3,6 +3,7 @@ import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Loader2, CheckCircle, XCircle, CheckCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -19,6 +20,8 @@ export default function AdminPayouts() {
   const [bulkLoading, setBulkLoading] = useState(false);
   const [confirmApprove, setConfirmApprove] = useState(false);
   const [confirmReject, setConfirmReject] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [individualRejectId, setIndividualRejectId] = useState<number | null>(null);
 
   const allPending = useMemo(() => (payouts || []).filter((p: any) => p.status === "pending"), [payouts]);
   const allSelected = allPending.length > 0 && allPending.every((p: any) => selected.has(p.id));
@@ -54,14 +57,14 @@ export default function AdminPayouts() {
     }
   };
 
-  const handleBulkReject = async () => {
+  const handleBulkReject = async (reason: string) => {
     if (selected.size === 0) return;
     setBulkLoading(true);
     try {
       let rejected = 0;
       for (const id of selected) {
         try {
-          await rejectPayout.mutateAsync({ id, reason: "Bulk rejection by admin" });
+          await rejectPayout.mutateAsync({ id, reason: reason || "Bulk rejection by admin" });
           rejected++;
         } catch { /* skip */ }
       }
@@ -131,7 +134,7 @@ export default function AdminPayouts() {
                 size="sm"
                 className="h-7 text-[10px] text-destructive"
                 disabled={bulkLoading}
-                onClick={() => setConfirmReject(true)}
+                onClick={() => { setRejectReason(""); setConfirmReject(true); }}
               >
                 <Trash2 className="h-3 w-3 mr-1" />
                 Reject {selected.size}
@@ -194,12 +197,7 @@ export default function AdminPayouts() {
                     variant="ghost"
                     size="sm"
                     className="h-7 text-[10px] text-destructive"
-                    onClick={async () => {
-                      await rejectPayout.mutateAsync({ id: p.id, reason: "Insufficient documentation" });
-                      toast.success("Rejected");
-                      setSelected((prev) => { const n = new Set(prev); n.delete(p.id); return n; });
-                      refetch();
-                    }}
+                    onClick={() => { setRejectReason(""); setIndividualRejectId(p.id); }}
                   >
                     <XCircle className="h-3 w-3 mr-1" /> Reject
                   </Button>
@@ -210,7 +208,7 @@ export default function AdminPayouts() {
         ))}
       </div>
 
-      {/* Confirmation Dialogs */}
+      {/* Approve Confirmation Dialog */}
       <AlertDialog open={confirmApprove} onOpenChange={setConfirmApprove}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -246,16 +244,27 @@ export default function AdminPayouts() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={confirmReject} onOpenChange={setConfirmReject}>
+      {/* Bulk Reject Confirmation Dialog with Reason */}
+      <AlertDialog open={confirmReject} onOpenChange={(open) => { setConfirmReject(open); if (!open) setRejectReason(""); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Reject {selected.size} Payout{selected.size !== 1 ? 's' : ''}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will reject {selected.size} pending payout request{selected.size !== 1 ? 's' : ''}. Users will be notified. This action cannot be undone.
+              This will reject {selected.size} pending payout request{selected.size !== 1 ? 's' : ''}. Users will be notified with the reason below. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="py-2">
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Rejection Reason</label>
+            <Textarea
+              placeholder="e.g. Incomplete bank details, suspicious activity, documentation mismatch..."
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={3}
+              className="text-sm resize-none"
+            />
+          </div>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={bulkLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={bulkLoading} onClick={() => setRejectReason("")}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               disabled={bulkLoading}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -265,12 +274,13 @@ export default function AdminPayouts() {
                   let rejected = 0;
                   for (const id of selected) {
                     try {
-                      await rejectPayout.mutateAsync({ id, reason: "Bulk rejection by admin" });
+                      await rejectPayout.mutateAsync({ id, reason: rejectReason || "Rejected by admin" });
                       rejected++;
                     } catch { /* skip */ }
                   }
                   toast.success(`Rejected ${rejected} payouts`);
                   setSelected(new Set());
+                  setRejectReason("");
                   refetch();
                 } finally {
                   setBulkLoading(false);
@@ -279,6 +289,50 @@ export default function AdminPayouts() {
               }}
             >
               {bulkLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+              Confirm Reject
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Individual Reject Dialog with Reason */}
+      <AlertDialog open={individualRejectId !== null} onOpenChange={(open) => { if (!open) { setIndividualRejectId(null); setRejectReason(""); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reject This Payout?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The user will be notified with the reason below. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-2">
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Rejection Reason</label>
+            <Textarea
+              placeholder="e.g. Incomplete bank details, suspicious activity, documentation mismatch..."
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={3}
+              className="text-sm resize-none"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setIndividualRejectId(null); setRejectReason(""); }}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async () => {
+                if (individualRejectId === null) return;
+                try {
+                  await rejectPayout.mutateAsync({ id: individualRejectId, reason: rejectReason || "Rejected by admin" });
+                  toast.success("Rejected");
+                  setSelected((prev) => { const n = new Set(prev); n.delete(individualRejectId); return n; });
+                  refetch();
+                } catch {
+                  toast.error("Reject failed");
+                } finally {
+                  setIndividualRejectId(null);
+                  setRejectReason("");
+                }
+              }}
+            >
               Confirm Reject
             </AlertDialogAction>
           </AlertDialogFooter>
