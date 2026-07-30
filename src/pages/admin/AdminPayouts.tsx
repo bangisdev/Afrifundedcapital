@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Loader2, CheckCircle, XCircle, CheckCheck, Trash2, DollarSign, Calendar, X, Users, Search } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, CheckCheck, Trash2, DollarSign, Calendar, X, Users, Search, Download } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 
@@ -189,6 +189,39 @@ export default function AdminPayouts() {
     }
   };
 
+  const exportCSV = useCallback(() => {
+    const items = payouts || [];
+    if (items.length === 0) {
+      toast.error("No data to export");
+      return;
+    }
+    const headers = ["ID", "User ID", "Amount", "Currency", "Status", "Payment Method", "Requested At", "Processed At", "Rejection Reason"];
+    const escape = (val: string) => val.includes(",") || val.includes('"') || val.includes("\n") ? `"${val.replace(/"/g, '""')}"` : val;
+    const rows = items.map((p: any) => [
+      String(p.id),
+      String(p.userId),
+      String(p.amount),
+      p.currency || "NGN",
+      p.status || "",
+      p.paymentMethod || "bank",
+      p.requestedAt ? new Date(p.requestedAt).toISOString() : "",
+      p.processedAt ? new Date(p.processedAt).toISOString() : "",
+      p.rejectionReason || "",
+    ].map(escape).join(","));
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const date = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `payouts-${date}${statusFilter ? `-${statusFilter}` : ""}${userFilter ? `-user${userFilter.id}` : ""}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${items.length} payout${items.length !== 1 ? 's' : ''} to CSV`);
+  }, [payouts, statusFilter, userFilter]);
+
   if (isLoading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
 
   return (
@@ -287,12 +320,23 @@ export default function AdminPayouts() {
       <div className="card-subtle p-4 space-y-3">
         <div className="flex items-center gap-2">
           <Calendar className="h-4 w-4 text-muted-foreground" />
-          <span className="text-xs font-medium text-muted-foreground">Filter by Date</span>
-          {hasActiveFilters && (
-            <Button variant="ghost" size="sm" className="h-6 text-[10px] ml-auto" onClick={clearFilters}>
-              <X className="h-3 w-3 mr-1" /> Clear
+          <span className="text-xs font-medium text-muted-foreground">Filters</span>
+          <div className="ml-auto flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 text-[10px]"
+              disabled={!payouts || payouts.length === 0}
+              onClick={exportCSV}
+            >
+              <Download className="h-3 w-3 mr-1" /> Export CSV
             </Button>
-          )}
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={clearFilters}>
+                <X className="h-3 w-3 mr-1" /> Clear
+              </Button>
+            )}
+          </div>
         </div>
         {/* Preset buttons */}
         <div className="flex flex-wrap gap-1.5">
