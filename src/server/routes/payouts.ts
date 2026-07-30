@@ -4,6 +4,7 @@ import { profitPayouts, fundedAccounts, userChallenges, users } from "../schema"
 import { eq, desc, and, count, sql } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification } from "../lib/notifications";
+import { sendEmail, payoutApprovedEmail, payoutRejectedEmail } from "../lib/email";
 
 const app = new Hono();
 
@@ -86,6 +87,12 @@ app.post("/admin/:id/approve", requireAuth, requireAdmin, async (c) => {
       message: `Your payout request of ${payout.currency} ${payout.amount.toLocaleString()} has been approved and will be processed shortly.`,
       link: "/dashboard/payouts",
     });
+    // Send email notification
+    const user = db.select().from(users).where(eq(users.id, payout.userId)).get();
+    if (user?.email) {
+      const email = payoutApprovedEmail(user.name || "Trader", payout.amount, payout.currency);
+      sendEmail({ ...email, to: user.email }).catch(() => {});
+    }
   }
   return c.json({ success: true });
 });
@@ -128,6 +135,12 @@ app.post("/admin/:id/reject", requireAuth, requireAdmin, async (c) => {
       message: `Your payout request of ${payout.currency} ${payout.amount.toLocaleString()} was rejected. Reason: ${body.reason || "Not specified"}.`,
       link: "/dashboard/payouts",
     });
+    // Send email notification with rejection reason
+    const user = db.select().from(users).where(eq(users.id, payout.userId)).get();
+    if (user?.email) {
+      const email = payoutRejectedEmail(user.name || "Trader", payout.amount, payout.currency, body.reason || "No reason provided");
+      sendEmail({ ...email, to: user.email }).catch(() => {});
+    }
   }
   return c.json({ success: true });
 });
