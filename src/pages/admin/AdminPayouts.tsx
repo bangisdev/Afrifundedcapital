@@ -169,6 +169,11 @@ export default function AdminPayouts() {
                 <div className="text-xs text-muted-foreground">
                   User {p.userId} · {p.paymentMethod || "bank"} · {p.requestedAt ? new Date(p.requestedAt).toLocaleDateString() : ""}
                 </div>
+                {p.status === "rejected" && p.rejectionReason && (
+                  <div className="text-[10px] text-destructive mt-1">
+                    Reason: {p.rejectionReason}
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2">
