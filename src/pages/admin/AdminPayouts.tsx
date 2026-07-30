@@ -291,13 +291,19 @@ export default function AdminPayouts() {
               <option value="custom">Custom reason...</option>
             </select>
             {(reasonPreset === "custom" || reasonPreset === "") && (
-              <Textarea
-                placeholder="Enter rejection reason..."
-                value={reasonPreset === "custom" ? rejectReason : ""}
-                onChange={(e) => setRejectReason(e.target.value)}
-                rows={3}
-                className="text-sm resize-none"
-              />
+              <div>
+                <Textarea
+                  placeholder="Enter rejection reason..."
+                  value={reasonPreset === "custom" ? rejectReason : ""}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  maxLength={500}
+                  rows={3}
+                  className="text-sm resize-none"
+                />
+                <div className="text-[10px] text-muted-foreground text-right mt-1">
+                  {rejectReason.length}/500
+                </div>
+              </div>
             )}
           </div>
           <AlertDialogFooter>
@@ -364,13 +370,19 @@ export default function AdminPayouts() {
               <option value="custom">Custom reason...</option>
             </select>
             {(reasonPreset === "custom" || reasonPreset === "") && (
-              <Textarea
-                placeholder="Enter rejection reason..."
-                value={reasonPreset === "custom" ? rejectReason : ""}
-                onChange={(e) => setRejectReason(e.target.value)}
-                rows={3}
-                className="text-sm resize-none"
-              />
+              <div>
+                <Textarea
+                  placeholder="Enter rejection reason..."
+                  value={reasonPreset === "custom" ? rejectReason : ""}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  maxLength={500}
+                  rows={3}
+                  className="text-sm resize-none"
+                />
+                <div className="text-[10px] text-muted-foreground text-right mt-1">
+                  {rejectReason.length}/500
+                </div>
+              </div>
             )}
           </div>
           <AlertDialogFooter>
