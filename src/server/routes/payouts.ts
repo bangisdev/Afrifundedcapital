@@ -105,6 +105,81 @@ app.get("/admin/stats", requireAuth, requireAdmin, (c) => {
   });
 });
 
+// Admin: Per-user payout breakdown within date range
+app.get("/admin/by-user", requireAuth, requireAdmin, (c) => {
+  const db = getDb();
+  const startDate = c.req.query("startDate");
+  const endDate = c.req.query("endDate");
+  const conditions: ReturnType<typeof eq | typeof sql>[] = [];
+  if (startDate) conditions.push(sql`${profitPayouts.requestedAt} >= ${parseInt(startDate)}`);
+  if (endDate) conditions.push(sql`${profitPayouts.requestedAt} <= ${parseInt(endDate)}`);
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+  // Get all payouts (with optional date filter)
+  const items = where
+    ? db.select().from(profitPayouts).where(where).orderBy(desc(profitPayouts.requestedAt)).all()
+    : db.select().from(profitPayouts).orderBy(desc(profitPayouts.requestedAt)).all();
+
+  // Group by userId
+  const userMap = new Map<number, {
+    userId: number;
+    totalAmount: number;
+    count: number;
+    pending: number;
+    approved: number;
+    paid: number;
+    rejected: number;
+    pendingAmount: number;
+    approvedAmount: number;
+    paidAmount: number;
+    rejectedAmount: number;
+  }>();
+
+  for (const p of items) {
+    const existing = userMap.get(p.userId);
+    if (existing) {
+      existing.totalAmount += p.amount;
+      existing.count++;
+      if (p.status === "pending") { existing.pending++; existing.pendingAmount += p.amount; }
+      if (p.status === "approved") { existing.approved++; existing.approvedAmount += p.amount; }
+      if (p.status === "paid") { existing.paid++; existing.paidAmount += p.amount; }
+      if (p.status === "rejected") { existing.rejected++; existing.rejectedAmount += p.amount; }
+    } else {
+      userMap.set(p.userId, {
+        userId: p.userId,
+        totalAmount: p.amount,
+        count: 1,
+        pending: p.status === "pending" ? 1 : 0,
+        approved: p.status === "approved" ? 1 : 0,
+        paid: p.status === "paid" ? 1 : 0,
+        rejected: p.status === "rejected" ? 1 : 0,
+        pendingAmount: p.status === "pending" ? p.amount : 0,
+        approvedAmount: p.status === "approved" ? p.amount : 0,
+        paidAmount: p.status === "paid" ? p.amount : 0,
+        rejectedAmount: p.status === "rejected" ? p.amount : 0,
+      });
+    }
+  }
+
+  // Look up user names
+  const userIds = Array.from(userMap.keys());
+  const userNames = new Map<number, string>();
+  if (userIds.length > 0) {
+    const allUsers = db.select({ id: users.id, name: users.name, email: users.email }).from(users).all();
+    for (const u of allUsers) {
+      if (userIds.includes(u.id)) {
+        userNames.set(u.id, u.name || u.email || `User ${u.id}`);
+      }
+    }
+  }
+
+  const breakdown = Array.from(userMap.values())
+    .map((u) => ({ ...u, name: userNames.get(u.userId) || `User ${u.userId}` }))
+    .sort((a, b) => b.totalAmount - a.totalAmount);
+
+  return c.json(breakdown);
+});
+
 // Admin: List all payouts (supports ?startDate=&endDate= in ms timestamps, ?status= filter)
 app.get("/admin/all", requireAuth, requireAdmin, (c) => {
   const db = getDb();

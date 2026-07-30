@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Loader2, CheckCircle, XCircle, CheckCheck, Trash2, DollarSign, Calendar, X } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, CheckCheck, Trash2, DollarSign, Calendar, X, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useMemo, useCallback } from "react";
 
@@ -58,6 +58,7 @@ export default function AdminPayouts() {
   const allQueryParams = buildQueryParams();
   const { data: payouts, isLoading, refetch } = useApiQuery<any[]>(["admin", "payouts", allQueryParams], `/api/payouts/admin/all${allQueryParams}`);
   const { data: stats } = useApiQuery<any>(["admin", "payout-stats", allQueryParams], `/api/payouts/admin/stats${allQueryParams}`);
+  const { data: byUser } = useApiQuery<any[]>(["admin", "payout-by-user", allQueryParams], `/api/payouts/admin/by-user${allQueryParams}`);
   const approvePayout = useApiMutation<any, any>("post", "/api/payouts/admin/${id}/approve");
   const rejectPayout = useApiMutation<any, any>("post", "/api/payouts/admin/${id}/reject");
   const bulkApprove = useApiMutation<any, any>("post", "/api/payouts/admin/bulk-approve");
@@ -182,6 +183,64 @@ export default function AdminPayouts() {
             <div className="text-[10px] text-muted-foreground">Total Paid (All Time)</div>
             <div className="text-lg font-medium text-emerald-600">₦{(stats.totalPaid || 0).toLocaleString()}</div>
             <div className="text-[10px] text-muted-foreground">{stats.total || 0} total</div>
+          </div>
+        </div>
+      )}
+
+      {/* Per-User Breakdown */}
+      {byUser && byUser.length > 0 && (
+        <div className="card-subtle p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Users className="h-4 w-4 text-muted-foreground" />
+            <span className="text-xs font-medium text-muted-foreground">Payouts by User</span>
+            <span className="text-[10px] text-muted-foreground">({byUser.length} user{byUser.length !== 1 ? 's' : ''})</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-2 px-2 text-[10px] font-medium text-muted-foreground">User</th>
+                  <th className="text-right py-2 px-2 text-[10px] font-medium text-muted-foreground">Total</th>
+                  <th className="text-right py-2 px-2 text-[10px] font-medium text-muted-foreground">Requests</th>
+                  <th className="text-right py-2 px-2 text-[10px] font-medium text-muted-foreground text-amber-600">Pending</th>
+                  <th className="text-right py-2 px-2 text-[10px] font-medium text-muted-foreground text-blue-600">Approved</th>
+                  <th className="text-right py-2 px-2 text-[10px] font-medium text-muted-foreground text-emerald-600">Paid</th>
+                  <th className="text-right py-2 px-2 text-[10px] font-medium text-muted-foreground text-red-600">Rejected</th>
+                </tr>
+              </thead>
+              <tbody>
+                {byUser.map((u: any) => (
+                  <tr key={u.userId} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                    <td className="py-2 px-2">
+                      <div className="font-medium text-sm">{u.name}</div>
+                      <div className="text-[10px] text-muted-foreground">ID: {u.userId}</div>
+                    </td>
+                    <td className="text-right py-2 px-2 font-medium">₦{u.totalAmount.toLocaleString()}</td>
+                    <td className="text-right py-2 px-2 text-muted-foreground">{u.count}</td>
+                    <td className="text-right py-2 px-2">
+                      {u.pending > 0 ? (
+                        <span className="text-amber-600">₦{u.pendingAmount.toLocaleString()}</span>
+                      ) : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="text-right py-2 px-2">
+                      {u.approved > 0 ? (
+                        <span className="text-blue-600">₦{u.approvedAmount.toLocaleString()}</span>
+                      ) : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="text-right py-2 px-2">
+                      {u.paid > 0 ? (
+                        <span className="text-emerald-600">₦{u.paidAmount.toLocaleString()}</span>
+                      ) : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="text-right py-2 px-2">
+                      {u.rejected > 0 ? (
+                        <span className="text-red-600">₦{u.rejectedAmount.toLocaleString()}</span>
+                      ) : <span className="text-muted-foreground">—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
