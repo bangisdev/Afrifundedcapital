@@ -145,6 +145,36 @@ app.post("/admin/:id/reject", requireAuth, requireAdmin, async (c) => {
   return c.json({ success: true });
 });
 
+// Admin: Bulk mark payouts as paid
+app.post("/admin/bulk-mark-paid", requireAuth, requireAdmin, async (c) => {
+  const body = await c.req.json();
+  const ids: number[] = body.ids || [];
+  if (!ids.length) return c.json({ error: "No IDs provided" }, 400);
+  const db = getDb();
+  const now = Date.now();
+  let marked = 0;
+  for (const id of ids) {
+    const payout = db.select().from(profitPayouts).where(eq(profitPayouts.id, id)).get();
+    if (payout && payout.status === "approved") {
+      db.update(profitPayouts).set({ status: "paid", processedAt: now }).where(eq(profitPayouts.id, id)).run();
+      createNotification(db, payout.userId, {
+        type: "payout",
+        title: "Payout Sent",
+        message: `Your payout of ${payout.currency} ${payout.amount.toLocaleString()} has been sent to your account.`,
+        link: "/dashboard/payouts",
+      });
+      // Send email notification
+      const user = db.select().from(users).where(eq(users.id, payout.userId)).get();
+      if (user?.email) {
+        const email = payoutPaidEmail(user.name || "Trader", payout.amount, payout.currency);
+        sendEmail({ ...email, to: user.email }).catch(() => {});
+      }
+      marked++;
+    }
+  }
+  return c.json({ success: true, marked });
+});
+
 // Admin: Mark payout as paid
 app.post("/admin/:id/mark-paid", requireAuth, requireAdmin, async (c) => {
   const id = parseInt(c.req.param("id"));

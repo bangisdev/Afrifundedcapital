@@ -27,17 +27,21 @@ export default function AdminPayouts() {
   const rejectPayout = useApiMutation<any, any>("post", "/api/payouts/admin/${id}/reject");
   const bulkApprove = useApiMutation<any, any>("post", "/api/payouts/admin/bulk-approve");
   const markPaid = useApiMutation<any, any>("post", "/api/payouts/admin/${id}/mark-paid");
+  const bulkMarkPaid = useApiMutation<any, any>("post", "/api/payouts/admin/bulk-mark-paid");
 
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
   const [confirmApprove, setConfirmApprove] = useState(false);
   const [confirmReject, setConfirmReject] = useState(false);
+  const [confirmMarkPaid, setConfirmMarkPaid] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [reasonPreset, setReasonPreset] = useState("");
   const [individualRejectId, setIndividualRejectId] = useState<number | null>(null);
 
   const allPending = useMemo(() => (payouts || []).filter((p: any) => p.status === "pending"), [payouts]);
-  const allSelected = allPending.length > 0 && allPending.every((p: any) => selected.has(p.id));
+  const allApproved = useMemo(() => (payouts || []).filter((p: any) => p.status === "approved"), [payouts]);
+  const allPendingSelected = allPending.length > 0 && allPending.every((p: any) => selected.has(p.id));
+  const allApprovedSelected = allApproved.length > 0 && allApproved.every((p: any) => selected.has(p.id));
 
   const toggleSelect = (id: number) => {
     setSelected((prev) => {
@@ -47,11 +51,19 @@ export default function AdminPayouts() {
     });
   };
 
-  const toggleAll = () => {
-    if (allSelected) {
-      setSelected(new Set());
+  const toggleAllPending = () => {
+    if (allPendingSelected) {
+      setSelected((prev) => { const next = new Set(prev); allPending.forEach((p: any) => next.delete(p.id)); return next; });
     } else {
-      setSelected(new Set(allPending.map((p: any) => p.id)));
+      setSelected((prev) => { const next = new Set(prev); allPending.forEach((p: any) => next.add(p.id)); return next; });
+    }
+  };
+
+  const toggleAllApproved = () => {
+    if (allApprovedSelected) {
+      setSelected((prev) => { const next = new Set(prev); allApproved.forEach((p: any) => next.delete(p.id)); return next; });
+    } else {
+      setSelected((prev) => { const next = new Set(prev); allApproved.forEach((p: any) => next.add(p.id)); return next; });
     }
   };
 
@@ -102,8 +114,7 @@ export default function AdminPayouts() {
       </div>
 
       {/* Stats */}
-      {stats && (
-        <div className="grid grid-cols-3 gap-3">
+      {stats && (          <div className="grid grid-cols-4 gap-3">
           <div className="card-subtle p-3">
             <div className="text-[10px] text-muted-foreground">Total Requests</div>
             <div className="text-lg font-medium">{stats.total}</div>
@@ -113,21 +124,25 @@ export default function AdminPayouts() {
             <div className="text-lg font-medium text-amber-600">{stats.pending}</div>
           </div>
           <div className="card-subtle p-3">
+            <div className="text-[10px] text-muted-foreground">Approved</div>
+            <div className="text-lg font-medium text-emerald-600">{allApproved.length}</div>
+          </div>
+          <div className="card-subtle p-3">
             <div className="text-[10px] text-muted-foreground">Total Paid</div>
             <div className="text-lg font-medium text-emerald-600">₦{(stats.totalPaid || 0).toLocaleString()}</div>
           </div>
         </div>
       )}
 
-      {/* Bulk Actions */}
+      {/* Bulk Actions — Pending */}
       {allPending.length > 0 && (
         <div className="flex items-center gap-3 p-3 card-subtle">
           <Checkbox
-            checked={allSelected}
-            onCheckedChange={toggleAll}
+            checked={allPendingSelected}
+            onCheckedChange={toggleAllPending}
           />
           <span className="text-xs text-muted-foreground">
-            {selected.size > 0 ? `${selected.size} selected` : "Select all pending"}
+            {selected.size > 0 ? `${selected.size} selected` : `Select all ${allPending.length} pending`}
           </span>
           <div className="flex-1" />
           {selected.size > 0 && (
@@ -157,6 +172,30 @@ export default function AdminPayouts() {
         </div>
       )}
 
+      {/* Bulk Actions — Approved */}
+      {allApproved.length > 0 && (
+        <div className="flex items-center gap-3 p-3 card-subtle">
+          <Checkbox
+            checked={allApprovedSelected}
+            onCheckedChange={toggleAllApproved}
+          />
+          <span className="text-xs text-muted-foreground">
+            {allApprovedSelected ? `All ${allApproved.length} approved selected` : `Select all ${allApproved.length} approved`}
+          </span>
+          <div className="flex-1" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-[10px] text-emerald-600"
+            disabled={bulkLoading || !allApprovedSelected}
+            onClick={() => setConfirmMarkPaid(true)}
+          >
+            {bulkLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <DollarSign className="h-3 w-3 mr-1" />}
+            Mark Paid
+          </Button>
+        </div>
+      )}
+
       {/* Payout List */}
       <div className="space-y-1">
         {(!payouts || payouts.length === 0) ? (
@@ -171,7 +210,7 @@ export default function AdminPayouts() {
             }`}
           >
             <div className="flex items-center gap-3">
-              {p.status === "pending" && (
+              {(p.status === "pending" || p.status === "approved") && (
                 <Checkbox
                   checked={selected.has(p.id)}
                   onCheckedChange={() => toggleSelect(p.id)}
@@ -350,6 +389,42 @@ export default function AdminPayouts() {
             >
               {bulkLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
               Confirm Reject
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Mark Paid Confirmation Dialog */}
+      <AlertDialog open={confirmMarkPaid} onOpenChange={setConfirmMarkPaid}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark {selected.size} Payout{selected.size !== 1 ? 's' : ''} as Paid?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will mark {selected.size} approved payout request{selected.size !== 1 ? 's' : ''} as paid. Users will be notified via email and dashboard. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={bulkLoading}
+              className="bg-emerald-600 hover:bg-emerald-700"
+              onClick={async () => {
+                setBulkLoading(true);
+                try {
+                  const result = await bulkMarkPaid.mutateAsync({ ids: Array.from(selected) });
+                  toast.success(`Marked ${result?.marked || selected.size} payouts as paid`);
+                  setSelected(new Set());
+                  refetch();
+                } catch {
+                  toast.error("Bulk mark paid failed");
+                } finally {
+                  setBulkLoading(false);
+                  setConfirmMarkPaid(false);
+                }
+              }}
+            >
+              {bulkLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+              Confirm Mark Paid
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
