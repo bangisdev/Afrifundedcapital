@@ -60,11 +60,32 @@ app.post("/request", requireAuth, async (c) => {
 // Admin: Payout stats
 app.get("/admin/stats", requireAuth, requireAdmin, (c) => {
   const db = getDb();
+  const now = Date.now();
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+  const startOfMonthTs = startOfMonth.getTime();
+
   const total = db.select({ count: count() }).from(profitPayouts).get();
   const pending = db.select({ count: count() }).from(profitPayouts).where(eq(profitPayouts.status, "pending")).get();
+  const approved = db.select({ count: count() }).from(profitPayouts).where(eq(profitPayouts.status, "approved")).get();
+  const approvedAmount = db.select({ total: sql<number>`coalesce(sum(amount), 0)` })
+    .from(profitPayouts).where(eq(profitPayouts.status, "approved")).get();
   const totalPaid = db.select({ total: sql<number>`coalesce(sum(amount), 0)` })
     .from(profitPayouts).where(eq(profitPayouts.status, "paid")).get();
-  return c.json({ total: total?.count || 0, pending: pending?.count || 0, totalPaid: totalPaid?.total || 0 });
+  const paidThisMonth = db.select({ total: sql<number>`coalesce(sum(amount), 0)` })
+    .from(profitPayouts).where(and(eq(profitPayouts.status, "paid"), sql`${profitPayouts.processedAt} >= ${startOfMonthTs}`)).get();
+  const paidCount = db.select({ count: count() })
+    .from(profitPayouts).where(and(eq(profitPayouts.status, "paid"), sql`${profitPayouts.processedAt} >= ${startOfMonthTs}`)).get();
+  return c.json({
+    total: total?.count || 0,
+    pending: pending?.count || 0,
+    approved: approved?.count || 0,
+    approvedAmount: approvedAmount?.total || 0,
+    totalPaid: totalPaid?.total || 0,
+    paidThisMonth: paidThisMonth?.total || 0,
+    paidThisMonthCount: paidCount?.count || 0,
+  });
 });
 
 // Admin: List all payouts

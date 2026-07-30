@@ -114,22 +114,25 @@ export default function AdminPayouts() {
       </div>
 
       {/* Stats */}
-      {stats && (          <div className="grid grid-cols-4 gap-3">
-          <div className="card-subtle p-3">
-            <div className="text-[10px] text-muted-foreground">Total Requests</div>
-            <div className="text-lg font-medium">{stats.total}</div>
-          </div>
+      {stats && (          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="card-subtle p-3">
             <div className="text-[10px] text-muted-foreground">Pending</div>
             <div className="text-lg font-medium text-amber-600">{stats.pending}</div>
           </div>
           <div className="card-subtle p-3">
-            <div className="text-[10px] text-muted-foreground">Approved</div>
-            <div className="text-lg font-medium text-emerald-600">{allApproved.length}</div>
+            <div className="text-[10px] text-muted-foreground">Awaiting Payment</div>
+            <div className="text-lg font-medium text-blue-600">₦{(stats.approvedAmount || 0).toLocaleString()}</div>
+            <div className="text-[10px] text-muted-foreground">{stats.approved || 0} approved</div>
           </div>
           <div className="card-subtle p-3">
-            <div className="text-[10px] text-muted-foreground">Total Paid</div>
+            <div className="text-[10px] text-muted-foreground">Paid This Month</div>
+            <div className="text-lg font-medium text-emerald-600">₦{(stats.paidThisMonth || 0).toLocaleString()}</div>
+            <div className="text-[10px] text-muted-foreground">{stats.paidThisMonthCount || 0} payouts</div>
+          </div>
+          <div className="card-subtle p-3">
+            <div className="text-[10px] text-muted-foreground">Total Paid (All Time)</div>
             <div className="text-lg font-medium text-emerald-600">₦{(stats.totalPaid || 0).toLocaleString()}</div>
+            <div className="text-[10px] text-muted-foreground">{stats.total || 0} total</div>
           </div>
         </div>
       )}
