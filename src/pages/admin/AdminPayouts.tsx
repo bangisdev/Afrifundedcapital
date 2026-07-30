@@ -9,6 +9,17 @@ import { Loader2, CheckCircle, XCircle, CheckCheck, Trash2 } from "lucide-react"
 import { toast } from "sonner";
 import { useState, useMemo } from "react";
 
+const REJECTION_PRESETS = [
+  "Incomplete documentation",
+  "Bank details mismatch",
+  "Suspicious activity detected",
+  "Account verification failed",
+  "Insufficient trading history",
+  "Duplicate account detected",
+  "Terms of service violation",
+  "Insufficient profit evidence",
+];
+
 export default function AdminPayouts() {
   const { data: payouts, isLoading, refetch } = useApiQuery<any[]>(["admin", "payouts"], "/api/payouts/admin/all");
   const { data: stats } = useApiQuery<any>(["admin", "payout-stats"], "/api/payouts/admin/stats");
@@ -21,6 +32,7 @@ export default function AdminPayouts() {
   const [confirmApprove, setConfirmApprove] = useState(false);
   const [confirmReject, setConfirmReject] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const [reasonPreset, setReasonPreset] = useState("");
   const [individualRejectId, setIndividualRejectId] = useState<number | null>(null);
 
   const allPending = useMemo(() => (payouts || []).filter((p: any) => p.status === "pending"), [payouts]);
@@ -134,7 +146,7 @@ export default function AdminPayouts() {
                 size="sm"
                 className="h-7 text-[10px] text-destructive"
                 disabled={bulkLoading}
-                onClick={() => { setRejectReason(""); setConfirmReject(true); }}
+                onClick={() => { setRejectReason(""); setReasonPreset(""); setConfirmReject(true); }}
               >
                 <Trash2 className="h-3 w-3 mr-1" />
                 Reject {selected.size}
@@ -202,7 +214,7 @@ export default function AdminPayouts() {
                     variant="ghost"
                     size="sm"
                     className="h-7 text-[10px] text-destructive"
-                    onClick={() => { setRejectReason(""); setIndividualRejectId(p.id); }}
+                    onClick={() => { setRejectReason(""); setReasonPreset(""); setIndividualRejectId(p.id); }}
                   >
                     <XCircle className="h-3 w-3 mr-1" /> Reject
                   </Button>
@@ -250,7 +262,7 @@ export default function AdminPayouts() {
       </AlertDialog>
 
       {/* Bulk Reject Confirmation Dialog with Reason */}
-      <AlertDialog open={confirmReject} onOpenChange={(open) => { setConfirmReject(open); if (!open) setRejectReason(""); }}>
+      <AlertDialog open={confirmReject} onOpenChange={(open) => { setConfirmReject(open); if (!open) { setRejectReason(""); setReasonPreset(""); } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Reject {selected.size} Payout{selected.size !== 1 ? 's' : ''}?</AlertDialogTitle>
@@ -258,34 +270,56 @@ export default function AdminPayouts() {
               This will reject {selected.size} pending payout request{selected.size !== 1 ? 's' : ''}. Users will be notified with the reason below. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="py-2">
-            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Rejection Reason</label>
-            <Textarea
-              placeholder="e.g. Incomplete bank details, suspicious activity, documentation mismatch..."
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              rows={3}
-              className="text-sm resize-none"
-            />
+          <div className="py-2 space-y-2">
+            <label className="text-xs font-medium text-muted-foreground block">Rejection Reason</label>
+            <select
+              value={reasonPreset}
+              onChange={(e) => {
+                setReasonPreset(e.target.value);
+                if (e.target.value !== "custom") {
+                  setRejectReason(e.target.value);
+                } else {
+                  setRejectReason("");
+                }
+              }}
+              className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs"
+            >
+              <option value="">Select a reason...</option>
+              {REJECTION_PRESETS.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+              <option value="custom">Custom reason...</option>
+            </select>
+            {(reasonPreset === "custom" || reasonPreset === "") && (
+              <Textarea
+                placeholder="Enter rejection reason..."
+                value={reasonPreset === "custom" ? rejectReason : ""}
+                onChange={(e) => setRejectReason(e.target.value)}
+                rows={3}
+                className="text-sm resize-none"
+              />
+            )}
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={bulkLoading} onClick={() => setRejectReason("")}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={bulkLoading} onClick={() => { setRejectReason(""); setReasonPreset(""); }}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              disabled={bulkLoading}
+              disabled={bulkLoading || (!rejectReason && reasonPreset !== "custom")}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={async () => {
+                const finalReason = reasonPreset === "custom" ? rejectReason : reasonPreset;
                 setBulkLoading(true);
                 try {
                   let rejected = 0;
                   for (const id of selected) {
                     try {
-                      await rejectPayout.mutateAsync({ id, reason: rejectReason || "Rejected by admin" });
+                      await rejectPayout.mutateAsync({ id, reason: finalReason || "Rejected by admin" });
                       rejected++;
                     } catch { /* skip */ }
                   }
                   toast.success(`Rejected ${rejected} payouts`);
                   setSelected(new Set());
                   setRejectReason("");
+                  setReasonPreset("");
                   refetch();
                 } finally {
                   setBulkLoading(false);
@@ -301,7 +335,7 @@ export default function AdminPayouts() {
       </AlertDialog>
 
       {/* Individual Reject Dialog with Reason */}
-      <AlertDialog open={individualRejectId !== null} onOpenChange={(open) => { if (!open) { setIndividualRejectId(null); setRejectReason(""); } }}>
+      <AlertDialog open={individualRejectId !== null} onOpenChange={(open) => { if (!open) { setIndividualRejectId(null); setRejectReason(""); setReasonPreset(""); } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Reject This Payout?</AlertDialogTitle>
@@ -309,24 +343,46 @@ export default function AdminPayouts() {
               The user will be notified with the reason below. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="py-2">
-            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Rejection Reason</label>
-            <Textarea
-              placeholder="e.g. Incomplete bank details, suspicious activity, documentation mismatch..."
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              rows={3}
-              className="text-sm resize-none"
-            />
+          <div className="py-2 space-y-2">
+            <label className="text-xs font-medium text-muted-foreground block">Rejection Reason</label>
+            <select
+              value={reasonPreset}
+              onChange={(e) => {
+                setReasonPreset(e.target.value);
+                if (e.target.value !== "custom") {
+                  setRejectReason(e.target.value);
+                } else {
+                  setRejectReason("");
+                }
+              }}
+              className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs"
+            >
+              <option value="">Select a reason...</option>
+              {REJECTION_PRESETS.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+              <option value="custom">Custom reason...</option>
+            </select>
+            {(reasonPreset === "custom" || reasonPreset === "") && (
+              <Textarea
+                placeholder="Enter rejection reason..."
+                value={reasonPreset === "custom" ? rejectReason : ""}
+                onChange={(e) => setRejectReason(e.target.value)}
+                rows={3}
+                className="text-sm resize-none"
+              />
+            )}
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => { setIndividualRejectId(null); setRejectReason(""); }}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => { setIndividualRejectId(null); setRejectReason(""); setReasonPreset(""); }}>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              disabled={reasonPreset === "" || (reasonPreset === "custom" && !rejectReason)}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={async () => {
                 if (individualRejectId === null) return;
+                const finalReason = reasonPreset === "custom" ? rejectReason : reasonPreset;
                 try {
-                  await rejectPayout.mutateAsync({ id: individualRejectId, reason: rejectReason || "Rejected by admin" });
+                  await rejectPayout.mutateAsync({ id: individualRejectId, reason: finalReason || "Rejected by admin" });
                   toast.success("Rejected");
                   setSelected((prev) => { const n = new Set(prev); n.delete(individualRejectId); return n; });
                   refetch();
@@ -335,6 +391,7 @@ export default function AdminPayouts() {
                 } finally {
                   setIndividualRejectId(null);
                   setRejectReason("");
+                  setReasonPreset("");
                 }
               }}
             >
