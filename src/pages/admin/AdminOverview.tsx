@@ -24,6 +24,8 @@ export default function AdminOverview() {
 
   const [bulkSeeding, setBulkSeeding] = useState(false);
   const [bulkSeedResult, setBulkSeedResult] = useState<any>(null);
+  const [seedingUsers, setSeedingUsers] = useState(false);
+  const [userSeedResult, setUserSeedResult] = useState<any>(null);
 
   const handleBulkSeed = async () => {
     setBulkSeeding(true);
@@ -53,6 +55,29 @@ export default function AdminOverview() {
     setBulkSeeding(false);
   };
 
+  const handleSeedUsers = async () => {
+    setSeedingUsers(true);
+    setUserSeedResult(null);
+    try {
+      const res = await fetch("/api/seed/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      const data = await res.json();
+      setUserSeedResult(data);
+      if (data.success) {
+        toast.success(data.message || "Demo users seeded successfully!");
+      } else {
+        toast.warning(data.message || "Seed completed with some errors");
+      }
+      refetchUsers();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to seed demo users");
+    }
+    setSeedingUsers(false);
+  };
+
   const hasNoData = !userStats?.totalUsers && !challengeStats?.total;
 
   return (
@@ -74,16 +99,28 @@ export default function AdminOverview() {
           </Button>
         )}
         {!hasNoData && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="text-xs"
-            onClick={handleBulkSeed}
-            disabled={bulkSeeding}
-          >
-            {bulkSeeding ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Database className="h-3 w-3 mr-1" />}
-            {bulkSeeding ? "Seeding..." : "Re-Seed Demo Data"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs"
+              onClick={handleSeedUsers}
+              disabled={seedingUsers}
+            >
+              {seedingUsers ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Users className="h-3 w-3 mr-1" />}
+              {seedingUsers ? "Seeding..." : "Seed Demo Users"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs"
+              onClick={handleBulkSeed}
+              disabled={bulkSeeding}
+            >
+              {bulkSeeding ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Database className="h-3 w-3 mr-1" />}
+              {bulkSeeding ? "Seeding..." : "Re-Seed Demo Data"}
+            </Button>
+          </div>
         )}
       </div>
 
@@ -116,6 +153,32 @@ export default function AdminOverview() {
             {bulkSeedResult.errors && bulkSeedResult.errors.length > 0 && (
               <div className="mt-1 text-red-500">
                 {bulkSeedResult.errors.map((e: string, i: number) => (
+                  <div key={i}>{e}</div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* User seed results */}
+      {userSeedResult && (
+        <div className={`card-subtle p-4 flex items-start gap-3 ${userSeedResult.success ? "border-emerald-500/20" : "border-yellow-500/20"}`}>
+          {userSeedResult.success ? (
+            <CheckCircle className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+          ) : (
+            <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5 shrink-0" />
+          )}
+          <div className="text-xs">
+            <div className="font-medium">{userSeedResult.message}</div>
+            {userSeedResult.users && (
+              <div className="mt-1 text-muted-foreground">
+                Created {userSeedResult.users.length} demo users with challenges in various states
+              </div>
+            )}
+            {userSeedResult.errors && userSeedResult.errors.length > 0 && (
+              <div className="mt-1 text-red-500">
+                {userSeedResult.errors.map((e: string, i: number) => (
                   <div key={i}>{e}</div>
                 ))}
               </div>
