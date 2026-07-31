@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getDb, getSqlite } from "../db";
-import { settings, challengeTemplates, accountSizes, users, affiliates, wallets, fundedAccounts, mt5Accounts, tradingMetrics, userChallenges, profitPayouts } from "../schema";
+import { settings, challengeTemplates, accountSizes, users, affiliates, wallets, fundedAccounts, mt5Accounts, tradingMetrics, userChallenges, profitPayouts, kycDocuments, payments } from "../schema";
 import { eq, count } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { scrypt, randomBytes } from "crypto";
@@ -710,6 +710,68 @@ app.post("/bulk", requireAuth, requireAdmin, async (c) => {
     errors.push(`Funded: ${e instanceof Error ? e.message : String(e)}`);
   }
 
+  // ── 4. Seed sample users with challenges ──
+  try {
+    const nonAdminUsers = db.select().from(users).all().filter(u => u.role === "user");
+    if (nonAdminUsers.length < 8) {
+      // Get template + sizes
+      const tmpl = db.select().from(challengeTemplates).limit(1).get();
+      const sizes = tmpl ? db.select().from(accountSizes).where(eq(accountSizes.templateId, tmpl.id)).all() : [];
+      if (tmpl && sizes.length > 0) {
+        const size25k = sizes.find(s => s.size === 25000) || sizes[2] || sizes[0];
+        const size50k = sizes.find(s => s.size === 50000) || sizes[3] || sizes[0];
+        const size10k = sizes.find(s => s.size === 10000) || sizes[1] || sizes[0];
+        const size100k = sizes.find(s => s.size === 100000) || sizes[4] || sizes[0];
+
+        const sampleUsersData = [
+          { name: "Adebayo Okonkwo", email: "adebayo@test.com", phone: "+234 801 234 5678", country: "Nigeria", tradingExperience: "intermediate", kycStatus: "approved", kycVerifiedAt: now - 30 * 86400000, onboardingComplete: true },
+          { name: "Chioma Nwosu", email: "chioma@test.com", phone: "+234 802 345 6789", country: "Nigeria", tradingExperience: "beginner", kycStatus: "pending", onboardingComplete: true },
+          { name: "Emeka Obi", email: "emeka@test.com", phone: "+234 803 456 7890", country: "Nigeria", tradingExperience: "advanced", kycStatus: "approved", kycVerifiedAt: now - 45 * 86400000, onboardingComplete: true },
+          { name: "Fatima Bello", email: "fatima@test.com", phone: "+234 804 567 8901", country: "Nigeria", tradingExperience: "expert", kycStatus: "approved", kycVerifiedAt: now - 60 * 86400000, onboardingComplete: true },
+          { name: "Tunde Adeyemi", email: "tunde@test.com", phone: "+234 805 678 9012", country: "Nigeria", tradingExperience: "intermediate", kycStatus: "approved", kycVerifiedAt: now - 20 * 86400000, onboardingComplete: true },
+          { name: "Amina Yusuf", email: "amina@test.com", phone: "+234 806 789 0123", country: "Nigeria", tradingExperience: "beginner", kycStatus: "unverified", onboardingComplete: true },
+          { name: "Oluwaseun Akinwale", email: "oluwaseun@test.com", phone: "+234 807 890 1234", country: "Nigeria", tradingExperience: "beginner", kycStatus: "unverified", onboardingComplete: false },
+          { name: "Ngozi Eze", email: "ngozi@test.com", phone: "+234 808 901 2345", country: "Nigeria", tradingExperience: "intermediate", kycStatus: "rejected", onboardingComplete: true },
+        ];
+
+        let usersCreated = 0;
+        for (const su of sampleUsersData) {
+          const existingUser = db.select().from(users).where(eq(users.email, su.email)).get();
+          if (existingUser) continue;
+
+          const daysAgo = Math.floor(Math.random() * 60) + 5;
+          const userCreatedAt = now - daysAgo * 86400000;
+          const user = db.insert(users).values({
+            name: su.name, email: su.email, emailVerified: true, role: "user",
+            phone: su.phone, country: su.country, tradingExperience: su.tradingExperience,
+            timezone: "Africa/Lagos", kycStatus: su.kycStatus, kycVerifiedAt: su.kycVerifiedAt,
+            onboardingComplete: su.onboardingComplete, createdAt: userCreatedAt, updatedAt: now,
+          }).returning().get();
+          usersCreated++;
+
+          db.insert(wallets).values({ userId: user.id, balance: 0, referralBalance: 0, bonusBalance: 0, currency: "NGN", createdAt: userCreatedAt, updatedAt: now }).run();
+          const code = "AFR" + Math.random().toString(36).substring(2, 8).toUpperCase();
+          db.insert(affiliates).values({ userId: user.id, referralCode: code, totalReferrals: 0, activeReferrals: 0, totalCommissions: 0, pendingCommissions: 0, paidCommissions: 0, commissionRate: 0.10, commissionLevels: 0, isActive: true, joinedAt: userCreatedAt }).run();
+          db.update(users).set({ referralCode: code, updatedAt: now }).where(eq(users.id, user.id)).run();
+
+          if (su.kycStatus === "approved" || su.kycStatus === "pending") {
+            db.insert(kycDocuments).values({ userId: user.id, documentType: "passport", fileUrl: "/uploads/kyc/passport_" + user.id + ".jpg", status: su.kycStatus, reviewedBy: su.kycStatus === "approved" ? userId : null, reviewedAt: su.kycStatus === "approved" ? now - 25 * 86400000 : null, uploadedAt: userCreatedAt + 86400000 }).run();
+          }
+          if (su.kycStatus === "rejected") {
+            db.insert(kycDocuments).values({ userId: user.id, documentType: "passport", fileUrl: "/uploads/kyc/passport_" + user.id + ".jpg", status: "rejected", reviewedBy: userId, reviewedAt: now - 5 * 86400000, rejectionReason: "Document is blurry", uploadedAt: userCreatedAt + 86400000 }).run();
+          }
+        }
+        results.sampleUsers = { created: usersCreated };
+      } else {
+        results.sampleUsers = { skipped: true, reason: "No templates/sizes" };
+      }
+    } else {
+      results.sampleUsers = { skipped: true, reason: "Already seeded" };
+    }
+  } catch (e) {
+    errors.push(`SampleUsers: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
   return c.json({
     success: errors.length === 0,
     message: errors.length === 0
@@ -717,6 +779,335 @@ app.post("/bulk", requireAuth, requireAdmin, async (c) => {
       : `Bulk seed completed with ${errors.length} error(s)`,
     results,
     ...(errors.length > 0 ? { errors } : {}),
+  });
+});
+
+// ─── Seed sample users with challenges in various states ────
+// POST /api/seed/users — creates 8 demo users with varied profiles, KYC, challenges, and metrics
+app.post("/users", requireAuth, requireAdmin, async (c) => {
+  const db = getDb();
+  const now = Date.now();
+  const adminId = c.get("userId");
+
+  // Simple check: if more than 2 non-admin users exist, skip
+  const nonAdminUsers = db.select().from(users).all().filter(u => u.role === "user");
+  if (nonAdminUsers.length >= 8) {
+    return c.json({ success: true, message: "Sample users already seeded", skipped: true });
+  }
+
+  // Get first template + account sizes for challenge creation
+  const template = db.select().from(challengeTemplates).limit(1).get();
+  const allSizes = template
+    ? db.select().from(accountSizes).where(eq(accountSizes.templateId, template.id)).all()
+    : [];
+  if (!template || allSizes.length === 0) {
+    return c.json({ error: "No challenge templates/sizes found. Run /api/seed/seed first." }, 400);
+  }
+
+  const size5k = allSizes.find(s => s.size === 5000) || allSizes[0];
+  const size10k = allSizes.find(s => s.size === 10000) || allSizes[1] || allSizes[0];
+  const size25k = allSizes.find(s => s.size === 25000) || allSizes[2] || allSizes[0];
+  const size50k = allSizes.find(s => s.size === 50000) || allSizes[3] || allSizes[0];
+  const size100k = allSizes.find(s => s.size === 100000) || allSizes[4] || allSizes[0];
+  const size200k = allSizes.find(s => s.size === 200000) || allSizes[5] || allSizes[0];
+
+  // ── Sample user definitions ──
+  const sampleUsers = [
+    {
+      name: "Adebayo Okonkwo", email: "adebayo@test.com", phone: "+234 801 234 5678",
+      country: "Nigeria", tradingExperience: "intermediate", timezone: "Africa/Lagos",
+      kycStatus: "approved", kycVerifiedAt: now - 30 * 86400000,
+      onboardingComplete: true, emailVerified: true,
+    },
+    {
+      name: "Chioma Nwosu", email: "chioma@test.com", phone: "+234 802 345 6789",
+      country: "Nigeria", tradingExperience: "beginner", timezone: "Africa/Lagos",
+      kycStatus: "pending", onboardingComplete: true, emailVerified: true,
+    },
+    {
+      name: "Emeka Obi", email: "emeka@test.com", phone: "+234 803 456 7890",
+      country: "Nigeria", tradingExperience: "advanced", timezone: "Africa/Lagos",
+      kycStatus: "approved", kycVerifiedAt: now - 45 * 86400000,
+      onboardingComplete: true, emailVerified: true,
+    },
+    {
+      name: "Fatima Bello", email: "fatima@test.com", phone: "+234 804 567 8901",
+      country: "Nigeria", tradingExperience: "expert", timezone: "Africa/Lagos",
+      kycStatus: "approved", kycVerifiedAt: now - 60 * 86400000,
+      onboardingComplete: true, emailVerified: true,
+    },
+    {
+      name: "Tunde Adeyemi", email: "tunde@test.com", phone: "+234 805 678 9012",
+      country: "Nigeria", tradingExperience: "intermediate", timezone: "Africa/Lagos",
+      kycStatus: "approved", kycVerifiedAt: now - 20 * 86400000,
+      onboardingComplete: true, emailVerified: true,
+    },
+    {
+      name: "Amina Yusuf", email: "amina@test.com", phone: "+234 806 789 0123",
+      country: "Nigeria", tradingExperience: "beginner", timezone: "Africa/Lagos",
+      kycStatus: "unverified", onboardingComplete: true, emailVerified: true,
+    },
+    {
+      name: "Oluwaseun Akinwale", email: "oluwaseun@test.com", phone: "+234 807 890 1234",
+      country: "Nigeria", tradingExperience: "beginner", timezone: "Africa/Lagos",
+      kycStatus: "unverified", onboardingComplete: false, emailVerified: true,
+    },
+    {
+      name: "Ngozi Eze", email: "ngozi@test.com", phone: "+234 808 901 2345",
+      country: "Nigeria", tradingExperience: "intermediate", timezone: "Africa/Lagos",
+      kycStatus: "rejected", onboardingComplete: true, emailVerified: true,
+    },
+  ];
+
+  const createdUsers: number[] = [];
+  const results = {
+    users: 0, wallets: 0, affiliates: 0, challenges: 0,
+    mt5Accounts: 0, fundedAccounts: 0, kycDocs: 0, payments: 0, metricsPoints: 0,
+  };
+
+  // ── Create each user with their associated data ──
+  for (const su of sampleUsers) {
+    // Skip if user already exists
+    const existingUser = db.select().from(users).where(eq(users.email, su.email)).get();
+    if (existingUser) {
+      createdUsers.push(existingUser.id);
+      continue;
+    }
+
+    // Create user
+    const daysAgo = Math.floor(Math.random() * 60) + 5;
+    const userCreatedAt = now - daysAgo * 86400000;
+    const user = db.insert(users).values({
+      name: su.name,
+      email: su.email,
+      emailVerified: su.emailVerified,
+      role: "user",
+      phone: su.phone,
+      country: su.country,
+      tradingExperience: su.tradingExperience,
+      timezone: su.timezone,
+      kycStatus: su.kycStatus,
+      kycVerifiedAt: su.kycVerifiedAt,
+      onboardingComplete: su.onboardingComplete,
+      createdAt: userCreatedAt,
+      updatedAt: now,
+    }).returning().get();
+    createdUsers.push(user.id);
+    results.users++;
+
+    // Create wallet
+    db.insert(wallets).values({
+      userId: user.id, balance: 0, referralBalance: 0, bonusBalance: 0,
+      currency: "NGN", createdAt: userCreatedAt, updatedAt: now,
+    }).run();
+    results.wallets++;
+
+    // Create affiliate record
+    const code = "AFR" + Math.random().toString(36).substring(2, 8).toUpperCase();
+    db.insert(affiliates).values({
+      userId: user.id, referralCode: code,
+      totalReferrals: Math.floor(Math.random() * 5), activeReferrals: Math.floor(Math.random() * 3),
+      totalCommissions: Math.round(Math.random() * 50000),
+      pendingCommissions: Math.round(Math.random() * 20000),
+      paidCommissions: Math.round(Math.random() * 30000),
+      commissionRate: 0.10, commissionLevels: 0, isActive: true, joinedAt: userCreatedAt,
+    }).run();
+    db.update(users).set({ referralCode: code, updatedAt: now }).where(eq(users.id, user.id)).run();
+    results.affiliates++;
+
+    // Create KYC documents for approved/pending users
+    if (su.kycStatus === "approved" || su.kycStatus === "pending") {
+      db.insert(kycDocuments).values({
+        userId: user.id, documentType: "passport",
+        fileUrl: "/uploads/kyc/passport_" + user.id + ".jpg",
+        status: su.kycStatus,
+        reviewedBy: su.kycStatus === "approved" ? adminId : null,
+        reviewedAt: su.kycStatus === "approved" ? now - 25 * 86400000 : null,
+        uploadedAt: userCreatedAt + 86400000,
+      }).run();
+      results.kycDocs++;
+      if (su.kycStatus === "approved") {
+        db.insert(kycDocuments).values({
+          userId: user.id, documentType: "proof_of_address",
+          fileUrl: "/uploads/kyc/address_" + user.id + ".jpg",
+          status: su.kycStatus,
+          reviewedBy: adminId,
+          reviewedAt: now - 24 * 86400000,
+          uploadedAt: userCreatedAt + 2 * 86400000,
+        }).run();
+        results.kycDocs++;
+      }
+    }
+    if (su.kycStatus === "rejected") {
+      db.insert(kycDocuments).values({
+        userId: user.id, documentType: "passport",
+        fileUrl: "/uploads/kyc/passport_" + user.id + ".jpg",
+        status: "rejected",
+        reviewedBy: adminId,
+        reviewedAt: now - 5 * 86400000,
+        rejectionReason: "Document is blurry and unreadable. Please upload a clearer image.",
+        uploadedAt: userCreatedAt + 86400000,
+      }).run();
+      results.kycDocs++;
+    }
+  }
+
+  // ── Create challenges in various states for each user ──
+  const challengeConfigs: Array<{
+    email: string; status: string; accountSize: typeof size25k;
+    daysAgo: number; hasMt5: boolean; hasFunded: boolean;
+    extraDaysToPhase1?: number; extraDaysToPhase2?: number; extraDaysToFunded?: number;
+  }> = [
+    // User 1: Adebayo — Active challenge in Phase 1
+    { email: "adebayo@test.com", status: "active", accountSize: size25k, daysAgo: 14,
+      hasMt5: true, hasFunded: false },
+    // User 2: Chioma — Phase 1 passed, in Phase 2
+    { email: "chioma@test.com", status: "phase_1_passed", accountSize: size50k, daysAgo: 25,
+      hasMt5: true, hasFunded: false, extraDaysToPhase1: 15 },
+    // User 3: Emeka — Phase 2 passed, awaiting funding
+    { email: "emeka@test.com", status: "phase_2_passed", accountSize: size100k, daysAgo: 40,
+      hasMt5: true, hasFunded: false, extraDaysToPhase1: 12, extraDaysToPhase2: 28 },
+    // User 4: Fatima — Fully funded
+    { email: "fatima@test.com", status: "funded", accountSize: size25k, daysAgo: 60,
+      hasMt5: true, hasFunded: true, extraDaysToPhase1: 10, extraDaysToPhase2: 22, extraDaysToFunded: 30 },
+    // User 5: Tunde — Violated (daily drawdown breach)
+    { email: "tunde@test.com", status: "violated", accountSize: size50k, daysAgo: 18,
+      hasMt5: false, hasFunded: false },
+    // User 6: Amina — Expired
+    { email: "amina@test.com", status: "expired", accountSize: size10k, daysAgo: 35,
+      hasMt5: false, hasFunded: false },
+    // User 8: Ngozi — Refunded
+    { email: "ngozi@test.com", status: "refunded", accountSize: size25k, daysAgo: 10,
+      hasMt5: false, hasFunded: false },
+  ];
+
+  for (const cc of challengeConfigs) {
+    const user = db.select().from(users).where(eq(users.email, cc.email)).get();
+    if (!user) continue;
+
+    // Skip if user already has challenges
+    const existingChallenge = db.select().from(userChallenges).where(eq(userChallenges.userId, user.id)).get();
+    if (existingChallenge) continue;
+
+    const accountSize = cc.accountSize;
+    const challengeStartedAt = now - cc.daysAgo * 86400000;
+    const phase1At = cc.extraDaysToPhase1 ? now - (cc.daysAgo - cc.extraDaysToPhase1) * 86400000 : null;
+    const phase2At = cc.extraDaysToPhase2 ? now - (cc.daysAgo - cc.extraDaysToPhase2) * 86400000 : null;
+    const fundedAt = cc.extraDaysToFunded ? now - (cc.daysAgo - cc.extraDaysToFunded) * 86400000 : null;
+
+    // Create a payment record
+    const paymentRef = "PAY-" + Math.random().toString(36).substring(2, 10).toUpperCase();
+    const payment = db.insert(payments).values({
+      userId: user.id, amount: accountSize.price, currency: "NGN",
+      provider: "flutterwave", status: "completed",
+      reference: paymentRef, description: "Challenge purchase: " + template.name,
+      templateId: template.id, accountSizeId: accountSize.id,
+      createdAt: challengeStartedAt - 86400000, completedAt: challengeStartedAt,
+    }).returning().get();
+    results.payments++;
+
+    // Create MT5 account for users who have them
+    let mt5Id: number | null = null;
+    if (cc.hasMt5) {
+      const login = "AFC-" + String(500000 + user.id).padStart(6, "0");
+      const mt5 = db.insert(mt5Accounts).values({
+        userId: user.id, login,
+        password: "Demo@" + login.slice(-4),
+        investorPassword: "Investor@" + login.slice(-4),
+        server: "AfriFundedCapital-Demo", group: "DEMO\\AFC",
+        leverage: template.maxLeverage, balance: accountSize.size, equity: accountSize.size,
+        currency: "USD", isActive: cc.status !== "violated" && cc.status !== "expired",
+        isSuspended: cc.status === "violated",
+        lastSyncAt: now, createdAt: challengeStartedAt,
+        metadata: JSON.stringify({ seeded: true, accountSize: accountSize.size }),
+      }).returning().get();
+      mt5Id = mt5.id;
+      results.mt5Accounts++;
+    }
+
+    // Create user challenge
+    const challengeViolations = cc.status === "violated"
+      ? JSON.stringify([{ type: "daily_drawdown_breach", date: now - 5 * 86400000, details: "Daily drawdown exceeded 5%" }])
+      : null;
+
+    const challenge = db.insert(userChallenges).values({
+      userId: user.id, templateId: template.id, accountSizeId: accountSize.id,
+      status: cc.status, accountSize: accountSize.size, currency: "USD",
+      profitTarget: template.profitTarget, dailyDrawdown: template.dailyDrawdown,
+      maxDrawdown: template.maxDrawdown, maxLeverage: template.maxLeverage,
+      minTradingDays: template.minTradingDays,
+      startedAt: challengeStartedAt,
+      phase1PassedAt: phase1At, phase2PassedAt: phase2At, fundedAt,
+      expiresAt: challengeStartedAt + template.durationDays * 86400000,
+      amountPaid: accountSize.price,
+      violations: challengeViolations,
+      mt5AccountId: mt5Id,
+      currentPhase: cc.status === "active" ? 1 : cc.status === "phase_1_passed" ? 2 : cc.status === "phase_2_passed" ? 2 : cc.status === "funded" ? 3 : 1,
+      createdAt: challengeStartedAt, updatedAt: now,
+    }).returning().get();
+    results.challenges++;
+
+    // Create funded account record
+    if (cc.hasFunded && mt5Id) {
+      const funded = db.insert(fundedAccounts).values({
+        userId: user.id, challengeId: challenge.id, mt5AccountId: mt5Id,
+        accountSize: accountSize.size, currency: "USD", profitSharePercent: 80,
+        isActive: true, activatedAt: fundedAt || now, totalPayouts: 0,
+      }).returning().get();
+      results.fundedAccounts++;
+
+      // Generate 30 days of trading metrics for funded user
+      let balance = accountSize.size;
+      let peakBalance = accountSize.size;
+      for (let day = 29; day >= 0; day--) {
+        const dayTs = now - day * 86400000;
+        const dailyPnL = (Math.random() - 0.45) * accountSize.size * 0.02;
+        const floatingPL = (Math.random() - 0.5) * accountSize.size * 0.01;
+        balance = Math.max(balance + dailyPnL, accountSize.size * 0.85);
+        peakBalance = Math.max(peakBalance, balance);
+        const equity = balance + floatingPL;
+        const totalProfit = balance - accountSize.size;
+        const currentDD = ((peakBalance - equity) / peakBalance) * 100;
+        const dailyDD = dailyPnL < 0 ? Math.abs(dailyPnL / balance) * 100 : 0;
+        const remainingDD = template.maxDrawdown - currentDD;
+        const profitProgress = Math.max(0, Math.min(100, (totalProfit / (accountSize.size * template.profitTarget / 100)) * 100));
+
+        db.insert(tradingMetrics).values({
+          mt5AccountId: mt5Id, challengeId: challenge.id,
+          balance: Math.round(balance * 100) / 100, equity: Math.round(equity * 100) / 100,
+          floatingPL: Math.round(floatingPL * 100) / 100, dailyPL: Math.round(dailyPnL * 100) / 100,
+          totalProfit: Math.round(totalProfit * 100) / 100,
+          currentDrawdown: Math.round(currentDD * 100) / 100,
+          dailyDrawdown: Math.round(dailyDD * 100) / 100,
+          trailingDrawdown: Math.round(currentDD * 100) / 100,
+          relativeDrawdown: Math.round(currentDD * 100) / 100,
+          absoluteDrawdown: Math.round(Math.max(0, (accountSize.size - equity)) / accountSize.size * 100 * 100) / 100,
+          remainingDrawdown: Math.round(Math.max(0, remainingDD) * 100) / 100,
+          profitTargetProgress: Math.round(profitProgress * 100) / 100,
+          tradingDaysCount: 30 - day, openPositions: Math.floor(Math.random() * 5),
+          closedTrades: (30 - day) * Math.floor(Math.random() * 8 + 2),
+          winRate: Math.round((50 + Math.random() * 20) * 100) / 100,
+          lossRate: Math.round((30 + Math.random() * 20) * 100) / 100,
+          averageRR: Math.round((1.2 + Math.random() * 1.5) * 100) / 100,
+          profitFactor: Math.round((1.0 + Math.random() * 1.5) * 100) / 100,
+          expectancy: Math.round((10 + Math.random() * 50) * 100) / 100,
+          largestWin: Math.round(accountSize.size * 0.03 * Math.random() * 100) / 100,
+          largestLoss: Math.round(-accountSize.size * 0.02 * Math.random() * 100) / 100,
+          consecutiveWins: Math.floor(Math.random() * 8) + 1,
+          consecutiveLosses: Math.floor(Math.random() * 4) + 1,
+          riskScore: Math.round((2 + Math.random() * 6) * 100) / 100,
+          healthScore: Math.round((60 + Math.random() * 35) * 100) / 100,
+          recordedAt: dayTs,
+        }).run();
+        results.metricsPoints++;
+      }
+    }
+  }
+
+  return c.json({
+    success: true,
+    message: `Sample users seeded: ${results.users} users, ${results.challenges} challenges, ${results.fundedAccounts} funded`,
+    ...results,
   });
 });
 
