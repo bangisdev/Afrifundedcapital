@@ -79,6 +79,8 @@ export default function AdminSettings() {
   const [savingAffiliate, setSavingAffiliate] = useState(false);
 
   const [seeding, setSeeding] = useState(false);
+  const [bulkSeedResult, setBulkSeedResult] = useState<any>(null);
+  const [bulkSeeding, setBulkSeeding] = useState(false);
 
   // Load existing config from settings
   useEffect(() => {
@@ -335,6 +337,30 @@ export default function AdminSettings() {
     setSeeding(false);
   };
 
+  const handleBulkSeed = async () => {
+    setBulkSeeding(true);
+    setBulkSeedResult(null);
+    try {
+      const res = await fetch("/api/seed/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      setBulkSeedResult(data);
+      if (data.success) {
+        toast.success("All demo data seeded successfully!");
+      } else {
+        toast.warning(data.message || "Seed completed with some errors");
+      }
+      refetch();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to run bulk seed");
+    }
+    setBulkSeeding(false);
+  };
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast.success("Copied to clipboard");
@@ -362,9 +388,9 @@ export default function AdminSettings() {
             Configure payment providers, API keys, and environment mode
           </p>
         </div>
-        <Button size="sm" className="text-xs" onClick={handleSeed} disabled={seeding}>
-          {seeding ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Database className="h-3 w-3 mr-1" />}
-          Seed Data
+        <Button size="sm" className="text-xs" onClick={handleBulkSeed} disabled={bulkSeeding}>
+          {bulkSeeding ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Database className="h-3 w-3 mr-1" />}
+          {bulkSeeding ? "Seeding..." : "Seed All Demo Data"}
         </Button>
       </div>
 
