@@ -506,4 +506,218 @@ app.post("/funded", requireAuth, requireAdmin, (c) => {
   });
 });
 
+// ─── Bulk seed: runs all seed operations in one call ─────
+// POST /api/seed/bulk — seeds templates, affiliates, funded accounts & payouts
+app.post("/bulk", requireAuth, requireAdmin, async (c) => {
+  const db = getDb();
+  const now = Date.now();
+  const userId = c.get("userId");
+  const results: Record<string, unknown> = {};
+  const errors: string[] = [];
+
+  // ── 1. Seed challenge templates & account sizes ──
+  try {
+    const existingTemplates = db.select({ cnt: count() }).from(challengeTemplates).all();
+    if (existingTemplates.length === 0 || !existingTemplates[0] || (existingTemplates[0]?.cnt ?? 0) === 0) {
+      const templates = [
+        { name: "Two-Step Evaluation", type: "two_step", profitTarget: 8, dailyDrawdown: 5, maxDrawdown: 10, maxLeverage: 100, minTradingDays: 5, price: 50000, durationDays: 30 },
+        { name: "One-Step Challenge", type: "one_step", profitTarget: 10, dailyDrawdown: 4, maxDrawdown: 8, maxLeverage: 50, minTradingDays: 3, price: 40000, durationDays: 30 },
+        { name: "Instant Funding", type: "instant_funding", profitTarget: 10, dailyDrawdown: 5, maxDrawdown: 10, maxLeverage: 100, minTradingDays: 0, price: 80000, durationDays: 30 },
+      ];
+      let templateCount = 0;
+      let sizeCount = 0;
+      for (const t of templates) {
+        const result = db.insert(challengeTemplates).values({
+          ...t,
+          description: `${t.name} challenge with ${t.profitTarget}% profit target`,
+          currency: "NGN",
+          isActive: true,
+          createdBy: userId,
+          createdAt: now,
+          updatedAt: now,
+        }).returning().get();
+        templateCount++;
+        const sizes = [
+          { label: "$5,000", size: 5000, price: t.price * 0.5 },
+          { label: "$10,000", size: 10000, price: t.price * 0.8 },
+          { label: "$25,000", size: 25000, price: t.price },
+          { label: "$50,000", size: 50000, price: t.price * 1.5 },
+          { label: "$100,000", size: 100000, price: t.price * 2.5 },
+          { label: "$200,000", size: 200000, price: t.price * 4 },
+        ];
+        sizes.forEach((s, i) => {
+          db.insert(accountSizes).values({
+            label: s.label, size: s.size, currency: "NGN",
+            templateId: result.id, price: s.price, sortOrder: i, isActive: true,
+          }).run();
+          sizeCount++;
+        });
+      }
+      results.templates = { created: templateCount, accountSizes: sizeCount };
+    } else {
+      results.templates = { skipped: true, reason: "Already seeded" };
+    }
+  } catch (e) {
+    errors.push(`Templates: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // ── 2. Backfill affiliates & wallets ──
+  try {
+    const allUsers = db.select().from(users).all();
+    let createdAffiliates = 0;
+    let createdWallets = 0;
+    for (const user of allUsers) {
+      const existingAffiliate = db.select().from(affiliates).where(eq(affiliates.userId, user.id)).get();
+      if (!existingAffiliate) {
+        const code = "AFR" + Math.random().toString(36).substring(2, 8).toUpperCase();
+        const codeExists = db.select().from(affiliates).where(eq(affiliates.referralCode, code)).get();
+        const finalCode = codeExists ? "AFR" + Math.random().toString(36).substring(2, 8).toUpperCase() : code;
+        db.insert(affiliates).values({
+          userId: user.id, referralCode: finalCode,
+          totalReferrals: 0, activeReferrals: 0,
+          totalCommissions: 0, pendingCommissions: 0, paidCommissions: 0,
+          commissionRate: 0.10, commissionLevels: 0, isActive: true, joinedAt: now,
+        }).run();
+        db.update(users).set({ referralCode: finalCode, updatedAt: now }).where(eq(users.id, user.id)).run();
+        createdAffiliates++;
+      }
+      const existingWallet = db.select().from(wallets).where(eq(wallets.userId, user.id)).get();
+      if (!existingWallet) {
+        db.insert(wallets).values({
+          userId: user.id, balance: 0, referralBalance: 0, bonusBalance: 0,
+          currency: "NGN", createdAt: now, updatedAt: now,
+        }).run();
+        createdWallets++;
+      }
+    }
+    results.affiliates = { totalUsers: allUsers.length, createdAffiliates, createdWallets };
+  } catch (e) {
+    errors.push(`Affiliates: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // ── 3. Seed funded accounts, MT5 accounts, metrics & payouts ──
+  try {
+    const existingFunded = db.select().from(fundedAccounts).where(eq(fundedAccounts.userId, userId)).get();
+    if (existingFunded) {
+      results.fundedAccounts = { skipped: true, reason: "Already seeded" };
+    } else {
+      const template = db.select().from(challengeTemplates).limit(1).get();
+      const accountSize = template
+        ? db.select().from(accountSizes).where(eq(accountSizes.templateId, template.id)).limit(1).get()
+        : null;
+      if (!template || !accountSize) {
+        errors.push("Funded: No templates/sizes found (step 1 may have failed)");
+      } else {
+        const fundResults = { mt5Accounts: 0, challenges: 0, fundedAccounts: 0, metricsPoints: 0, payoutRequests: 0 };
+        const sampleConfigs = [
+          { size: 10000, login: "AFC-" + String(100000 + userId).padStart(6, "0"), leverage: 100 },
+          { size: 25000, login: "AFC-" + String(200000 + userId).padStart(6, "0"), leverage: 100 },
+          { size: 50000, login: "AFC-" + String(300000 + userId).padStart(6, "0"), leverage: 50 },
+        ];
+        for (const cfg of sampleConfigs) {
+          const mt5 = db.insert(mt5Accounts).values({
+            userId, login: cfg.login, password: "Demo@" + cfg.login.slice(-4),
+            investorPassword: "Investor@" + cfg.login.slice(-4), server: "AfriFundedCapital-Demo",
+            group: "DEMO\\AFC", leverage: cfg.leverage, balance: cfg.size, equity: cfg.size,
+            currency: "USD", isActive: true, isSuspended: false, lastSyncAt: now, createdAt: now,
+            metadata: JSON.stringify({ seeded: true, accountSize: cfg.size }),
+          }).returning().get();
+          fundResults.mt5Accounts++;
+          const challenge = db.insert(userChallenges).values({
+            userId, templateId: template.id, accountSizeId: accountSize.id, status: "funded",
+            accountSize: cfg.size, currency: "USD", profitTarget: template.profitTarget,
+            dailyDrawdown: template.dailyDrawdown, maxDrawdown: template.maxDrawdown,
+            maxLeverage: cfg.leverage, minTradingDays: template.minTradingDays,
+            startedAt: now - 30 * 86400000, phase1PassedAt: now - 20 * 86400000,
+            phase2PassedAt: now - 10 * 86400000, fundedAt: now - 5 * 86400000,
+            expiresAt: now + 90 * 86400000, amountPaid: 0, mt5AccountId: mt5.id,
+            currentPhase: 3, createdAt: now - 30 * 86400000, updatedAt: now,
+          }).returning().get();
+          fundResults.challenges++;
+          const funded = db.insert(fundedAccounts).values({
+            userId, challengeId: challenge.id, mt5AccountId: mt5.id,
+            accountSize: cfg.size, currency: "USD", profitSharePercent: 80,
+            isActive: true, activatedAt: now - 5 * 86400000, totalPayouts: 0,
+          }).returning().get();
+          fundResults.fundedAccounts++;
+          const payoutStatuses = [
+            { status: "pending", daysAgo: 2, amount: cfg.size * 0.08 },
+            { status: "approved", daysAgo: 7, amount: cfg.size * 0.05 },
+            { status: "paid", daysAgo: 14, amount: cfg.size * 0.10 },
+            { status: "rejected", daysAgo: 21, amount: cfg.size * 0.03 },
+          ];
+          for (const p of payoutStatuses) {
+            const requestedAt = now - p.daysAgo * 86400000;
+            const processedAt = p.status !== "pending" ? requestedAt + 2 * 86400000 : null;
+            db.insert(profitPayouts).values({
+              userId, fundedAccountId: funded.id, challengeId: challenge.id,
+              amount: Math.round(p.amount * 100) / 100, currency: "USD", status: p.status,
+              paymentMethod: "bank_transfer",
+              paymentDetails: JSON.stringify({ bankName: "Access Bank", accountNumber: "0123456789", accountName: "AfriFunded Test User" }),
+              processedBy: p.status !== "pending" ? userId : null,
+              notes: p.status === "rejected" ? "Incomplete banking details" : null,
+              rejectionReason: p.status === "rejected" ? "Please update your bank account information" : null,
+              requestedAt, processedAt,
+            }).run();
+            fundResults.payoutRequests++;
+          }
+          let balance = cfg.size;
+          let peakBalance = cfg.size;
+          for (let day = 29; day >= 0; day--) {
+            const dayTs = now - day * 86400000;
+            const dailyPnL = (Math.random() - 0.45) * cfg.size * 0.02;
+            const floatingPL = (Math.random() - 0.5) * cfg.size * 0.01;
+            balance = Math.max(balance + dailyPnL, cfg.size * 0.85);
+            peakBalance = Math.max(peakBalance, balance);
+            const equity = balance + floatingPL;
+            const totalProfit = balance - cfg.size;
+            const currentDD = ((peakBalance - equity) / peakBalance) * 100;
+            const dailyDD = dailyPnL < 0 ? Math.abs(dailyPnL / balance) * 100 : 0;
+            const remainingDD = template.maxDrawdown - currentDD;
+            const profitProgress = Math.max(0, Math.min(100, (totalProfit / (cfg.size * template.profitTarget / 100)) * 100));
+            db.insert(tradingMetrics).values({
+              mt5AccountId: mt5.id, challengeId: challenge.id,
+              balance: Math.round(balance * 100) / 100, equity: Math.round(equity * 100) / 100,
+              floatingPL: Math.round(floatingPL * 100) / 100, dailyPL: Math.round(dailyPnL * 100) / 100,
+              totalProfit: Math.round(totalProfit * 100) / 100,
+              currentDrawdown: Math.round(currentDD * 100) / 100, dailyDrawdown: Math.round(dailyDD * 100) / 100,
+              trailingDrawdown: Math.round(currentDD * 100) / 100, relativeDrawdown: Math.round(currentDD * 100) / 100,
+              absoluteDrawdown: Math.round(Math.max(0, (cfg.size - equity)) / cfg.size * 100 * 100) / 100,
+              remainingDrawdown: Math.round(Math.max(0, remainingDD) * 100) / 100,
+              profitTargetProgress: Math.round(profitProgress * 100) / 100,
+              tradingDaysCount: 30 - day, openPositions: Math.floor(Math.random() * 5),
+              closedTrades: (30 - day) * Math.floor(Math.random() * 8 + 2),
+              winRate: Math.round((50 + Math.random() * 20) * 100) / 100,
+              lossRate: Math.round((30 + Math.random() * 20) * 100) / 100,
+              averageRR: Math.round((1.2 + Math.random() * 1.5) * 100) / 100,
+              profitFactor: Math.round((1.0 + Math.random() * 1.5) * 100) / 100,
+              expectancy: Math.round((10 + Math.random() * 50) * 100) / 100,
+              largestWin: Math.round(cfg.size * 0.03 * Math.random() * 100) / 100,
+              largestLoss: Math.round(-cfg.size * 0.02 * Math.random() * 100) / 100,
+              consecutiveWins: Math.floor(Math.random() * 8) + 1,
+              consecutiveLosses: Math.floor(Math.random() * 4) + 1,
+              riskScore: Math.round((2 + Math.random() * 6) * 100) / 100,
+              healthScore: Math.round((60 + Math.random() * 35) * 100) / 100,
+              recordedAt: dayTs,
+            }).run();
+            fundResults.metricsPoints++;
+          }
+        }
+        results.fundedAccounts = fundResults;
+      }
+    }
+  } catch (e) {
+    errors.push(`Funded: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  return c.json({
+    success: errors.length === 0,
+    message: errors.length === 0
+      ? "Bulk seed completed successfully"
+      : `Bulk seed completed with ${errors.length} error(s)`,
+    results,
+    ...(errors.length > 0 ? { errors } : {}),
+  });
+});
+
 export default app;
