@@ -9,7 +9,7 @@ import {
   accountSizes,
   mt5Accounts,
 } from "../schema";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql, like, or, count, type SQL } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { randomBytes } from "crypto";
 import QRCode from "qrcode";
@@ -510,12 +510,72 @@ app.get("/verify/:code", (c) => {
 // ─── Admin: List all certificates ──────────────────────────
 app.get("/admin/all", requireAuth, requireAdmin, (c) => {
   const db = getDb();
-  const certs = db
-    .select()
+
+  // Pagination params (clamped)
+  const page = Math.max(1, parseInt(c.req.query("page") || "1") || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query("pageSize") || "20") || 20));
+
+  // Filters
+  const search = (c.req.query("search") || "").trim();
+  const type = c.req.query("type") || "";
+
+  const conditions: SQL[] = [];
+  if (search) {
+    const pattern = `%${search}%`;
+    conditions.push(
+      or(
+        like(certificates.certificateNumber, pattern),
+        like(certificates.verificationCode, pattern),
+        like(certificates.type, pattern),
+        like(users.name, pattern),
+        like(users.email, pattern),
+      )!,
+    );
+  }
+  if (type && type !== "all") conditions.push(eq(certificates.type, type));
+  const whereClause: SQL = conditions.length > 0 ? and(...conditions)! : sql`1 = 1`;
+
+  // Total matching count
+  const totalRow = db
+    .select({ count: count() })
     .from(certificates)
+    .leftJoin(users, eq(users.id, certificates.userId))
+    .where(whereClause)
+    .get();
+  const total = totalRow?.count || 0;
+
+  // Page of certificates with user info joined
+  const rows = db
+    .select({ certificate: certificates, userName: users.name, userEmail: users.email })
+    .from(certificates)
+    .leftJoin(users, eq(users.id, certificates.userId))
+    .where(whereClause)
     .orderBy(desc(certificates.issuedAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize)
     .all();
-  return c.json(certs);
+
+  const certs = rows.map(({ certificate, userName, userEmail }) => ({
+    ...certificate,
+    userName,
+    userEmail,
+  }));
+
+  // Platform-wide stats (unfiltered)
+  const allCerts = db.select({ type: certificates.type }).from(certificates).all();
+  const byType = allCerts.reduce<Record<string, number>>((acc, c) => {
+    acc[c.type] = (acc[c.type] || 0) + 1;
+    return acc;
+  }, {});
+
+  return c.json({
+    certificates: certs,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    stats: { total: allCerts.length, byType },
+  });
 });
 
 // ─── Admin: Issue certificate for a challenge ──────────────

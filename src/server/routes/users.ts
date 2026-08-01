@@ -297,8 +297,72 @@ app.delete("/:id", requireAuth, requireAdmin, async (c) => {
 // Admin: List audit logs
 app.get("/audit-logs", requireAuth, requireAdmin, (c) => {
   const db = getDb();
-  const logs = db.select().from(auditLogs).orderBy(desc(auditLogs.timestamp)).limit(100).all();
-  return c.json(logs);
+
+  // Pagination params (clamped)
+  const page = Math.max(1, parseInt(c.req.query("page") || "1") || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query("pageSize") || "20") || 20));
+
+  // Filters
+  const search = (c.req.query("search") || "").trim();
+  const action = c.req.query("action") || "";
+
+  const conditions: SQL[] = [];
+  if (search) {
+    const pattern = `%${search}%`;
+    conditions.push(
+      or(
+        like(auditLogs.action, pattern),
+        like(auditLogs.entity, pattern),
+        sql`cast(${auditLogs.entityId} as text) like ${pattern}`,
+        like(users.name, pattern),
+        like(users.email, pattern),
+      )!,
+    );
+  }
+  if (action && action !== "all") conditions.push(eq(auditLogs.action, action));
+  const whereClause: SQL = conditions.length > 0 ? and(...conditions)! : sql`1 = 1`;
+
+  // Total matching count
+  const totalRow = db
+    .select({ count: count() })
+    .from(auditLogs)
+    .leftJoin(users, eq(users.id, auditLogs.userId))
+    .where(whereClause)
+    .get();
+  const total = totalRow?.count || 0;
+
+  // Page of logs with user info joined
+  const rows = db
+    .select({ log: auditLogs, userName: users.name, userEmail: users.email })
+    .from(auditLogs)
+    .leftJoin(users, eq(users.id, auditLogs.userId))
+    .where(whereClause)
+    .orderBy(desc(auditLogs.timestamp))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize)
+    .all();
+
+  const logs = rows.map(({ log, userName, userEmail }) => ({
+    ...log,
+    userName,
+    userEmail,
+  }));
+
+  // Platform-wide stats (unfiltered)
+  const allLogs = db.select({ action: auditLogs.action }).from(auditLogs).all();
+  const byAction = allLogs.reduce<Record<string, number>>((acc, l) => {
+    acc[l.action] = (acc[l.action] || 0) + 1;
+    return acc;
+  }, {});
+
+  return c.json({
+    logs,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    stats: { total: allLogs.length, byAction },
+  });
 });
 
 // Admin: List users brief (for dropdowns)

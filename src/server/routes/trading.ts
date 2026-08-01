@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
-import { tradingMetrics, mt5Accounts, drawdownHistory, userChallenges } from "../schema";
-import { eq, desc, and, sql, count } from "drizzle-orm";
+import { tradingMetrics, mt5Accounts, drawdownHistory, userChallenges, users } from "../schema";
+import { eq, desc, and, sql, count, like, or, type SQL } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { maybeGenerateCertificate } from "../lib/certificates";
 import { createNotification } from "../lib/notifications";
@@ -447,6 +447,91 @@ app.post("/admin/mt5", requireAuth, requireAdmin, async (c) => {
     createdAt: Date.now(),
   }).returning().get();
   return c.json(result);
+});
+
+// ─── Admin: MT5 Accounts (paginated list) ───────────────
+
+app.get("/admin/mt5", requireAuth, requireAdmin, (c) => {
+  const db = getDb();
+
+  // Pagination params (clamped)
+  const page = Math.max(1, parseInt(c.req.query("page") || "1") || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query("pageSize") || "20") || 20));
+
+  // Filters
+  const search = (c.req.query("search") || "").trim();
+  const status = c.req.query("status") || "";
+
+  const conditions: SQL[] = [];
+  if (search) {
+    const pattern = `%${search}%`;
+    conditions.push(
+      or(
+        like(mt5Accounts.login, pattern),
+        like(mt5Accounts.server, pattern),
+        like(users.name, pattern),
+        like(users.email, pattern),
+      )!,
+    );
+  }
+  if (status === "active") conditions.push(eq(mt5Accounts.isActive, true));
+  if (status === "suspended") conditions.push(eq(mt5Accounts.isSuspended, true));
+  if (status === "inactive") conditions.push(eq(mt5Accounts.isActive, false));
+  const whereClause: SQL = conditions.length > 0 ? and(...conditions)! : sql`1 = 1`;
+
+  // Total matching count
+  const totalRow = db
+    .select({ count: count() })
+    .from(mt5Accounts)
+    .leftJoin(users, eq(users.id, mt5Accounts.userId))
+    .where(whereClause)
+    .get();
+  const total = totalRow?.count || 0;
+
+  // Page of accounts with user info joined
+  const rows = db
+    .select({ account: mt5Accounts, userName: users.name, userEmail: users.email })
+    .from(mt5Accounts)
+    .leftJoin(users, eq(users.id, mt5Accounts.userId))
+    .where(whereClause)
+    .orderBy(desc(mt5Accounts.createdAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize)
+    .all();
+
+  // Stats
+  const totalAccounts = db.select({ cnt: count() }).from(mt5Accounts).get();
+  const activeAccounts = db
+    .select({ cnt: count() })
+    .from(mt5Accounts)
+    .where(eq(mt5Accounts.isActive, true))
+    .get();
+  const suspendedAccounts = db
+    .select({ cnt: count() })
+    .from(mt5Accounts)
+    .where(eq(mt5Accounts.isSuspended, true))
+    .get();
+  const sumBalance = db.select({ total: sql`COALESCE(SUM(${mt5Accounts.balance}), 0)` }).from(mt5Accounts).get();
+
+  const items = rows.map((r) => ({
+    ...r.account,
+    userName: r.userName,
+    userEmail: r.userEmail,
+  }));
+
+  return c.json({
+    items,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    stats: {
+      total: totalAccounts?.cnt || 0,
+      active: activeAccounts?.cnt || 0,
+      suspended: suspendedAccounts?.cnt || 0,
+      totalBalance: sumBalance?.total || 0,
+    },
+  });
 });
 
 // ─── Admin: Sync Queue Status ──────────────────────────

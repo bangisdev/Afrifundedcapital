@@ -95,11 +95,15 @@ function exportPDF(html: string, filename: string) {
 }
 
 export default function AdminReports() {
-  const { data: users, isLoading: usersLoading } = useApiQuery<any[]>(["admin", "users"], "/api/users/list");
-  const { data: payments, isLoading: paymentsLoading } = useApiQuery<any[]>(["admin", "payments"], "/api/payments/admin/all");
+  // Server-driven lists now return paginated envelopes; pull a large page for report/export purposes
+  const { data: usersData, isLoading: usersLoading } = useApiQuery<any>(["admin", "users", "report"], "/api/users/list?page=1&pageSize=100");
+  const { data: paymentsData, isLoading: paymentsLoading } = useApiQuery<any>(["admin", "payments", "report"], "/api/payments/admin/all?page=1&pageSize=100");
   const { data: challenges, isLoading: challengesLoading } = useApiQuery<any[]>(["admin", "allChallenges"], "/api/challenges/admin/all");
   const { data: userStats } = useApiQuery<any>(["admin", "userStats"], "/api/users/stats");
   const { data: paymentStats } = useApiQuery<any>(["admin", "paymentStats"], "/api/payments/admin/stats");
+
+  const users = usersData?.users || [];
+  const payments = paymentsData?.items || [];
 
   const [activeTab, setActiveTab] = useState<ReportType>("payments");
   const [dateRange, setDateRange] = useState<DateRange>({ from: "", to: "" });

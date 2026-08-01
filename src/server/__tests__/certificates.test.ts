@@ -273,7 +273,9 @@ describe("GET /api/certificates/admin/all", () => {
   it("returns all certificates as admin", async () => {
     const { status, body } = await authGet(app, "/api/certificates/admin/all", adminCookie);
     expect(status).toBe(200);
-    expect(Array.isArray(body)).toBe(true);
+    expect(Array.isArray(body.certificates)).toBe(true);
+    expect(typeof body.total).toBe("number");
+    expect(typeof body.stats).toBe("object");
   });
 
   it("returns 403 for non-admin", async () => {
