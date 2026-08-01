@@ -35,11 +35,34 @@ const mockAddMessage = vi.fn(async () => ({ message: "sent" }));
 
 vi.mock("@/hooks/use-api", () => ({
   useApiQuery: vi.fn((key: string[], path: string, _opts?: any) => {
-    const dataKey = `${key.join("/")}`;
+    // The page passes query-suffixed keys (["support", "my", "/api/support/my?..."]),
+    // so look up by the stable prefix (first two segments).
+    const dataKey = key.slice(0, 2).join("/");
     if (queryDataMap[dataKey] === undefined) {
       return { data: undefined, isLoading: true };
     }
-    return { data: queryDataMap[dataKey], isLoading: false };
+    const base = queryDataMap[dataKey];
+    // Simulate the server-driven tickets list: paginate + stats envelope.
+    if (dataKey === "support/my" && Array.isArray(base)) {
+      const query = path.includes("?") ? path.split("?")[1] : "";
+      const params = new URLSearchParams(query);
+      const page = Number(params.get("page") || 1);
+      const pageSize = Number(params.get("pageSize") || 10);
+      const total = base.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      return {
+        data: {
+          tickets: base.slice((page - 1) * pageSize, page * pageSize),
+          total,
+          page,
+          pageSize,
+          totalPages,
+          stats: { total, byStatus: {} },
+        },
+        isLoading: false,
+      };
+    }
+    return { data: base, isLoading: false };
   }),
   useApiMutation: vi.fn((method: string, path: string, _onSuccess?: any) => {
     if (path.includes("/messages")) {
@@ -511,14 +534,22 @@ describe("Support Page", () => {
       expect(screen.getByText("closed")).toBeTruthy();
     });
 
-    it("handles many tickets", () => {
+    it("paginates many tickets", async () => {
+      const user = userEvent.setup();
       const tickets = Array.from({ length: 20 }, (_, i) =>
         makeTicket({ id: i + 1, subject: `Ticket ${i + 1}`, status: i % 2 === 0 ? "open" : "closed" })
       );
       setQueryData({ "support/my": tickets });
       render(<Support />);
+      // Page 1 shows the first 10 of 20
       expect(screen.getByText("Ticket 1")).toBeTruthy();
+      expect(screen.queryByText("Ticket 20")).toBeNull();
+      expect(screen.getByText(/Showing 10 of 20 tickets/)).toBeTruthy();
+
+      // Next page shows the remaining 10
+      await user.click(screen.getByText("Next"));
       expect(screen.getByText("Ticket 20")).toBeTruthy();
+      expect(screen.getByText(/Showing 10 of 20 tickets/)).toBeTruthy();
     });
   });
 });

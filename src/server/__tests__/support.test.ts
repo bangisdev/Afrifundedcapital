@@ -91,8 +91,9 @@ describe("GET /api/support/my", () => {
   it("returns user's tickets", async () => {
     const { status, body } = await authGet(app, "/api/support/my", userCookie);
     expect(status).toBe(200);
-    expect(Array.isArray(body)).toBe(true);
-    expect(body.length).toBeGreaterThanOrEqual(1);
+    expect(Array.isArray(body.tickets)).toBe(true);
+    expect(body.tickets.length).toBeGreaterThanOrEqual(1);
+    expect(typeof body.total).toBe("number");
   });
 });
 
@@ -103,7 +104,7 @@ describe("GET /api/support/my", () => {
 describe("POST /api/support/:id/messages", () => {
   it("adds a message to a ticket", async () => {
     const { body: tickets } = await authGet(app, "/api/support/my", userCookie);
-    const ticket = (tickets as Record<string, unknown>[])[0];
+    const ticket = ((tickets as Record<string, unknown>).tickets as Record<string, unknown>[])[0];
     if (!ticket) return;
 
     const { status, body } = await authPost(app, `/api/support/${ticket.id}/messages`, userCookie, {
@@ -118,7 +119,7 @@ describe("POST /api/support/:id/messages", () => {
 describe("GET /api/support/:id/messages", () => {
   it("returns messages for a ticket", async () => {
     const { body: tickets } = await authGet(app, "/api/support/my", userCookie);
-    const ticket = (tickets as Record<string, unknown>[])[0];
+    const ticket = ((tickets as Record<string, unknown>).tickets as Record<string, unknown>[])[0];
     if (!ticket) return;
 
     const { status, body } = await authGet(app, `/api/support/${ticket.id}/messages`, userCookie);

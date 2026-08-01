@@ -11,10 +11,48 @@ const app = new Hono();
 app.get("/my", requireAuth, (c) => {
   const userId = c.get("userId");
   const db = getDb();
-  const tickets = db.select().from(supportTickets)
+
+  // Pagination params (clamped)
+  const page = Math.max(1, parseInt(c.req.query("page") || "1") || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query("pageSize") || "10") || 10));
+
+  // Total count for this user
+  const totalRow = db
+    .select({ count: count() })
+    .from(supportTickets)
     .where(eq(supportTickets.userId, userId))
-    .orderBy(desc(supportTickets.createdAt)).all();
-  return c.json(tickets);
+    .get();
+  const total = totalRow?.count || 0;
+
+  // Page of tickets
+  const tickets = db
+    .select()
+    .from(supportTickets)
+    .where(eq(supportTickets.userId, userId))
+    .orderBy(desc(supportTickets.createdAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize)
+    .all();
+
+  // User-wide stats (unfiltered)
+  const allTickets = db
+    .select({ status: supportTickets.status })
+    .from(supportTickets)
+    .where(eq(supportTickets.userId, userId))
+    .all();
+  const byStatus = allTickets.reduce<Record<string, number>>((acc, t) => {
+    acc[t.status] = (acc[t.status] || 0) + 1;
+    return acc;
+  }, {});
+
+  return c.json({
+    tickets,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    stats: { total: allTickets.length, byStatus },
+  });
 });
 
 // Create ticket
