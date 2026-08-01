@@ -52,9 +52,9 @@ beforeAll(async () => {
   // Create a demo challenge and advance it to funded
   const user = db.select().from(users).where(eq(users.email, "payout-trader@test.com")).get();
   const { body: templates } = await authGet(app, "/api/challenges/templates", adminCookie);
-  const template = (templates as Record<string, unknown>[])[0];
+  const template = (templates as Array<{ id: number }>)[0];
   const { body: sizes } = await authGet(app, `/api/challenges/templates/${template.id}/sizes`, adminCookie);
-  const size = (sizes as Record<string, unknown>[])[0];
+  const size = (sizes as Array<{ id: number; size: number }>)[0];
 
   await authPost(app, "/api/challenges/demo-purchase", adminCookie, {
     templateId: template.id,
@@ -64,7 +64,7 @@ beforeAll(async () => {
 
   // Get challenge and update to funded status (uses PUT, not POST!)
   const { body: challenges } = await authGet(app, "/api/challenges/my", userCookie);
-  const challenge = (challenges as Record<string, unknown>[])[0];
+  const challenge = (challenges as Array<{ id: number }>)[0];
   if (challenge) {
     await authPut(app, `/api/challenges/admin/${challenge.id}/status`, adminCookie, {
       status: "funded",

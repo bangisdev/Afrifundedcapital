@@ -7,13 +7,15 @@ import React from "react";
 
 // ─── Mock: react-router ───────────────────────────────────
 const mockNavigate = vi.fn();
+const mockSetSearchParams = vi.fn();
 vi.mock("react-router", () => ({
   useNavigate: () => mockNavigate,
+  useSearchParams: () => [new URLSearchParams(), mockSetSearchParams],
 }));
 
 // ─── Mock: useAuth ─────────────────────────────────────────
 const mockSignIn = vi.fn();
-const mockUseAuth = vi.fn(() => ({
+const mockUseAuth = vi.fn((...args: any[]): any => ({
   isLoading: false,
   isAuthenticated: false,
   user: null,
@@ -452,7 +454,7 @@ describe("Auth Page", () => {
       vi.spyOn(global, "fetch").mockResolvedValueOnce({
         ok: false,
         json: async () => { throw new Error("bad json"); },
-      } as Response);
+      } as unknown as Response);
       const user = userEvent.setup();
       render(<AuthPage />);
 

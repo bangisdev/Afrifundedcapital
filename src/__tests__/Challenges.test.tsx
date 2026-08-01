@@ -70,7 +70,7 @@ vi.mock("@/hooks/use-api", () => ({
 // ─── Mock: useFlutterwavePayment ───────────────────────────
 const mockStartCheckout = vi.fn();
 const mockResetPayment = vi.fn();
-let mockPaymentState = { status: "idle" as const };
+let mockPaymentState: CheckoutState = { status: "idle" };
 
 vi.mock("@/hooks/use-flutterwave", () => ({
   useFlutterwavePayment: vi.fn(() => ({
@@ -152,7 +152,7 @@ vi.mock("@/components/ui/tabs", () => {
 // ─── Import component after mocks ─────────────────────────
 import Challenges from "@/pages/dashboard/Challenges";
 import { useAuth } from "@/hooks/use-auth";
-import { useFlutterwavePayment } from "@/hooks/use-flutterwave";
+import { useFlutterwavePayment, type CheckoutState } from "@/hooks/use-flutterwave";
 import { toast } from "sonner";
 
 // ─── Test data factories ──────────────────────────────────

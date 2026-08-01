@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Test setup — creates a fresh SQLite test database and builds the Hono app
  * for each test suite.  Exports `buildTestApp()` so tests can import the
@@ -366,7 +367,7 @@ export async function authGet(
   app: Hono,
   url: string,
   cookie: string,
-): Promise<{ status: number; body: unknown }> {
+): Promise<{ status: number; body: any }> {
   const res = await app.request(url, {
     method: "GET",
     headers: { Cookie: cookie },
@@ -380,7 +381,7 @@ export async function authPost(
   url: string,
   cookie: string,
   data?: unknown,
-): Promise<{ status: number; body: unknown }> {
+): Promise<{ status: number; body: any }> {
   const res = await app.request(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: cookie },
@@ -395,7 +396,7 @@ export async function authPut(
   url: string,
   cookie: string,
   data?: unknown,
-): Promise<{ status: number; body: unknown }> {
+): Promise<{ status: number; body: any }> {
   const res = await app.request(url, {
     method: "PUT",
     headers: { "Content-Type": "application/json", Cookie: cookie },
@@ -409,7 +410,7 @@ export async function authDelete(
   app: Hono,
   url: string,
   cookie: string,
-): Promise<{ status: number; body: unknown }> {
+): Promise<{ status: number; body: any }> {
   const res = await app.request(url, {
     method: "DELETE",
     headers: { Cookie: cookie },
