@@ -146,7 +146,8 @@ export default function AdminChallenges() {
     try {
       const res = await fetch(`/api/challenges/templates/${templateId}/sizes`, { credentials: "include" });
       const data = await res.json();
-      setSizesCache((prev) => ({ ...prev, [templateId]: data }));
+      // Guard against non-array responses so sizes.map never crashes
+      setSizesCache((prev) => ({ ...prev, [templateId]: Array.isArray(data) ? data : [] }));
     } catch {}
   };
 
@@ -243,7 +244,7 @@ export default function AdminChallenges() {
           ) : (
             <div className="space-y-2">
               {(templates || []).map((t) => {
-                const sizes = sizesCache[t.id] || [];
+                const sizes = Array.isArray(sizesCache[t.id]) ? sizesCache[t.id] : [];
                 const isExpanded = expandedTemplate === t.id;
                 return (
                   <div key={t.id} className="border rounded-lg overflow-hidden">

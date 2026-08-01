@@ -14,7 +14,10 @@ vi.mock("sonner", () => ({
 }));
 
 const mockNavigate = vi.fn();
-vi.mock("react-router", () => ({ useNavigate: () => mockNavigate }));
+vi.mock("react-router", () => ({
+  useNavigate: () => mockNavigate,
+  useSearchParams: () => [new URLSearchParams(), vi.fn()],
+}));
 
 const mockAuthState = {
   isLoading: false,

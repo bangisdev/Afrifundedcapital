@@ -12,19 +12,17 @@ vi.mock("@/hooks/use-auth", () => ({
 
 const queryDataMap: Record<string, any> = {};
 vi.mock("@/hooks/use-api", () => ({
-  useApiQuery: vi.fn((key: string[]) => {
-    const joined = `${key.join("/")}`;
-    // Server-aware pagination: list key looks like admin/payments/api/payments/admin/all?page=1&pageSize=10
-    const listMatch = joined.match(/^admin\/payments\/api\/payments\/admin\/all\?(.*)$/);
-    if (listMatch) {
+  useApiQuery: vi.fn((key: string[], path?: string) => {
+    // Server-aware pagination: the payments list endpoint returns a paginated envelope
+    if (path && path.startsWith("/api/payments/admin/all")) {
       const base = queryDataMap["admin/payments"];
       if (base === undefined) return { data: undefined, isLoading: true, refetch: vi.fn() };
-      const qp = new URLSearchParams(listMatch[1]);
-      const search = (qp.get("search") || "").toLowerCase();
-      const status = qp.get("status") || "all";
-      const provider = qp.get("provider") || "all";
-      const page = parseInt(qp.get("page") || "1", 10);
-      const pageSize = parseInt(qp.get("pageSize") || "10", 10);
+      const url = new URL(path, "http://localhost");
+      const search = (url.searchParams.get("search") || "").toLowerCase();
+      const status = url.searchParams.get("status") || "all";
+      const provider = url.searchParams.get("provider") || "all";
+      const page = parseInt(url.searchParams.get("page") || "1", 10);
+      const pageSize = parseInt(url.searchParams.get("pageSize") || "10", 10);
       const items = base.filter((p: any) => {
         if (status !== "all" && p.status !== status) return false;
         if (provider !== "all" && p.provider !== provider) return false;
@@ -48,7 +46,7 @@ vi.mock("@/hooks/use-api", () => ({
       };
       return { data: { payments, total, page, pageSize, totalPages, stats }, isLoading: false, refetch: vi.fn() };
     }
-    const dataKey = joined;
+    const dataKey = `${key.join("/")}`;
     if (queryDataMap[dataKey] === undefined) return { data: undefined, isLoading: true, refetch: vi.fn() };
     return { data: queryDataMap[dataKey], isLoading: false, refetch: vi.fn() };
   }),

@@ -151,7 +151,7 @@ describe("Affiliate Page", () => {
       render(<Affiliate />);
       expect(screen.getByText("Total Referrals")).toBeTruthy();
       expect(screen.getByText("Total Commissions")).toBeTruthy();
-      expect(screen.getByText("Pending")).toBeTruthy();
+      expect(screen.getByText("Pending Payout")).toBeTruthy();
     });
 
     it("displays total referrals count", () => {
@@ -169,7 +169,9 @@ describe("Affiliate Page", () => {
     it("displays pending commissions in NGN", () => {
       setQueryData({ "affiliate/my": makeAffiliate({ pendingCommissions: 50000 }) });
       render(<Affiliate />);
-      expect(screen.getByText("₦50,000")).toBeTruthy();
+      // ₦50,000 appears in both the Pending Payout stat and the Available box
+      const amounts = screen.getAllByText("₦50,000");
+      expect(amounts.length).toBeGreaterThanOrEqual(1);
     });
 
     it("shows zero values when affiliate data has no values", () => {
@@ -189,7 +191,9 @@ describe("Affiliate Page", () => {
       });
       render(<Affiliate />);
       expect(screen.getByText("₦1,234,567")).toBeTruthy();
-      expect(screen.getByText("₦987,654")).toBeTruthy();
+      // ₦987,654 appears in both the Pending Payout stat and the Available box
+      const pendingAmounts = screen.getAllByText("₦987,654");
+      expect(pendingAmounts.length).toBeGreaterThanOrEqual(1);
     });
 
     it("shows zero referrals when affiliate data has no totalReferrals", () => {
@@ -254,7 +258,7 @@ describe("Affiliate Page", () => {
       await user.click(copyButtons[0]);
 
       // Toast success proves the click handler fired and clipboard was attempted
-      expect(toast.success).toHaveBeenCalledWith("Copied!");
+      expect(toast.success).toHaveBeenCalledWith("Referral code copied!");
     });
 
     it("shows success toast when code is copied", async () => {
@@ -265,7 +269,7 @@ describe("Affiliate Page", () => {
       const copyButtons = screen.getAllByText("Copy");
       await user.click(copyButtons[0]);
 
-      expect(toast.success).toHaveBeenCalledWith("Copied!");
+      expect(toast.success).toHaveBeenCalledWith("Referral code copied!");
     });
 
     it("copies fallback user code when affiliate code is null", async () => {
@@ -277,7 +281,7 @@ describe("Affiliate Page", () => {
       await user.click(copyButtons[0]);
 
       // Toast success proves the handler fired with fallback code
-      expect(toast.success).toHaveBeenCalledWith("Copied!");
+      expect(toast.success).toHaveBeenCalledWith("Referral code copied!");
     });
   });
 
@@ -286,7 +290,7 @@ describe("Affiliate Page", () => {
     it("renders the referral link label", () => {
       setQueryData({ "affiliate/my": makeAffiliate({ referralCode: "AFF123" }) });
       render(<Affiliate />);
-      expect(screen.getByText("Referral Link")).toBeTruthy();
+      expect(screen.getByText("Your Referral Link")).toBeTruthy();
     });
 
     it("displays the full referral link with code", () => {
@@ -320,7 +324,7 @@ describe("Affiliate Page", () => {
       await user.click(copyButtons[1]);
 
       // Toast success proves the handler fired
-      expect(toast.success).toHaveBeenCalledWith("Link copied!");
+      expect(toast.success).toHaveBeenCalledWith("Referral link copied!");
     });
 
     it("shows success toast when link is copied", async () => {
@@ -331,7 +335,7 @@ describe("Affiliate Page", () => {
       const copyButtons = screen.getAllByText("Copy");
       await user.click(copyButtons[1]);
 
-      expect(toast.success).toHaveBeenCalledWith("Link copied!");
+      expect(toast.success).toHaveBeenCalledWith("Referral link copied!");
     });
 
     it("link input is read-only", () => {
@@ -387,15 +391,16 @@ describe("Affiliate Page", () => {
       expect(screen.getByText("50")).toBeTruthy();
       expect(screen.getByText("Total Commissions")).toBeTruthy();
       expect(screen.getByText("₦250,000")).toBeTruthy();
-      expect(screen.getByText("Pending")).toBeTruthy();
-      expect(screen.getByText("₦75,000")).toBeTruthy();
+      expect(screen.getByText("Pending Payout")).toBeTruthy();
+      // ₦75,000 appears in both the Pending Payout stat and the Available box
+      expect(screen.getAllByText("₦75,000").length).toBeGreaterThanOrEqual(1);
 
       // Referral code
       expect(screen.getByText("Your Referral Code")).toBeTruthy();
       expect(screen.getByText("PROCODE")).toBeTruthy();
 
       // Referral link
-      expect(screen.getByText("Referral Link")).toBeTruthy();
+      expect(screen.getByText("Your Referral Link")).toBeTruthy();
       expect(screen.getByDisplayValue(/auth\?ref=PROCODE/)).toBeTruthy();
 
       // Copy buttons
@@ -433,7 +438,8 @@ describe("Affiliate Page", () => {
       });
       render(<Affiliate />);
       expect(screen.getByText("₦999,999,999")).toBeTruthy();
-      expect(screen.getByText("₦888,888,888")).toBeTruthy();
+      // ₦888,888,888 appears in both the Pending Payout stat and the Available box
+      expect(screen.getAllByText("₦888,888,888").length).toBeGreaterThanOrEqual(1);
     });
   });
 });

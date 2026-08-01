@@ -12,7 +12,9 @@ vi.mock("@/hooks/use-auth", () => ({
 const queryDataMap: Record<string, any> = {};
 vi.mock("@/hooks/use-api", () => ({
   useApiQuery: vi.fn((key: string[]) => {
-    const dataKey = `${key.join("/")}`;
+    // The page keys payouts queries as ["admin","payouts",queryParams] where queryParams
+    // is often "" — strip trailing slashes so "admin/payouts/" matches "admin/payouts".
+    const dataKey = `${key.join("/")}`.replace(/\/+$/, "");
     if (queryDataMap[dataKey] === undefined) return { data: undefined, isLoading: true, refetch: vi.fn() };
     return { data: queryDataMap[dataKey], isLoading: false, refetch: vi.fn() };
   }),
@@ -37,7 +39,7 @@ describe("AdminPayouts Page", () => {
       setQueryData({ "admin/payouts": [
         { id: 1, amount: 50000, status: "pending", userId: 1, paymentMethod: "bank", requestedAt: Date.now() },
       ]}); render(<AdminPayouts />);
-      expect(screen.getByText("1 payout requests")).toBeTruthy();
+      expect(screen.getByText("1 total · 1 pending")).toBeTruthy();
     });
   });
 
@@ -72,7 +74,7 @@ describe("AdminPayouts Page", () => {
     it("renders complete page", () => {
       setQueryData({}); render(<AdminPayouts />);
       expect(screen.getByText("Payouts")).toBeTruthy();
-      expect(screen.getByText("0 payout requests")).toBeTruthy();
+      expect(screen.getByText("0 total · 0 pending")).toBeTruthy();
     });
   });
 });

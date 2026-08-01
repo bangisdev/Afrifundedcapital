@@ -12,7 +12,38 @@ vi.mock("@/hooks/use-auth", () => ({
 
 const queryDataMap: Record<string, any> = {};
 vi.mock("@/hooks/use-api", () => ({
-  useApiQuery: vi.fn((key: string[]) => {
+  useApiQuery: vi.fn((key: string[], path?: string) => {
+    // Server-aware pagination: the support list endpoint returns a paginated envelope
+    if (path && path.startsWith("/api/support/admin/all")) {
+      const base = queryDataMap["admin/tickets"];
+      if (base === undefined) return { data: undefined, isLoading: true, refetch: vi.fn() };
+      const url = new URL(path, "http://localhost");
+      const search = (url.searchParams.get("search") || "").toLowerCase();
+      const status = url.searchParams.get("status") || "all";
+      const priority = url.searchParams.get("priority") || "all";
+      const page = parseInt(url.searchParams.get("page") || "1", 10);
+      const pageSize = parseInt(url.searchParams.get("pageSize") || "10", 10);
+      const items = base.filter((t: any) => {
+        if (status !== "all" && t.status !== status) return false;
+        if (priority !== "all" && t.priority !== priority) return false;
+        if (search) {
+          const hay = `${t.subject || ""} ${t.category || ""} ${t.userName || ""} ${t.userEmail || ""} ${t.id || ""}`.toLowerCase();
+          if (!hay.includes(search)) return false;
+        }
+        return true;
+      });
+      const total = items.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      const start = (page - 1) * pageSize;
+      const tickets = items.slice(start, start + pageSize);
+      const stats = {
+        total,
+        open: items.filter((t: any) => t.status === "open").length,
+        pending: items.filter((t: any) => t.status === "pending").length,
+        resolved: items.filter((t: any) => t.status === "resolved").length,
+      };
+      return { data: { tickets, total, page, pageSize, totalPages, stats }, isLoading: false, refetch: vi.fn() };
+    }
     const dataKey = `${key.join("/")}`;
     if (queryDataMap[dataKey] === undefined) return { data: undefined, isLoading: true, refetch: vi.fn() };
     return { data: queryDataMap[dataKey], isLoading: false, refetch: vi.fn() };

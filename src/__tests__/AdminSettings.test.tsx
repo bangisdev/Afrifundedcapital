@@ -161,7 +161,7 @@ describe("AdminSettings Page", () => {
     it("renders Seed Data button", () => {
       setQueryData({});
       render(<AdminSettings />);
-      expect(screen.getByText("Seed Data")).toBeTruthy();
+      expect(screen.getByText("Seed All Demo Data")).toBeTruthy();
     });
   });
 
@@ -383,14 +383,15 @@ describe("AdminSettings Page", () => {
 
   // ─── Seed Data ─────────────────────────────────────────
   describe("Seed Data", () => {
-    it("calls seed API on Seed Data click", async () => {
+    it("calls seed API on Seed All Demo Data click", async () => {
       const user = userEvent.setup();
+      mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, message: "All demo data seeded successfully!" }) });
       setQueryData({});
       render(<AdminSettings />);
-      await user.click(screen.getByText("Seed Data"));
+      await user.click(screen.getByText("Seed All Demo Data"));
       await waitFor(() => {
-        expect(mockSeedData).toHaveBeenCalled();
-        expect(toast.success).toHaveBeenCalledWith("Seed data created successfully");
+        expect(mockFetch).toHaveBeenCalledWith("/api/seed/bulk", expect.objectContaining({ method: "POST" }));
+        expect(toast.success).toHaveBeenCalledWith("All demo data seeded successfully!");
       });
     });
   });
@@ -468,7 +469,7 @@ describe("AdminSettings Page", () => {
       expect(screen.getByText("Payment Settings")).toBeTruthy();
       expect(screen.getByText("Test Mode")).toBeTruthy();
       expect(screen.getByTestId("tabs")).toBeTruthy();
-      expect(screen.getByText("Seed Data")).toBeTruthy();
+      expect(screen.getByText("Seed All Demo Data")).toBeTruthy();
     });
 
     it("renders with pre-existing config", () => {
