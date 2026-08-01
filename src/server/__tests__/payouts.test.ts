@@ -99,7 +99,9 @@ describe("GET /api/payouts/my", () => {
   it("returns user's payouts", async () => {
     const { status, body } = await authGet(app, "/api/payouts/my", userCookie);
     expect(status).toBe(200);
-    expect(Array.isArray(body)).toBe(true);
+    expect(Array.isArray(body.payouts)).toBe(true);
+    expect(typeof body.total).toBe("number");
+    expect(typeof body.totalPages).toBe("number");
   });
 
   it("returns 401 without auth", async () => {

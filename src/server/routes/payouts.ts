@@ -12,10 +12,50 @@ const app = new Hono();
 app.get("/my", requireAuth, (c) => {
   const userId = c.get("userId");
   const db = getDb();
-  const items = db.select().from(profitPayouts)
+
+  // Pagination params (clamped)
+  const page = Math.max(1, parseInt(c.req.query("page") || "1") || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query("pageSize") || "10") || 10));
+
+  // Total count for this user
+  const totalRow = db
+    .select({ count: count() })
+    .from(profitPayouts)
     .where(eq(profitPayouts.userId, userId))
-    .orderBy(desc(profitPayouts.requestedAt)).all();
-  return c.json(items);
+    .get();
+  const total = totalRow?.count || 0;
+
+  // Page of payouts
+  const items = db
+    .select()
+    .from(profitPayouts)
+    .where(eq(profitPayouts.userId, userId))
+    .orderBy(desc(profitPayouts.requestedAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize)
+    .all();
+
+  // User-wide stats (unfiltered)
+  const allPayouts = db
+    .select({ status: profitPayouts.status, amount: profitPayouts.amount })
+    .from(profitPayouts)
+    .where(eq(profitPayouts.userId, userId))
+    .all();
+  const byStatus = allPayouts.reduce<Record<string, number>>((acc, p) => {
+    acc[p.status] = (acc[p.status] || 0) + 1;
+    return acc;
+  }, {});
+  const totalPaid = allPayouts.filter((p) => p.status === "paid").reduce((s, p) => s + (p.amount || 0), 0);
+  const totalPending = allPayouts.filter((p) => p.status === "pending" || p.status === "processing").reduce((s, p) => s + (p.amount || 0), 0);
+
+  return c.json({
+    payouts: items,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    stats: { total: allPayouts.length, totalPaid, totalPending, byStatus },
+  });
 });
 
 // Get my payout stats

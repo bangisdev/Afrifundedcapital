@@ -106,6 +106,28 @@ vi.mock("@/hooks/use-api", () => ({
         isLoading: false,
       };
     }
+    // Simulate the server-driven payouts envelope for the Payouts page.
+    if (dataKey === "payouts/my" && Array.isArray(base)) {
+      const query = path.includes("?") ? path.split("?")[1] : "";
+      const params = new URLSearchParams(query);
+      const page = Number(params.get("page") || 1);
+      const pageSize = Number(params.get("pageSize") || 10);
+      const total = base.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      const totalPaid = base.filter((p: any) => p.status === "paid").reduce((s: number, p: any) => s + (p.amount || 0), 0);
+      const totalPending = base.filter((p: any) => p.status === "pending" || p.status === "processing").reduce((s: number, p: any) => s + (p.amount || 0), 0);
+      return {
+        data: {
+          payouts: base.slice((page - 1) * pageSize, page * pageSize),
+          total,
+          page,
+          pageSize,
+          totalPages,
+          stats: { total, totalPaid, totalPending, byStatus: {} },
+        },
+        isLoading: false,
+      };
+    }
     return { data: base, isLoading: false };
   }),
   useApiMutation: vi.fn((method: string, path: string) => ({
