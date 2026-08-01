@@ -41,11 +41,49 @@ const mockDeleteNotif = vi.fn(async () => ({ message: "deleted" }));
 
 vi.mock("@/hooks/use-api", () => ({
   useApiQuery: vi.fn((key: string[], path: string, _opts?: any) => {
-    const dataKey = `${key.join("/")}`;
+    // The page passes query-suffixed keys (["notifications", "my", "/api/notifications/my?..."]),
+    // so look up by the stable prefix (first two segments).
+    const dataKey = key.slice(0, 2).join("/");
     if (queryDataMap[dataKey] === undefined) {
       return { data: undefined, isLoading: true };
     }
-    return { data: queryDataMap[dataKey], isLoading: false };
+    const base = queryDataMap[dataKey];
+    // Simulate the server-driven notifications list: search + type filter + paginate + stats envelope.
+    if (dataKey === "notifications/my" && Array.isArray(base)) {
+      const query = path.includes("?") ? path.split("?")[1] : "";
+      const params = new URLSearchParams(query);
+      const search = (params.get("search") || "").toLowerCase();
+      const type = params.get("type");
+      const page = Number(params.get("page") || 1);
+      const pageSize = Number(params.get("pageSize") || 10);
+
+      let filtered = base;
+      if (search) {
+        filtered = filtered.filter((n: any) =>
+          [n.title, n.message].some((v) => v && String(v).toLowerCase().includes(search)),
+        );
+      }
+      if (type && type !== "all") filtered = filtered.filter((n: any) => n.type === type);
+
+      const total = filtered.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      return {
+        data: {
+          notifications: filtered.slice((page - 1) * pageSize, page * pageSize),
+          total,
+          page,
+          pageSize,
+          totalPages,
+          stats: {
+            total: base.length,
+            unread: base.filter((n: any) => !n.read).length,
+            byType: {},
+          },
+        },
+        isLoading: false,
+      };
+    }
+    return { data: base, isLoading: false };
   }),
   useApiMutation: vi.fn((method: string, path: string, _onSuccess?: any) => {
     if (path.includes("/read-all")) {
@@ -265,8 +303,10 @@ describe("Notifications Page", () => {
       });
       render(<Notifications />);
       await user.type(screen.getByPlaceholderText("Search notifications..."), "payment");
-      expect(screen.getByText("Payment Received")).toBeTruthy();
-      expect(screen.queryByText("KYC Approved")).toBeNull();
+      await waitFor(() => {
+        expect(screen.getByText("Payment Received")).toBeTruthy();
+        expect(screen.queryByText("KYC Approved")).toBeNull();
+      });
     });
 
     it("filters by message", async () => {
@@ -279,8 +319,10 @@ describe("Notifications Page", () => {
       });
       render(<Notifications />);
       await user.type(screen.getByPlaceholderText("Search notifications..."), "challenge");
-      expect(screen.getByText("Your challenge was funded")).toBeTruthy();
-      expect(screen.queryByText("KYC verified")).toBeNull();
+      await waitFor(() => {
+        expect(screen.getByText("Your challenge was funded")).toBeTruthy();
+        expect(screen.queryByText("KYC verified")).toBeNull();
+      });
     });
 
     it("search is case-insensitive", async () => {
@@ -293,8 +335,10 @@ describe("Notifications Page", () => {
       });
       render(<Notifications />);
       await user.type(screen.getByPlaceholderText("Search notifications..."), "PAYMENT");
-      expect(screen.getByText("Payment Received")).toBeTruthy();
-      expect(screen.queryByText("KYC Approved")).toBeNull();
+      await waitFor(() => {
+        expect(screen.getByText("Payment Received")).toBeTruthy();
+        expect(screen.queryByText("KYC Approved")).toBeNull();
+      });
     });
 
     it("shows all when search is cleared", async () => {
@@ -308,10 +352,14 @@ describe("Notifications Page", () => {
       render(<Notifications />);
       const searchInput = screen.getByPlaceholderText("Search notifications...");
       await user.type(searchInput, "payment");
-      expect(screen.queryByText("KYC")).toBeNull();
+      await waitFor(() => {
+        expect(screen.queryByText("KYC")).toBeNull();
+      });
 
       await user.clear(searchInput);
-      expect(screen.getByText("KYC")).toBeTruthy();
+      await waitFor(() => {
+        expect(screen.getByText("KYC")).toBeTruthy();
+      });
     });
   });
 
@@ -465,13 +513,29 @@ describe("Notifications Page", () => {
       expect(unreadCards.length).toBe(2);
     });
 
-    it("handles many notifications", () => {
+    it("paginates many notifications", async () => {
+      const user = userEvent.setup();
       const notifs = Array.from({ length: 30 }, (_, i) =>
         makeNotification({ id: i + 1, title: `Notification ${i + 1}` })
       );
       setQueryData({ "notifications/my": notifs });
       render(<Notifications />);
+      // Page 1 shows the first 10 of 30
       expect(screen.getByText("Notification 1")).toBeTruthy();
+      expect(screen.queryByText("Notification 30")).toBeNull();
+      expect(screen.getByText(/Showing 10 of 30 notifications/)).toBeTruthy();
+
+      // Next page shows more
+      await user.click(screen.getByText("Next"));
+      expect(screen.getByText("Notification 11")).toBeTruthy();
+
+      // Last page reaches Notification 30
+      while (screen.getByText(/\d+ \/ 3/)) {
+        const nextBtn = screen.getByText("Next");
+        const disabled = (nextBtn.closest("button") as HTMLButtonElement)?.disabled;
+        if (disabled) break;
+        await user.click(nextBtn);
+      }
       expect(screen.getByText("Notification 30")).toBeTruthy();
     });
   });

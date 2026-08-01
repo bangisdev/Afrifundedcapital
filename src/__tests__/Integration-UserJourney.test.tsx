@@ -79,6 +79,33 @@ vi.mock("@/hooks/use-api", () => ({
         isLoading: false,
       };
     }
+    // Simulate the server-driven notifications envelope for the Notifications page.
+    if (dataKey === "notifications/my" && Array.isArray(base)) {
+      const query = path.includes("?") ? path.split("?")[1] : "";
+      const params = new URLSearchParams(query);
+      const search = (params.get("search") || "").toLowerCase();
+      const page = Number(params.get("page") || 1);
+      const pageSize = Number(params.get("pageSize") || 10);
+      let filtered = base;
+      if (search) {
+        filtered = filtered.filter((n: any) =>
+          [n.title, n.message].some((v) => v && String(v).toLowerCase().includes(search)),
+        );
+      }
+      const total = filtered.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      return {
+        data: {
+          notifications: filtered.slice((page - 1) * pageSize, page * pageSize),
+          total,
+          page,
+          pageSize,
+          totalPages,
+          stats: { total: base.length, unread: base.filter((n: any) => !n.read).length, byType: {} },
+        },
+        isLoading: false,
+      };
+    }
     return { data: base, isLoading: false };
   }),
   useApiMutation: vi.fn((method: string, path: string) => ({

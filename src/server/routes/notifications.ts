@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
 import { notifications, users } from "../schema";
-import { eq, desc, count, and, sql } from "drizzle-orm";
+import { eq, desc, count, and, or, like, sql, type SQL } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 
 const app = new Hono();
@@ -22,14 +22,66 @@ app.get("/unread-count", requireAuth, (c) => {
 app.get("/my", requireAuth, (c) => {
   const userId = c.get("userId");
   const db = getDb();
+
+  // Pagination params (clamped)
+  const page = Math.max(1, parseInt(c.req.query("page") || "1") || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query("pageSize") || "10") || 10));
+
+  // Filters
+  const search = (c.req.query("search") || "").trim();
+  const type = c.req.query("type") || "";
+
+  const conditions: SQL[] = [eq(notifications.userId, userId)];
+  if (search) {
+    const pattern = `%${search}%`;
+    conditions.push(
+      or(
+        like(notifications.title, pattern),
+        like(notifications.message, pattern),
+      )!,
+    );
+  }
+  if (type && type !== "all") conditions.push(eq(notifications.type, type));
+  const whereClause: SQL = and(...conditions)!;
+
+  // Total matching count
+  const totalRow = db
+    .select({ count: count() })
+    .from(notifications)
+    .where(whereClause)
+    .get();
+  const total = totalRow?.count || 0;
+
+  // Page of notifications
   const items = db
     .select()
     .from(notifications)
-    .where(eq(notifications.userId, userId))
+    .where(whereClause)
     .orderBy(desc(notifications.createdAt))
-    .limit(100)
+    .limit(pageSize)
+    .offset((page - 1) * pageSize)
     .all();
-  return c.json(items);
+
+  // User-wide stats (unfiltered)
+  const allNotifs = db
+    .select({ type: notifications.type, read: notifications.read })
+    .from(notifications)
+    .where(eq(notifications.userId, userId))
+    .all();
+  const byType = allNotifs.reduce<Record<string, number>>((acc, n) => {
+    acc[n.type] = (acc[n.type] || 0) + 1;
+    return acc;
+  }, {});
+  const unread = allNotifs.filter((n) => !n.read).length;
+
+  return c.json({
+    notifications: items,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    stats: { total: allNotifs.length, unread, byType },
+  });
 });
 
 // Mark as read

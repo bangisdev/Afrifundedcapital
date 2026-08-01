@@ -100,8 +100,10 @@ describe("GET /api/notifications/my", () => {
   it("returns notifications for the user", async () => {
     const { status, body } = await authGet(app, "/api/notifications/my", adminCookie);
     expect(status).toBe(200);
-    expect(Array.isArray(body)).toBe(true);
-    expect(body.length).toBeGreaterThanOrEqual(2);
+    expect(Array.isArray(body.notifications)).toBe(true);
+    expect(body.notifications.length).toBeGreaterThanOrEqual(2);
+    expect(typeof body.total).toBe("number");
+    expect(typeof body.stats.unread).toBe("number");
   });
 });
 
@@ -112,7 +114,7 @@ describe("GET /api/notifications/my", () => {
 describe("PUT /api/notifications/:id/read", () => {
   it("marks a notification as read", async () => {
     const { body: notifs } = await authGet(app, "/api/notifications/my", adminCookie);
-    const notif = (notifs as Record<string, unknown>[])[0];
+    const notif = ((notifs as Record<string, unknown>).notifications as Record<string, unknown>[])[0];
     if (!notif) return;
 
     const { status, body } = await authPut(app, `/api/notifications/${notif.id}/read`, adminCookie);
@@ -139,7 +141,7 @@ describe("PUT /api/notifications/read-all", () => {
 describe("DELETE /api/notifications/:id", () => {
   it("deletes a notification", async () => {
     const { body: notifs } = await authGet(app, "/api/notifications/my", adminCookie);
-    const notif = (notifs as Record<string, unknown>[])[0];
+    const notif = ((notifs as Record<string, unknown>).notifications as Record<string, unknown>[])[0];
     if (!notif) return;
 
     const res = await app.request(`/api/notifications/${notif.id}`, {

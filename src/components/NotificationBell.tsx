@@ -62,14 +62,16 @@ export function NotificationBell({ isAdmin = false }: { isAdmin?: boolean }) {
     "/api/notifications/unread-count"
   );
 
-  const { data: notifications, refetch } = useApiQuery<Notification[]>(
+  const { data: notificationsData, refetch } = useApiQuery<any>(
     ["notifications", "my"],
     "/api/notifications/my"
   );
 
   const markRead = useApiMutation("put", "/api/notifications/read-all");
 
-  const recentNotifications = (notifications || []).slice(0, 8);
+  // The endpoint returns a paginated envelope; the bell shows the latest few.
+  const notifications = notificationsData?.notifications || [];
+  const recentNotifications = (notifications as Notification[]).slice(0, 8);
 
   // Close dropdown on outside click
   useEffect(() => {

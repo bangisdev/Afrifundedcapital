@@ -1,13 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { useNavigate } from "react-router";
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
-  Loader2, Bell, Search, CheckCheck, Trash2, DollarSign, ShieldCheck,
-  ShieldX, ShieldAlert, TrendingUp, Award, UserPlus, Ticket, Gift,
-  AlertTriangle, Settings, BarChart3, Clock, ExternalLink,
+  Loader2, Bell, Search, CheckCheck, DollarSign, ShieldCheck,
+  ShieldX, AlertTriangle, Award, UserPlus, Ticket, Gift,
+  Settings, BarChart3, ChevronDown, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -37,6 +36,17 @@ const NOTIFICATION_ICON_BG: Record<string, string> = {
   violation_warning: "bg-amber-500/10", system: "bg-secondary", broadcast: "bg-secondary",
 };
 
+interface NotificationsResponse {
+  notifications: any[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  stats: { total: number; unread: number; byType: Record<string, number> };
+}
+
+const PAGE_SIZES = [10, 25, 50];
+
 function getRelativeDate(timestamp: number) {
   const diffMs = Date.now() - timestamp;
   const diffMinutes = Math.floor(diffMs / 60000);
@@ -51,24 +61,41 @@ function getRelativeDate(timestamp: number) {
 
 export default function Notifications() {
   const navigate = useNavigate();
-  const { data: notifications, isLoading } = useApiQuery<any[]>(["notifications", "my"], "/api/notifications/my");
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [filterType, setFilterType] = useState<string>("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
   const markRead = useApiMutation<any, any>("put", "/api/notifications/${id}/read");
   const markAllRead = useApiMutation<any, any>("put", "/api/notifications/read-all");
   const deleteNotif = useApiMutation<any, any>("delete", "/api/notifications/${id}");
-  const [search, setSearch] = useState("");
-  const [filterType, setFilterType] = useState<string | null>(null);
 
-  const filtered = useMemo(() => {
-    if (!notifications) return [];
-    return notifications.filter((n: any) => {
-      if (filterType && n.type !== filterType) return false;
-      if (search) {
-        const q = search.toLowerCase();
-        return n.title?.toLowerCase().includes(q) || n.message?.toLowerCase().includes(q);
-      }
-      return true;
-    });
-  }, [notifications, filterType, search]);
+  // Debounce the search input so we don't hit the API on every keystroke
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Reset to first page whenever filters or page size change
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, filterType, pageSize]);
+
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  params.set("pageSize", String(pageSize));
+  if (debouncedSearch) params.set("search", debouncedSearch);
+  if (filterType !== "all") params.set("type", filterType);
+  const listQuery = `/api/notifications/my?${params.toString()}`;
+
+  const { data, isLoading } = useApiQuery<NotificationsResponse>(["notifications", "my", listQuery], listQuery);
+
+  const notifications = data?.notifications || [];
+  const total = data?.total || 0;
+  const totalPages = data?.totalPages || 1;
+  const stats = data?.stats || { total: 0, unread: 0, byType: {} };
+  const hasUnread = stats.unread > 0;
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-64"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
@@ -82,7 +109,7 @@ export default function Notifications() {
           <p className="text-xs text-muted-foreground mt-1">Stay updated on your challenges, payments, and account activity</p>
         </div>
         <div className="flex items-center gap-2">
-          {notifications && notifications.some((n: any) => !n.read) && (
+          {hasUnread && (
             <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => markAllRead.mutateAsync({}).then(() => toast.success("All marked as read"))}>
               <CheckCheck className="h-3.5 w-3.5 mr-1.5" /> Mark all read
             </Button>
@@ -90,19 +117,35 @@ export default function Notifications() {
         </div>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-        <input type="text" placeholder="Search notifications..." value={search} onChange={(e) => setSearch(e.target.value)}
-          className="w-full h-9 pl-8 pr-3 rounded-md border border-input bg-background text-xs placeholder:text-muted-foreground outline-none focus:border-foreground" />
+      {/* Search & Filters */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <input type="text" placeholder="Search notifications..." value={search} onChange={(e) => setSearch(e.target.value)}
+            className="w-full h-9 pl-8 pr-3 rounded-md border border-input bg-background text-xs placeholder:text-muted-foreground outline-none focus:border-foreground" />
+        </div>
+        <div className="relative">
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-3 pr-8 text-xs appearance-none cursor-pointer"
+          >
+            <option value="all">All Types</option>
+            {Object.keys(stats.byType || {}).map((t) => (
+              <option key={t} value={t}>{t.replace(/_/g, " ")}</option>
+            ))}
+          </select>
+          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+        </div>
       </div>
 
       <div className="space-y-1">
-        {filtered.length === 0 ? (
+        {notifications.length === 0 ? (
           <div className="card-subtle p-8 text-center">
             <Bell className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
             <p className="text-xs text-muted-foreground">No notifications</p>
           </div>
-        ) : filtered.map((n: any) => (
+        ) : notifications.map((n: any) => (
           <div key={n.id} className={`card-subtle p-4 flex items-start gap-3 transition-colors ${!n.read ? "bg-secondary/20" : ""}`}>
             <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${NOTIFICATION_ICON_BG[n.type] || "bg-secondary"}`}>
               {NOTIFICATION_ICONS[n.type] || <Bell className="h-4 w-4 text-muted-foreground" />}
@@ -118,6 +161,34 @@ export default function Notifications() {
           </div>
         ))}
       </div>
+
+      {/* Pagination Footer */}
+      {total > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
+          <div>Showing {notifications.length} of {total} notifications · Page {page} of {totalPages}</div>
+          <div className="flex items-center gap-2">
+            <select
+              value={pageSize}
+              onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+              className="h-8 rounded-md border border-input bg-background px-2 text-xs appearance-none cursor-pointer"
+              aria-label="Rows per page"
+            >
+              {PAGE_SIZES.map((n) => (
+                <option key={n} value={n}>{n} / page</option>
+              ))}
+            </select>
+            <div className="flex items-center gap-1">
+              <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                <ChevronLeft className="h-3.5 w-3.5" /> Prev
+              </Button>
+              <span className="px-2 font-medium tabular-nums">{page} / {totalPages}</span>
+              <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                Next <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
