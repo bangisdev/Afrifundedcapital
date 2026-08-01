@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
 import { kycDocuments, users } from "../schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, or, like, count, sql, type SQL } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { notify } from "../lib/notifications";
 import { kycApprovedEmail, kycRejectedEmail, kycDocumentUploadedEmail } from "../lib/email";
@@ -142,16 +142,80 @@ app.delete("/my/:id", requireAuth, async (c) => {
 
 // ─── Admin Endpoints ──────────────────────────────────
 
-// Admin: List all KYC documents
+// Admin: List all KYC documents (paginated + searchable)
 app.get("/admin/all", requireAuth, requireAdmin, (c) => {
   const db = getDb();
-  const docs = db.select().from(kycDocuments).orderBy(desc(kycDocuments.uploadedAt)).all();
-  // Strip fileData for list view
-  const stripped = docs.map(({ fileUrl, ...rest }) => ({
-    ...rest,
-    hasFile: !!fileUrl,
+
+  // Pagination params (clamped)
+  const page = Math.max(1, parseInt(c.req.query("page") || "1") || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query("pageSize") || "20") || 20));
+
+  // Filters
+  const search = (c.req.query("search") || "").trim();
+  const status = c.req.query("status") || "";
+  const type = c.req.query("type") || "";
+
+  const conditions: SQL[] = [];
+  if (search) {
+    const pattern = `%${search}%`;
+    conditions.push(
+      or(
+        like(kycDocuments.documentType, pattern),
+        like(users.name, pattern),
+        like(users.email, pattern),
+      )!,
+    );
+  }
+  if (status && status !== "all") conditions.push(eq(kycDocuments.status, status));
+  if (type && type !== "all") conditions.push(eq(kycDocuments.documentType, type));
+  const whereClause: SQL = conditions.length > 0 ? and(...conditions)! : sql`1 = 1`;
+
+  // Total matching count
+  const totalRow = db
+    .select({ count: count() })
+    .from(kycDocuments)
+    .leftJoin(users, eq(users.id, kycDocuments.userId))
+    .where(whereClause)
+    .get();
+  const total = totalRow?.count || 0;
+
+  // Page of documents with user info joined
+  const rows = db
+    .select({ doc: kycDocuments, userName: users.name, userEmail: users.email })
+    .from(kycDocuments)
+    .leftJoin(users, eq(users.id, kycDocuments.userId))
+    .where(whereClause)
+    .orderBy(desc(kycDocuments.uploadedAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize)
+    .all();
+
+  const items = rows.map(({ doc, userName, userEmail }) => ({
+    ...doc,
+    userName: userName || null,
+    userEmail: userEmail || null,
+    hasFile: !!doc.fileUrl,
   }));
-  return c.json(stripped);
+
+  // Platform-wide stats (unfiltered) so the stat cards stay accurate when filtered/paginated
+  const all = db.select({ count: count() }).from(kycDocuments).get();
+  const pending = db.select({ count: count() }).from(kycDocuments).where(eq(kycDocuments.status, "pending")).get();
+  const approved = db.select({ count: count() }).from(kycDocuments).where(eq(kycDocuments.status, "approved")).get();
+  const rejected = db.select({ count: count() }).from(kycDocuments).where(eq(kycDocuments.status, "rejected")).get();
+
+  return c.json({
+    documents: items,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    stats: {
+      total: all?.count || 0,
+      pending: pending?.count || 0,
+      approved: approved?.count || 0,
+      rejected: rejected?.count || 0,
+    },
+  });
 });
 
 // Admin: Get single document with file data for preview

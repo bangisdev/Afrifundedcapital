@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
 import { payments, paymentLogs, flutterwaveTransactions, challengeTemplates, accountSizes, userChallenges, mt5Accounts, settings, coupons, couponRedemptions, users, referrals, affiliates, commissions } from "../schema";
-import { eq, desc, count, and, sql } from "drizzle-orm";
+import { eq, desc, count, and, or, like, sql, type SQL } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { notify } from "../lib/notifications";
 import { paymentConfirmationEmail } from "../lib/email";
@@ -535,11 +535,87 @@ app.get("/my", requireAuth, (c) => {
   return c.json(items);
 });
 
-// Admin: List all payments
+// Admin: List all payments (paginated + searchable)
 app.get("/admin/all", requireAuth, requireAdmin, (c) => {
   const db = getDb();
-  const items = db.select().from(payments).orderBy(desc(payments.createdAt)).limit(200).all();
-  return c.json(items);
+
+  // Pagination params (clamped)
+  const page = Math.max(1, parseInt(c.req.query("page") || "1") || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query("pageSize") || "20") || 20));
+
+  // Filters
+  const search = (c.req.query("search") || "").trim();
+  const status = c.req.query("status") || "";
+  const provider = c.req.query("provider") || "";
+
+  const conditions: SQL[] = [];
+  if (search) {
+    const pattern = `%${search}%`;
+    conditions.push(
+      or(
+        like(payments.reference, pattern),
+        like(payments.description, pattern),
+        like(payments.provider, pattern),
+        like(users.name, pattern),
+        like(users.email, pattern),
+        sql`cast(${payments.amount} as text) like ${pattern}`,
+        sql`cast(${payments.userId} as text) like ${pattern}`,
+      )!,
+    );
+  }
+  if (status && status !== "all") conditions.push(eq(payments.status, status));
+  if (provider && provider !== "all") conditions.push(eq(payments.provider, provider));
+  const whereClause: SQL = conditions.length > 0 ? and(...conditions)! : sql`1 = 1`;
+
+  // Total matching count
+  const totalRow = db
+    .select({ count: count() })
+    .from(payments)
+    .leftJoin(users, eq(users.id, payments.userId))
+    .where(whereClause)
+    .get();
+  const total = totalRow?.count || 0;
+
+  // Page of payments with user info joined
+  const rows = db
+    .select({ payment: payments, userName: users.name, userEmail: users.email })
+    .from(payments)
+    .leftJoin(users, eq(users.id, payments.userId))
+    .where(whereClause)
+    .orderBy(desc(payments.createdAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize)
+    .all();
+
+  const items = rows.map((r) => ({
+    ...r.payment,
+    userName: r.userName || null,
+    userEmail: r.userEmail || null,
+  }));
+
+  // Platform-wide stats (unfiltered) so the stat cards stay accurate when filtered/paginated
+  const all = db.select({ count: count() }).from(payments).get();
+  const completed = db.select({ count: count() }).from(payments).where(eq(payments.status, "completed")).get();
+  const pending = db.select({ count: count() }).from(payments).where(eq(payments.status, "pending")).get();
+  const failed = db.select({ count: count() }).from(payments).where(eq(payments.status, "failed")).get();
+  const refunded = db.select({ count: count() }).from(payments).where(eq(payments.status, "refunded")).get();
+  const revenue = db.select({ total: sql<number>`coalesce(sum(amount), 0)` }).from(payments).where(eq(payments.status, "completed")).get();
+
+  return c.json({
+    payments: items,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    stats: {
+      total: all?.count || 0,
+      completed: completed?.count || 0,
+      pending: pending?.count || 0,
+      failed: failed?.count || 0,
+      refunded: refunded?.count || 0,
+      revenue: revenue?.total || 0,
+    },
+  });
 });
 
 // Admin: Payment stats
@@ -547,8 +623,18 @@ app.get("/admin/stats", requireAuth, requireAdmin, (c) => {
   const db = getDb();
   const total = db.select({ count: count() }).from(payments).get();
   const completed = db.select({ count: count() }).from(payments).where(eq(payments.status, "completed")).get();
+  const pending = db.select({ count: count() }).from(payments).where(eq(payments.status, "pending")).get();
+  const failed = db.select({ count: count() }).from(payments).where(eq(payments.status, "failed")).get();
+  const refunded = db.select({ count: count() }).from(payments).where(eq(payments.status, "refunded")).get();
   const revenue = db.select({ total: sql<number>`coalesce(sum(amount), 0)` }).from(payments).where(eq(payments.status, "completed")).get();
-  return c.json({ total: total?.count || 0, completed: completed?.count || 0, revenue: revenue?.total || 0 });
+  return c.json({
+    total: total?.count || 0,
+    completed: completed?.count || 0,
+    pending: pending?.count || 0,
+    failed: failed?.count || 0,
+    refunded: refunded?.count || 0,
+    revenue: revenue?.total || 0,
+  });
 });
 
 // Admin: Revenue growth

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,8 +13,10 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Search,
-  XCircle,
+  X,
   RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -36,6 +38,10 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   refunded: { label: "Refunded", color: "bg-violet-500/10 text-violet-600 border-violet-500/20" },
 };
 
+const PAGE_SIZES = [10, 25, 50];
+
+const EMPTY_STATS = { total: 0, completed: 0, pending: 0, failed: 0, refunded: 0, revenue: 0 };
+
 function formatNgn(n: number) {
   return `₦${n.toLocaleString()}`;
 }
@@ -51,50 +57,59 @@ function formatTime(ts: number | null) {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function formatFullTime(ts: number | null) {
-  if (!ts) return "";
-  return new Date(ts).toLocaleString("en-US", {
-    year: "numeric", month: "short", day: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  });
+interface PaymentsResponse {
+  payments: any[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  stats: { total: number; completed: number; pending: number; failed: number; refunded: number; revenue: number };
 }
 
 export default function AdminPayments() {
-  const { data: payments, isLoading, refetch } = useApiQuery<any[]>(["admin", "payments"], "/api/payments/admin/all");
   const { data: stats } = useApiQuery<any>(["admin", "paymentStats"], "/api/payments/admin/stats");
   const { data: revenueGrowth } = useApiQuery<any>(["admin", "revenueGrowth"], "/api/payments/admin/revenue-growth");
   const refundPayment = useApiMutation<any, any>("post", "/api/payments/admin/${id}/refund");
 
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [providerFilter, setProviderFilter] = useState<string>("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [refundTarget, setRefundTarget] = useState<any>(null);
   const [tab, setTab] = useState<"transactions" | "analytics">("transactions");
 
-  const filtered = useMemo(() => {
-    if (!payments) return [];
-    return payments.filter((p) => {
-      const matchesSearch = !search ||
-        p.reference?.toLowerCase().includes(search.toLowerCase()) ||
-        String(p.amount).includes(search) ||
-        String(p.userId).includes(search);
-      const matchesStatus = statusFilter === "all" || p.status === statusFilter;
-      const matchesProvider = providerFilter === "all" || p.provider === providerFilter;
-      return matchesSearch && matchesStatus && matchesProvider;
-    });
-  }, [payments, search, statusFilter, providerFilter]);
+  // Debounce the search input so we don't hit the API on every keystroke
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  const paymentStats = useMemo(() => {
-    if (!payments) return { total: 0, completed: 0, pending: 0, failed: 0, refunded: 0, revenue: 0 };
-    return {
-      total: payments.length,
-      completed: payments.filter((p) => p.status === "completed").length,
-      pending: payments.filter((p) => p.status === "pending").length,
-      failed: payments.filter((p) => p.status === "failed").length,
-      refunded: payments.filter((p) => p.status === "refunded").length,
-      revenue: payments.filter((p) => p.status === "completed").reduce((s, p) => s + (p.amount || 0), 0),
-    };
-  }, [payments]);
+  // Reset to first page whenever filters or page size change
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, statusFilter, providerFilter, pageSize]);
+
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  params.set("pageSize", String(pageSize));
+  if (debouncedSearch) params.set("search", debouncedSearch);
+  if (statusFilter !== "all") params.set("status", statusFilter);
+  if (providerFilter !== "all") params.set("provider", providerFilter);
+  const listQuery = `/api/payments/admin/all?${params.toString()}`;
+
+  const { data, isLoading, refetch } = useApiQuery<PaymentsResponse>(["admin", "payments", listQuery], listQuery);
+
+  const payments = data?.payments || [];
+  const total = data?.total || 0;
+  const totalPages = data?.totalPages || 1;
+
+  // Platform-wide stats — prefer the paginated response's stats, fall back to /admin/stats
+  const paymentStats = useMemo(
+    () => data?.stats || stats || EMPTY_STATS,
+    [data, stats],
+  );
 
   const handleRefund = async () => {
     if (!refundTarget) return;
@@ -107,6 +122,8 @@ export default function AdminPayments() {
       toast.error(err?.message || "Failed to refund");
     }
   };
+
+  const hasActiveFilters = debouncedSearch || statusFilter !== "all" || providerFilter !== "all";
 
   if (isLoading) {
     return (
@@ -132,8 +149,8 @@ export default function AdminPayments() {
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: "Total Revenue", value: formatNgn(stats?.revenue || paymentStats.revenue), icon: DollarSign, accent: "text-emerald-600" },
-          { label: "Total Transactions", value: stats?.total || paymentStats.total, icon: CreditCard },
+          { label: "Total Revenue", value: formatNgn(paymentStats.revenue), icon: DollarSign, accent: "text-emerald-600" },
+          { label: "Total Transactions", value: paymentStats.total, icon: CreditCard },
           { label: "This Month", value: formatNgn(revenueGrowth?.thisMonth || 0), icon: TrendingUp, accent: "text-blue-600" },
           { label: "Last Month", value: formatNgn(revenueGrowth?.lastMonth || 0), icon: TrendingUp, accent: "text-muted-foreground" },
         ].map((s) => (
@@ -174,7 +191,7 @@ export default function AdminPayments() {
             <div className="relative flex-1">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input
-                placeholder="Search by reference, amount, or user..."
+                placeholder="Search by reference, amount, user, or description..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-8 h-9 text-xs"
@@ -206,13 +223,18 @@ export default function AdminPayments() {
               </select>
               <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
             </div>
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" className="h-9 text-xs" onClick={() => { setSearch(""); setStatusFilter("all"); setProviderFilter("all"); }}>
+                <X className="h-3 w-3 mr-1" /> Clear
+              </Button>
+            )}
           </div>
 
           {/* Summary row */}
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <span>Showing {filtered.length} of {payments?.length || 0} transactions</span>
+            <span>Showing {payments.length} of {total} transactions</span>
             <span>·</span>
-            <span>Total: {formatNgn(filtered.reduce((s, p) => s + (p.amount || 0), 0))}</span>
+            <span>Total (current page): {formatNgn(payments.reduce((s, p) => s + (p.amount || 0), 0))}</span>
           </div>
 
           {/* Transactions Table */}
@@ -231,14 +253,14 @@ export default function AdminPayments() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.length === 0 ? (
+                  {payments.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="p-8 text-center text-muted-foreground">
                         No transactions found
                       </td>
                     </tr>
                   ) : (
-                    filtered.map((p) => {
+                    payments.map((p) => {
                       const statusCfg = STATUS_CONFIG[p.status] || STATUS_CONFIG.pending;
                       return (
                         <tr key={p.id} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
@@ -248,7 +270,16 @@ export default function AdminPayments() {
                               <div className="text-muted-foreground mt-0.5 truncate max-w-[200px]">{p.description}</div>
                             )}
                           </td>
-                          <td className="p-3 hidden md:table-cell text-muted-foreground">User {p.userId}</td>
+                          <td className="p-3 hidden md:table-cell text-muted-foreground">
+                            {p.userName ? (
+                              <span>
+                                <span className="text-foreground">{p.userName}</span>
+                                {p.userEmail && <span className="block text-[10px]">{p.userEmail}</span>}
+                              </span>
+                            ) : (
+                              `User ${p.userId}`
+                            )}
+                          </td>
                           <td className="p-3 text-right font-medium">{formatNgn(p.amount || 0)}</td>
                           <td className="p-3 hidden lg:table-cell">
                             <Badge variant="outline" className="text-[10px] capitalize">{p.provider}</Badge>
@@ -279,6 +310,47 @@ export default function AdminPayments() {
               </table>
             </div>
           </div>
+
+          {/* Pagination Footer */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
+            <div>
+              Showing {payments.length} of {total} transactions
+              {total > 0 && ` · Page ${page} of ${totalPages}`}
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={pageSize}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+                className="h-8 rounded-md border border-input bg-background px-2 text-xs appearance-none cursor-pointer"
+                aria-label="Rows per page"
+              >
+                {PAGE_SIZES.map((n) => (
+                  <option key={n} value={n}>{n} / page</option>
+                ))}
+              </select>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2.5 text-xs"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" /> Prev
+                </Button>
+                <span className="px-2 font-medium tabular-nums">{page} / {totalPages}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2.5 text-xs"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -289,9 +361,9 @@ export default function AdminPayments() {
           <div className="grid md:grid-cols-3 gap-4">
             <div className="card-subtle p-4">
               <div className="text-xs text-muted-foreground mb-1">Total Revenue</div>
-              <div className="text-2xl font-medium">{formatNgn(stats?.revenue || paymentStats.revenue)}</div>
+              <div className="text-2xl font-medium">{formatNgn(paymentStats.revenue)}</div>
               <div className="text-[10px] text-muted-foreground mt-1">
-                {stats?.completed || paymentStats.completed} completed transactions
+                {paymentStats.completed} completed transactions
               </div>
             </div>
             <div className="card-subtle p-4">

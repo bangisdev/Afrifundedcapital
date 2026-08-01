@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Loader2, CheckCircle, XCircle, ArrowLeft, FileText, User, Clock,
-  ChevronDown, Eye, AlertTriangle, Image as ImageIcon, X, Download,
+  ChevronDown, ChevronLeft, ChevronRight, Eye, AlertTriangle, Image as ImageIcon, X, Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -25,6 +25,19 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   unverified: { label: "Unverified", color: "bg-secondary text-secondary-foreground" },
 };
 
+const PAGE_SIZES = [10, 25, 50];
+
+const EMPTY_STATS = { total: 0, pending: 0, approved: 0, rejected: 0 };
+
+interface KycResponse {
+  documents: any[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  stats: { total: number; pending: number; approved: number; rejected: number };
+}
+
 function formatTime(ts: number | null) {
   if (!ts) return "";
   const d = new Date(ts);
@@ -38,9 +51,6 @@ function formatTime(ts: number | null) {
 }
 
 export default function AdminKyc() {
-  const { data: documents, isLoading, refetch } = useApiQuery<any[]>(["admin", "kyc"], "/api/kyc/admin/all");
-  const { data: briefUsers } = useApiQuery<any[]>(["admin", "briefUsers"], "/api/users/brief");
-
   const [selectedDoc, setSelectedDoc] = useState<any>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [fullDoc, setFullDoc] = useState<any>(null);
@@ -51,31 +61,36 @@ export default function AdminKyc() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [showImagePreview, setShowImagePreview] = useState<string | null>(null);
 
-  const filtered = useMemo(() => {
-    if (!documents) return [];
-    return documents.filter((d) => {
-      const user = briefUsers?.find((u) => u.id === d.userId);
-      const matchesSearch = !search ||
-        user?.name?.toLowerCase().includes(search.toLowerCase()) ||
-        user?.email?.toLowerCase().includes(search.toLowerCase()) ||
-        DOC_TYPES[d.documentType]?.toLowerCase().includes(search.toLowerCase());
-      const matchesStatus = statusFilter === "all" || d.status === statusFilter;
-      const matchesType = typeFilter === "all" || d.documentType === typeFilter;
-      return matchesSearch && matchesStatus && matchesType;
-    });
-  }, [documents, briefUsers, search, statusFilter, typeFilter]);
+  // Debounce the search input so we don't hit the API on every keystroke
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  const stats = useMemo(() => {
-    if (!documents) return { total: 0, pending: 0, approved: 0, rejected: 0 };
-    return {
-      total: documents.length,
-      pending: documents.filter((d) => d.status === "pending").length,
-      approved: documents.filter((d) => d.status === "approved").length,
-      rejected: documents.filter((d) => d.status === "rejected").length,
-    };
-  }, [documents]);
+  // Reset to first page whenever filters or page size change
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, statusFilter, typeFilter, pageSize]);
+
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  params.set("pageSize", String(pageSize));
+  if (debouncedSearch) params.set("search", debouncedSearch);
+  if (statusFilter !== "all") params.set("status", statusFilter);
+  if (typeFilter !== "all") params.set("type", typeFilter);
+  const listQuery = `/api/kyc/admin/all?${params.toString()}`;
+
+  const { data, isLoading, refetch } = useApiQuery<KycResponse>(["admin", "kyc", listQuery], listQuery);
+
+  const documents = data?.documents || [];
+  const total = data?.total || 0;
+  const totalPages = data?.totalPages || 1;
+  const stats = data?.stats || EMPTY_STATS;
 
   const handleApprove = async (doc: any) => {
     try {
@@ -133,6 +148,8 @@ export default function AdminKyc() {
     await loadFullDocument(doc);
   };
 
+  const hasActiveFilters = debouncedSearch || statusFilter !== "all" || typeFilter !== "all";
+
   if (isLoading) {
     return <div className="flex items-center justify-center h-64"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
   }
@@ -155,7 +172,6 @@ export default function AdminKyc() {
   if (showDetail && selectedDoc) {
     const doc = fullDoc || selectedDoc;
     const statusCfg = STATUS_CONFIG[doc.status] || STATUS_CONFIG.pending;
-    const user = briefUsers?.find((u) => u.id === doc.userId);
     const isImage = doc.fileUrl?.startsWith("data:image");
     const isPdf = doc.fileUrl?.startsWith("data:application/pdf");
 
@@ -191,11 +207,11 @@ export default function AdminKyc() {
                 <div className="text-muted-foreground mb-1">User</div>
                 <div className="flex items-center gap-2">
                   <div className="h-6 w-6 rounded-full bg-secondary flex items-center justify-center text-[10px] font-medium">
-                    {(doc.userName || user?.name || "?")[0]?.toUpperCase()}
+                    {(doc.userName || "?")[0]?.toUpperCase()}
                   </div>
                   <div>
-                    <div className="font-medium">{doc.userName || user?.name || "Unknown"}</div>
-                    <div className="text-muted-foreground">{doc.userEmail || user?.email}</div>
+                    <div className="font-medium">{doc.userName || "Unknown"}</div>
+                    <div className="text-muted-foreground">{doc.userEmail}</div>
                   </div>
                 </div>
               </div>
@@ -342,8 +358,10 @@ export default function AdminKyc() {
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
-        <Input placeholder="Search by name, email, or document type..." value={search}
-          onChange={(e) => setSearch(e.target.value)} className="h-9 text-xs flex-1" />
+        <div className="relative flex-1">
+          <Input placeholder="Search by name, email, or document type..." value={search}
+            onChange={(e) => setSearch(e.target.value)} className="h-9 text-xs pl-8" />
+        </div>
         <div className="relative">
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
             className="h-9 rounded-md border border-input bg-background px-3 pr-8 text-xs appearance-none cursor-pointer">
@@ -362,16 +380,20 @@ export default function AdminKyc() {
           </select>
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
         </div>
+        {hasActiveFilters && (
+          <Button variant="ghost" size="sm" className="h-9 text-xs" onClick={() => { setSearch(""); setStatusFilter("all"); setTypeFilter("all"); }}>
+            <X className="h-3 w-3 mr-1" /> Clear
+          </Button>
+        )}
       </div>
 
       {/* Document List */}
       <div className="space-y-1">
-        {filtered.length === 0 ? (
+        {documents.length === 0 ? (
           <div className="card-subtle p-8 text-center text-sm text-muted-foreground">No documents found</div>
         ) : (
-          filtered.map((doc: any) => {
+          documents.map((doc: any) => {
             const statusCfg = STATUS_CONFIG[doc.status] || STATUS_CONFIG.pending;
-            const user = briefUsers?.find((u) => u.id === doc.userId);
             return (
               <div key={doc.id} className="card-subtle p-4 cursor-pointer hover:bg-secondary/20 transition-colors"
                 onClick={() => openDetail(doc)}>
@@ -393,7 +415,7 @@ export default function AdminKyc() {
                         )}
                       </div>
                       <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2">
-                        <span className="flex items-center gap-1"><User className="h-3 w-3" /> {user?.name || `User ${doc.userId}`}</span>
+                        <span className="flex items-center gap-1"><User className="h-3 w-3" /> {doc.userName || `User ${doc.userId}`}</span>
                         <span>·</span>
                         <span>{formatTime(doc.uploadedAt)}</span>
                         {doc.rejectionReason && (
@@ -429,8 +451,45 @@ export default function AdminKyc() {
         )}
       </div>
 
-      <div className="text-xs text-muted-foreground text-right">
-        Showing {filtered.length} of {documents?.length || 0} documents
+      {/* Pagination Footer */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
+        <div>
+          Showing {documents.length} of {total} documents
+          {total > 0 && ` · Page ${page} of ${totalPages}`}
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            value={pageSize}
+            onChange={(e) => setPageSize(Number(e.target.value))}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs appearance-none cursor-pointer"
+            aria-label="Rows per page"
+          >
+            {PAGE_SIZES.map((n) => (
+              <option key={n} value={n}>{n} / page</option>
+            ))}
+          </select>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 text-xs"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              <ChevronLeft className="h-3.5 w-3.5" /> Prev
+            </Button>
+            <span className="px-2 font-medium tabular-nums">{page} / {totalPages}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 text-xs"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* Reject Dialog */}
