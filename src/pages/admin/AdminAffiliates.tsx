@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,11 +25,14 @@ import {
   Search,
   Eye,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Wallet,
   Clock,
   Banknote,
   Copy,
   ExternalLink,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -128,13 +131,28 @@ export default function AdminAffiliates() {
 // ═══════════════════════════════════════════════════════
 //  PAYOUTS TAB
 // ═══════════════════════════════════════════════════════
-function AffiliatePayoutsTab() {
-  const {
-    data: payouts,
-    isLoading,
-    refetch,
-  } = useApiQuery<PayoutRow[]>(["admin", "affiliate-payouts"], "/api/affiliates/admin/payouts");
+const PAGE_SIZES = [10, 25, 50];
+const EMPTY_PAYOUT_STATS = {
+  total: 0,
+  pending: 0,
+  approved: 0,
+  paid: 0,
+  rejected: 0,
+  totalAmount: 0,
+  pendingAmount: 0,
+  paidAmount: 0,
+};
 
+interface PayoutsResponse {
+  payouts: PayoutRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  stats: typeof EMPTY_PAYOUT_STATS;
+}
+
+function AffiliatePayoutsTab() {
   const approvePayout = useApiMutation<any, any>(
     "post",
     "/api/affiliates/admin/payouts/${id}/approve"
@@ -149,41 +167,43 @@ function AffiliatePayoutsTab() {
   );
 
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [rejectTarget, setRejectTarget] = useState<PayoutRow | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [processingId, setProcessingId] = useState<number | null>(null);
 
-  const filtered = useMemo(() => {
-    return (payouts || []).filter((p) => {
-      const matchesSearch =
-        !search ||
-        p.userName?.toLowerCase().includes(search.toLowerCase()) ||
-        p.userEmail?.toLowerCase().includes(search.toLowerCase()) ||
-        p.paymentMethod?.toLowerCase().includes(search.toLowerCase()) ||
-        String(p.amount).includes(search);
-      const matchesStatus = statusFilter === "all" || p.status === statusFilter;
-      return matchesSearch && matchesStatus;
-    });
-  }, [payouts, search, statusFilter]);
+  // Debounce the search input so we don't hit the API on every keystroke
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  const stats = useMemo(() => {
-    const all = payouts || [];
-    return {
-      total: all.length,
-      pending: all.filter((p) => p.status === "pending").length,
-      approved: all.filter((p) => p.status === "approved").length,
-      paid: all.filter((p) => p.status === "paid").length,
-      rejected: all.filter((p) => p.status === "rejected").length,
-      totalAmount: all.reduce((s, p) => s + (p.amount || 0), 0),
-      pendingAmount: all
-        .filter((p) => p.status === "pending")
-        .reduce((s, p) => s + (p.amount || 0), 0),
-      paidAmount: all
-        .filter((p) => p.status === "paid")
-        .reduce((s, p) => s + (p.amount || 0), 0),
-    };
-  }, [payouts]);
+  // Reset to first page whenever filters or page size change
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, statusFilter, pageSize]);
+
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  params.set("pageSize", String(pageSize));
+  if (debouncedSearch) params.set("search", debouncedSearch);
+  if (statusFilter !== "all") params.set("status", statusFilter);
+  const listQuery = `/api/affiliates/admin/payouts?${params.toString()}`;
+
+  const {
+    data,
+    isLoading,
+    refetch,
+  } = useApiQuery<PayoutsResponse>(["admin", "affiliate-payouts", listQuery], listQuery);
+
+  const payouts = data?.payouts || [];
+  const total = data?.total || 0;
+  const totalPages = data?.totalPages || 1;
+  const stats = data?.stats || EMPTY_PAYOUT_STATS;
+  const hasActiveFilters = debouncedSearch || statusFilter !== "all";
 
   const handleApprove = async (payout: PayoutRow) => {
     setProcessingId(payout.id);
@@ -286,14 +306,14 @@ function AffiliatePayoutsTab() {
 
       {/* Payout List */}
       <div className="space-y-1">
-        {filtered.length === 0 ? (
+        {payouts.length === 0 ? (
           <div className="card-subtle p-8 text-center text-xs text-muted-foreground">
-            {payouts?.length === 0
+            {total === 0
               ? "No affiliate payout requests yet"
               : "No payouts match your filters"}
           </div>
         ) : (
-          filtered.map((payout) => (
+          payouts.map((payout) => (
             <PayoutRowItem
               key={payout.id}
               payout={payout}
@@ -309,8 +329,45 @@ function AffiliatePayoutsTab() {
         )}
       </div>
 
-      <div className="text-[10px] text-muted-foreground text-right">
-        Showing {filtered.length} of {payouts?.length || 0} payout requests
+      {/* Pagination Footer */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
+        <div>
+          Showing {payouts.length} of {total} payout requests
+          {total > 0 && ` · Page ${page} of ${totalPages}`}
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            value={pageSize}
+            onChange={(e) => setPageSize(Number(e.target.value))}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs appearance-none cursor-pointer"
+            aria-label="Rows per page"
+          >
+            {PAGE_SIZES.map((n) => (
+              <option key={n} value={n}>{n} / page</option>
+            ))}
+          </select>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 text-xs"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              <ChevronLeft className="h-3.5 w-3.5" /> Prev
+            </Button>
+            <span className="px-2 font-medium tabular-nums">{page} / {totalPages}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 text-xs"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* Reject Dialog */}
@@ -559,42 +616,61 @@ function PayoutRowItem({
 // ═══════════════════════════════════════════════════════
 //  AFFILIATES LIST TAB
 // ═══════════════════════════════════════════════════════
-function AffiliatesListTab() {
-  const {
-    data: affiliates,
-    isLoading,
-  } = useApiQuery<AffiliateRow[]>(["admin", "affiliates"], "/api/affiliates/admin/all");
+const EMPTY_AFFILIATE_STATS = {
+  total: 0,
+  active: 0,
+  totalReferrals: 0,
+  totalCommissions: 0,
+  pendingCommissions: 0,
+  paidCommissions: 0,
+};
 
+interface AffiliatesResponse {
+  affiliates: AffiliateRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  stats: typeof EMPTY_AFFILIATE_STATS;
+}
+
+function AffiliatesListTab() {
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  const filtered = useMemo(() => {
-    return (affiliates || []).filter((a) => {
-      const matchesSearch =
-        !search ||
-        a.referralCode?.toLowerCase().includes(search.toLowerCase()) ||
-        a.userName?.toLowerCase().includes(search.toLowerCase()) ||
-        a.userEmail?.toLowerCase().includes(search.toLowerCase());
-      const matchesStatus =
-        statusFilter === "all" ||
-        (statusFilter === "active" && a.isActive) ||
-        (statusFilter === "inactive" && !a.isActive);
-      return matchesSearch && matchesStatus;
-    });
-  }, [affiliates, search, statusFilter]);
+  // Debounce the search input so we don't hit the API on every keystroke
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  const stats = useMemo(() => {
-    const all = affiliates || [];
-    return {
-      total: all.length,
-      active: all.filter((a) => a.isActive).length,
-      totalReferrals: all.reduce((s, a) => s + (a.totalReferrals || 0), 0),
-      totalCommissions: all.reduce((s, a) => s + (a.totalCommissions || 0), 0),
-      pendingCommissions: all.reduce((s, a) => s + (a.pendingCommissions || 0), 0),
-      paidCommissions: all.reduce((s, a) => s + (a.paidCommissions || 0), 0),
-    };
-  }, [affiliates]);
+  // Reset to first page whenever filters or page size change
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, statusFilter, pageSize]);
+
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  params.set("pageSize", String(pageSize));
+  if (debouncedSearch) params.set("search", debouncedSearch);
+  if (statusFilter !== "all") params.set("status", statusFilter);
+  const listQuery = `/api/affiliates/admin/all?${params.toString()}`;
+
+  const {
+    data,
+    isLoading,
+    refetch,
+  } = useApiQuery<AffiliatesResponse>(["admin", "affiliates", listQuery], listQuery);
+
+  const affiliates = data?.affiliates || [];
+  const total = data?.total || 0;
+  const totalPages = data?.totalPages || 1;
+  const stats = data?.stats || EMPTY_AFFILIATE_STATS;
+  const hasActiveFilters = debouncedSearch || statusFilter !== "all";
 
   if (isLoading) {
     return (
@@ -661,14 +737,14 @@ function AffiliatesListTab() {
 
       {/* Affiliates List */}
       <div className="space-y-1">
-        {filtered.length === 0 ? (
+        {affiliates.length === 0 ? (
           <div className="card-subtle p-8 text-center text-xs text-muted-foreground">
-            {affiliates?.length === 0
+            {total === 0
               ? "No affiliates registered yet"
               : "No affiliates match your filters"}
           </div>
         ) : (
-          filtered.map((affiliate) => (
+          affiliates.map((affiliate) => (
             <div key={affiliate.id} className="card-subtle overflow-hidden">
               {/* Main Row */}
               <div
@@ -818,8 +894,45 @@ function AffiliatesListTab() {
         )}
       </div>
 
-      <div className="text-[10px] text-muted-foreground text-right">
-        Showing {filtered.length} of {affiliates?.length || 0} affiliates
+      {/* Pagination Footer */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
+        <div>
+          Showing {affiliates.length} of {total} affiliates
+          {total > 0 && ` · Page ${page} of ${totalPages}`}
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            value={pageSize}
+            onChange={(e) => setPageSize(Number(e.target.value))}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs appearance-none cursor-pointer"
+            aria-label="Rows per page"
+          >
+            {PAGE_SIZES.map((n) => (
+              <option key={n} value={n}>{n} / page</option>
+            ))}
+          </select>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 text-xs"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              <ChevronLeft className="h-3.5 w-3.5" /> Prev
+            </Button>
+            <span className="px-2 font-medium tabular-nums">{page} / {totalPages}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 text-xs"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
-import { supportTickets, supportTicketMessages } from "../schema";
-import { eq, desc, and } from "drizzle-orm";
+import { supportTickets, supportTicketMessages, users } from "../schema";
+import { eq, desc, and, or, like, count, sql, type SQL } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification } from "../lib/notifications";
 
@@ -74,11 +74,79 @@ app.post("/:id/messages", requireAuth, async (c) => {
   return c.json(msg);
 });
 
-// Admin: List all tickets
+// Admin: List all tickets (paginated + searchable)
 app.get("/admin/all", requireAuth, requireAdmin, (c) => {
   const db = getDb();
-  const tickets = db.select().from(supportTickets).orderBy(desc(supportTickets.createdAt)).all();
-  return c.json(tickets);
+
+  // Pagination params (clamped)
+  const page = Math.max(1, parseInt(c.req.query("page") || "1") || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query("pageSize") || "20") || 20));
+
+  // Filters
+  const search = (c.req.query("search") || "").trim();
+  const status = c.req.query("status") || "";
+  const priority = c.req.query("priority") || "";
+
+  const conditions: SQL[] = [];
+  if (search) {
+    const pattern = `%${search}%`;
+    conditions.push(
+      or(
+        like(supportTickets.subject, pattern),
+        like(supportTickets.category, pattern),
+        like(users.name, pattern),
+        like(users.email, pattern),
+        sql`cast(${supportTickets.id} as text) like ${pattern}`,
+      )!,
+    );
+  }
+  if (status && status !== "all") conditions.push(eq(supportTickets.status, status));
+  if (priority && priority !== "all") conditions.push(eq(supportTickets.priority, priority));
+  const whereClause: SQL = conditions.length > 0 ? and(...conditions)! : sql`1 = 1`;
+
+  // Total matching count
+  const totalRow = db
+    .select({ count: count() })
+    .from(supportTickets)
+    .leftJoin(users, eq(users.id, supportTickets.userId))
+    .where(whereClause)
+    .get();
+  const total = totalRow?.count || 0;
+
+  // Page of tickets with user info joined
+  const rows = db
+    .select({ ticket: supportTickets, userName: users.name, userEmail: users.email })
+    .from(supportTickets)
+    .leftJoin(users, eq(users.id, supportTickets.userId))
+    .where(whereClause)
+    .orderBy(desc(supportTickets.createdAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize)
+    .all();
+
+  const items = rows.map((r) => ({
+    ...r.ticket,
+    userName: r.userName || null,
+    userEmail: r.userEmail || null,
+  }));
+
+  // Platform-wide stats (unfiltered) so the stat cards stay accurate when filtered/paginated
+  const all = db.select().from(supportTickets).all();
+  const stats = {
+    total: all.length,
+    open: all.filter((t) => t.status === "open").length,
+    pending: all.filter((t) => t.status === "pending" || t.status === "waiting_on_customer").length,
+    resolved: all.filter((t) => t.status === "resolved" || t.status === "closed").length,
+  };
+
+  return c.json({
+    tickets: items,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    stats,
+  });
 });
 
 // Admin: Update ticket status

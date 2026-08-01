@@ -136,7 +136,7 @@ describe("GET /api/support/admin/all", () => {
   it("returns all tickets as admin", async () => {
     const { status, body } = await authGet(app, "/api/support/admin/all", adminCookie);
     expect(status).toBe(200);
-    expect(Array.isArray(body)).toBe(true);
+    expect(Array.isArray((body as { tickets?: unknown[] }).tickets)).toBe(true);
   });
 
   it("returns 403 for non-admin", async () => {
@@ -151,8 +151,8 @@ describe("GET /api/support/admin/all", () => {
 
 describe("PUT /api/support/admin/:id/status", () => {
   it("updates ticket status as admin", async () => {
-    const { body: tickets } = await authGet(app, "/api/support/admin/all", adminCookie);
-    const ticket = (tickets as Record<string, unknown>[])[0];
+    const { body: listBody } = await authGet(app, "/api/support/admin/all", adminCookie);
+    const ticket = ((listBody as { tickets: Record<string, unknown>[] }).tickets)[0];
     if (!ticket) return;
 
     const { status, body } = await authPut(app, `/api/support/admin/${ticket.id}/status`, adminCookie, {
@@ -169,8 +169,8 @@ describe("PUT /api/support/admin/:id/status", () => {
 
 describe("PUT /api/support/admin/:id/assign", () => {
   it("assigns a ticket as admin", async () => {
-    const { body: tickets } = await authGet(app, "/api/support/admin/all", adminCookie);
-    const ticket = (tickets as Record<string, unknown>[])[0];
+    const { body: listBody } = await authGet(app, "/api/support/admin/all", adminCookie);
+    const ticket = ((listBody as { tickets: Record<string, unknown>[] }).tickets)[0];
     if (!ticket) return;
 
     const { status, body } = await authPut(app, `/api/support/admin/${ticket.id}/assign`, adminCookie, {

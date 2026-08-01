@@ -17,6 +17,10 @@ import {
   User,
   Tag,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -55,8 +59,19 @@ function formatFullTime(ts: number | null) {
   });
 }
 
+const PAGE_SIZES = [10, 25, 50];
+const EMPTY_STATS = { total: 0, open: 0, pending: 0, resolved: 0 };
+
+interface TicketsResponse {
+  tickets: any[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  stats: { total: number; open: number; pending: number; resolved: number };
+}
+
 export default function AdminSupport() {
-  const { data: tickets, isLoading, refetch } = useApiQuery<any[]>(["admin", "tickets"], "/api/support/admin/all");
   const { data: briefUsers } = useApiQuery<any[]>(["admin", "briefUsers"], "/api/users/brief");
   const updateStatus = useApiMutation<any, any>("put", "/api/support/admin/${id}/status");
   const assignTicket = useApiMutation<any, any>("put", "/api/support/admin/${id}/assign");
@@ -69,6 +84,9 @@ export default function AdminSupport() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { data: messages, isLoading: messagesLoading } = useApiQuery<any[]>(
@@ -77,25 +95,32 @@ export default function AdminSupport() {
     { enabled: !!selectedTicket }
   );
 
-  const filtered = useMemo(() => {
-    if (!tickets) return [];
-    return tickets.filter((t) => {
-      const matchesSearch = !search || t.subject?.toLowerCase().includes(search.toLowerCase()) || String(t.id).includes(search);
-      const matchesStatus = statusFilter === "all" || t.status === statusFilter;
-      const matchesPriority = priorityFilter === "all" || t.priority === priorityFilter;
-      return matchesSearch && matchesStatus && matchesPriority;
-    });
-  }, [tickets, search, statusFilter, priorityFilter]);
+  // Debounce the search input so we don't hit the API on every keystroke
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  const stats = useMemo(() => {
-    if (!tickets) return { total: 0, open: 0, pending: 0, resolved: 0 };
-    return {
-      total: tickets.length,
-      open: tickets.filter((t) => t.status === "open").length,
-      pending: tickets.filter((t) => t.status === "pending" || t.status === "waiting_on_customer").length,
-      resolved: tickets.filter((t) => t.status === "resolved" || t.status === "closed").length,
-    };
-  }, [tickets]);
+  // Reset to first page whenever filters or page size change
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, statusFilter, priorityFilter, pageSize]);
+
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  params.set("pageSize", String(pageSize));
+  if (debouncedSearch) params.set("search", debouncedSearch);
+  if (statusFilter !== "all") params.set("status", statusFilter);
+  if (priorityFilter !== "all") params.set("priority", priorityFilter);
+  const listQuery = `/api/support/admin/all?${params.toString()}`;
+
+  const { data, isLoading, refetch } = useApiQuery<TicketsResponse>(["admin", "tickets", listQuery], listQuery);
+
+  const tickets = data?.tickets || [];
+  const total = data?.total || 0;
+  const totalPages = data?.totalPages || 1;
+  const stats = data?.stats || EMPTY_STATS;
+  const hasActiveFilters = debouncedSearch || statusFilter !== "all" || priorityFilter !== "all";
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -332,12 +357,15 @@ export default function AdminSupport() {
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
-        <Input
-          placeholder="Search tickets..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="h-9 text-xs flex-1"
-        />
+        <div className="relative flex-1">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Search by subject, ticket #, or user..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-9 text-xs flex-1 pl-8"
+          />
+        </div>
         <div className="relative">
           <select
             value={statusFilter}
@@ -364,16 +392,21 @@ export default function AdminSupport() {
           </select>
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
         </div>
+        {hasActiveFilters && (
+          <Button variant="ghost" size="sm" className="h-9 text-xs" onClick={() => { setSearch(""); setStatusFilter("all"); setPriorityFilter("all"); }}>
+            <X className="h-3 w-3 mr-1" /> Clear
+          </Button>
+        )}
       </div>
 
       {/* Ticket List */}
       <div className="space-y-1">
-        {filtered.length === 0 ? (
+        {tickets.length === 0 ? (
           <div className="card-subtle p-8 text-center text-sm text-muted-foreground">
             No tickets found
           </div>
         ) : (
-          filtered.map((ticket: any) => {
+          tickets.map((ticket: any) => {
             const statusCfg = STATUS_CONFIG[ticket.status] || STATUS_CONFIG.open;
             const priorityCfg = PRIORITY_CONFIG[ticket.priority] || PRIORITY_CONFIG.medium;
             const StatusIcon = statusCfg.icon;
@@ -398,7 +431,7 @@ export default function AdminSupport() {
                       <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2">
                         <span>#{ticket.id}</span>
                         <span>·</span>
-                        <span>User {ticket.userId}</span>
+                        <span>{ticket.userName || `User ${ticket.userId}`}</span>
                         <span>·</span>
                         <span>{ticket.category}</span>
                         <span>·</span>
@@ -431,8 +464,45 @@ export default function AdminSupport() {
         )}
       </div>
 
-      <div className="text-xs text-muted-foreground text-right">
-        Showing {filtered.length} of {tickets?.length || 0} tickets
+      {/* Pagination Footer */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
+        <div>
+          Showing {tickets.length} of {total} tickets
+          {total > 0 && ` · Page ${page} of ${totalPages}`}
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            value={pageSize}
+            onChange={(e) => setPageSize(Number(e.target.value))}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs appearance-none cursor-pointer"
+            aria-label="Rows per page"
+          >
+            {PAGE_SIZES.map((n) => (
+              <option key={n} value={n}>{n} / page</option>
+            ))}
+          </select>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 text-xs"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              <ChevronLeft className="h-3.5 w-3.5" /> Prev
+            </Button>
+            <span className="px-2 font-medium tabular-nums">{page} / {totalPages}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 text-xs"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );

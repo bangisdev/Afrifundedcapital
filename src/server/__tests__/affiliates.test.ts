@@ -153,8 +153,8 @@ describe("GET /api/affiliates/admin/all", () => {
   it("returns all affiliates as admin", async () => {
     const { status, body } = await authGet(app, "/api/affiliates/admin/all", adminCookie);
     expect(status).toBe(200);
-    expect(Array.isArray(body)).toBe(true);
-    expect(body.length).toBeGreaterThanOrEqual(1);
+    expect(Array.isArray((body as { affiliates?: unknown[] }).affiliates)).toBe(true);
+    expect(((body as { affiliates?: unknown[] }).affiliates || []).length).toBeGreaterThanOrEqual(1);
   });
 
   it("returns 403 for non-admin", async () => {

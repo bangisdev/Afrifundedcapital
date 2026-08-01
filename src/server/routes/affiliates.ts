@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
 import { affiliates, referrals, commissions, commissionPayouts, users, wallets, walletTransactions, settings } from "../schema";
-import { eq, desc, count, sql, and } from "drizzle-orm";
+import { eq, desc, count, sql, and, or, like, type SQL } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification } from "../lib/notifications";
 
@@ -33,11 +33,78 @@ app.post("/track", requireAuth, async (c) => {
   return c.json({ success: true });
 });
 
-// Admin: List all affiliates
+// Admin: List all affiliates (paginated + searchable)
 app.get("/admin/all", requireAuth, requireAdmin, (c) => {
   const db = getDb();
-  const items = db.select().from(affiliates).orderBy(desc(affiliates.joinedAt)).all();
-  return c.json(items);
+
+  // Pagination params (clamped)
+  const page = Math.max(1, parseInt(c.req.query("page") || "1") || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query("pageSize") || "20") || 20));
+
+  // Filters
+  const search = (c.req.query("search") || "").trim();
+  const status = c.req.query("status") || "";
+
+  const conditions: SQL[] = [];
+  if (search) {
+    const pattern = `%${search}%`;
+    conditions.push(
+      or(
+        like(affiliates.referralCode, pattern),
+        like(users.name, pattern),
+        like(users.email, pattern),
+      )!,
+    );
+  }
+  if (status === "active") conditions.push(eq(affiliates.isActive, true));
+  if (status === "inactive") conditions.push(eq(affiliates.isActive, false));
+  const whereClause: SQL = conditions.length > 0 ? and(...conditions)! : sql`1 = 1`;
+
+  // Total matching count
+  const totalRow = db
+    .select({ count: count() })
+    .from(affiliates)
+    .leftJoin(users, eq(users.id, affiliates.userId))
+    .where(whereClause)
+    .get();
+  const total = totalRow?.count || 0;
+
+  // Page of affiliates with user info joined
+  const rows = db
+    .select({ aff: affiliates, userName: users.name, userEmail: users.email })
+    .from(affiliates)
+    .leftJoin(users, eq(users.id, affiliates.userId))
+    .where(whereClause)
+    .orderBy(desc(affiliates.joinedAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize)
+    .all();
+
+  const items = rows.map((r) => ({
+    ...r.aff,
+    userName: r.userName || null,
+    userEmail: r.userEmail || null,
+  }));
+
+  // Platform-wide stats (unfiltered)
+  const all = db.select().from(affiliates).all();
+  const stats = {
+    total: all.length,
+    active: all.filter((a) => a.isActive).length,
+    totalReferrals: all.reduce((s, a) => s + (a.totalReferrals || 0), 0),
+    totalCommissions: all.reduce((s, a) => s + (a.totalCommissions || 0), 0),
+    pendingCommissions: all.reduce((s, a) => s + (a.pendingCommissions || 0), 0),
+    paidCommissions: all.reduce((s, a) => s + (a.paidCommissions || 0), 0),
+  };
+
+  return c.json({
+    affiliates: items,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    stats,
+  });
 });
 
 // Admin: Approve commission
@@ -159,20 +226,80 @@ app.post("/payout-request", requireAuth, async (c) => {
   return c.json({ ...payout, autoApproved: shouldAutoApprove, threshold });
 });
 
-// ─── Admin: List all affiliate payout requests ───────────
+// ─── Admin: List all affiliate payout requests (paginated + searchable) ───
 app.get("/admin/payouts", requireAuth, requireAdmin, (c) => {
   const db = getDb();
-  const items = db.select().from(commissionPayouts)
+
+  // Pagination params (clamped)
+  const page = Math.max(1, parseInt(c.req.query("page") || "1") || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query("pageSize") || "20") || 20));
+
+  // Filters
+  const search = (c.req.query("search") || "").trim();
+  const status = c.req.query("status") || "";
+
+  const conditions: SQL[] = [];
+  if (search) {
+    const pattern = `%${search}%`;
+    conditions.push(
+      or(
+        like(users.name, pattern),
+        like(users.email, pattern),
+        like(commissionPayouts.paymentMethod, pattern),
+        sql`cast(${commissionPayouts.amount} as text) like ${pattern}`,
+      )!,
+    );
+  }
+  if (status && status !== "all") conditions.push(eq(commissionPayouts.status, status));
+  const whereClause: SQL = conditions.length > 0 ? and(...conditions)! : sql`1 = 1`;
+
+  // Total matching count
+  const totalRow = db
+    .select({ count: count() })
+    .from(commissionPayouts)
+    .leftJoin(users, eq(users.id, commissionPayouts.userId))
+    .where(whereClause)
+    .get();
+  const total = totalRow?.count || 0;
+
+  // Page of payouts with user info joined
+  const rows = db
+    .select({ payout: commissionPayouts, userName: users.name, userEmail: users.email })
+    .from(commissionPayouts)
+    .leftJoin(users, eq(users.id, commissionPayouts.userId))
+    .where(whereClause)
     .orderBy(desc(commissionPayouts.requestedAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize)
     .all();
 
-  // Enrich with user info
-  const enriched = items.map((item) => {
-    const user = db.select().from(users).where(eq(users.id, item.userId)).get();
-    return { ...item, userName: user?.name || user?.email || "Unknown" };
-  });
+  const items = rows.map((r) => ({
+    ...r.payout,
+    userName: r.userName || null,
+    userEmail: r.userEmail || null,
+  }));
 
-  return c.json(enriched);
+  // Platform-wide stats (unfiltered)
+  const all = db.select().from(commissionPayouts).all();
+  const stats = {
+    total: all.length,
+    pending: all.filter((p) => p.status === "pending").length,
+    approved: all.filter((p) => p.status === "approved").length,
+    paid: all.filter((p) => p.status === "paid").length,
+    rejected: all.filter((p) => p.status === "rejected").length,
+    totalAmount: all.reduce((s, p) => s + (p.amount || 0), 0),
+    pendingAmount: all.filter((p) => p.status === "pending").reduce((s, p) => s + (p.amount || 0), 0),
+    paidAmount: all.filter((p) => p.status === "paid").reduce((s, p) => s + (p.amount || 0), 0),
+  };
+
+  return c.json({
+    payouts: items,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    stats,
+  });
 });
 
 // ─── Admin: Approve affiliate payout ─────────────────────
