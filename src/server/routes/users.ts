@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
 import { users, sessions, auditLogs, settings, wallets, affiliates } from "../schema";
-import { eq, desc, like, count, sql, and } from "drizzle-orm";
+import { eq, desc, like, count, sql, and, or, type SQL } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification } from "../lib/notifications";
 
@@ -106,12 +106,72 @@ app.post("/referral-code", requireAuth, async (c) => {
   return c.json({ referralCode: code });
 });
 
-// Admin: List users
+// Admin: List users (paginated + searchable)
 app.get("/list", requireAuth, requireAdmin, (c) => {
   const db = getDb();
-  const allUsers = db.select().from(users).orderBy(desc(users.createdAt)).all();
-  const safeUsers = allUsers.map(({ twoFactorSecret, accountLockedUntil, loginAttempts, ...u }) => u);
-  return c.json(safeUsers);
+
+  // Pagination params (clamped)
+  const page = Math.max(1, parseInt(c.req.query("page") || "1") || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query("pageSize") || "20") || 20));
+
+  // Filters
+  const search = (c.req.query("search") || "").trim();
+  const role = c.req.query("role") || "";
+  const kycStatus = c.req.query("kycStatus") || "";
+
+  const conditions: SQL[] = [];
+  if (search) {
+    const pattern = `%${search}%`;
+    conditions.push(
+      or(
+        like(users.name, pattern),
+        like(users.email, pattern),
+        like(users.phone, pattern),
+        like(users.referralCode, pattern),
+      )!,
+    );
+  }
+  if (role && role !== "all") conditions.push(eq(users.role, role));
+  if (kycStatus && kycStatus !== "all") conditions.push(eq(users.kycStatus, kycStatus));
+  const whereClause: SQL = conditions.length > 0 ? and(...conditions)! : sql`1 = 1`;
+
+  // Total matching count
+  const totalRow = db.select({ count: count() }).from(users).where(whereClause).get();
+  const total = totalRow?.count || 0;
+
+  // Page of users
+  const pageUsers = db
+    .select()
+    .from(users)
+    .where(whereClause)
+    .orderBy(desc(users.createdAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize)
+    .all();
+
+  // Strip sensitive fields (keep accountLockedUntil for lock UI)
+  const safeUsers = pageUsers.map(({ twoFactorSecret, loginAttempts, ...u }) => u);
+
+  // Platform-wide stats (unfiltered) so the stat cards stay accurate
+  const allUsers = db
+    .select({ role: users.role, emailVerified: users.emailVerified, accountLockedUntil: users.accountLockedUntil })
+    .from(users)
+    .all();
+  const stats = {
+    total: allUsers.length,
+    admins: allUsers.filter((u) => u.role && u.role !== "user").length,
+    verified: allUsers.filter((u) => u.emailVerified).length,
+    locked: allUsers.filter((u) => u.accountLockedUntil && u.accountLockedUntil > Date.now()).length,
+  };
+
+  return c.json({
+    users: safeUsers,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    stats,
+  });
 });
 
 // Admin: Get user stats

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -11,6 +11,8 @@ import {
   Unlock,
   Trash2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   X,
   Users,
   UserCheck,
@@ -47,6 +49,17 @@ interface User {
   createdAt: number | null;
   updatedAt: number | null;
 }
+
+interface UsersResponse {
+  users: User[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  stats: { total: number; admins: number; verified: number; locked: number };
+}
+
+const PAGE_SIZES = [10, 25, 50];
 
 const ROLES = [
   "super_admin", "support_admin", "finance_admin", "client_manager",
@@ -89,40 +102,46 @@ function formatDateTime(ts: number | null) {
 }
 
 export default function AdminUsers() {
-  const { data: users, isLoading, refetch } = useApiQuery<User[]>(["admin", "users"], "/api/users/list");
-
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [kycFilter, setKycFilter] = useState<string>("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showUserDetail, setShowUserDetail] = useState(false);
   const [editingRole, setEditingRole] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
 
-  const filtered = useMemo(() => {
-    if (!users) return [];
-    return users.filter((u) => {
-      const matchesSearch = !search ||
-        u.name?.toLowerCase().includes(search.toLowerCase()) ||
-        u.email?.toLowerCase().includes(search.toLowerCase()) ||
-        u.phone?.includes(search) ||
-        u.referralCode?.toLowerCase().includes(search.toLowerCase());
-      const matchesRole = roleFilter === "all" || u.role === roleFilter;
-      const matchesKyc = kycFilter === "all" || u.kycStatus === kycFilter;
-      return matchesSearch && matchesRole && matchesKyc;
-    });
-  }, [users, search, roleFilter, kycFilter]);
+  // Debounce the search input so we don't hit the API on every keystroke
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  const stats = useMemo(() => {
-    if (!users) return { total: 0, admins: 0, verified: 0, locked: 0 };
-    return {
-      total: users.length,
-      admins: users.filter((u) => u.role && u.role !== "user").length,
-      verified: users.filter((u) => u.emailVerified).length,
-      locked: users.filter((u) => u.accountLockedUntil && u.accountLockedUntil > Date.now()).length,
-    };
-  }, [users]);
+  // Reset to first page whenever filters or page size change
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, roleFilter, kycFilter, pageSize]);
+
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  params.set("pageSize", String(pageSize));
+  if (debouncedSearch) params.set("search", debouncedSearch);
+  if (roleFilter !== "all") params.set("role", roleFilter);
+  if (kycFilter !== "all") params.set("kycStatus", kycFilter);
+  const listQuery = `/api/users/list?${params.toString()}`;
+
+  const { data, isLoading, refetch } = useApiQuery<UsersResponse>(["admin", "users", listQuery], listQuery);
+
+  const users = data?.users || [];
+  const total = data?.total || 0;
+  const totalPages = data?.totalPages || 1;
+  const stats = useMemo(
+    () => data?.stats || { total: 0, admins: 0, verified: 0, locked: 0 },
+    [data],
+  );
 
   // Direct fetch helpers for dynamic endpoints
   const apiPut = async (path: string, body: any) => {
@@ -177,6 +196,8 @@ export default function AdminUsers() {
       await apiDelete(`/api/users/${deleteTarget.id}`);
       toast.success(`User ${deleteTarget.email} deleted`);
       setDeleteTarget(null);
+      // If we just deleted the last row on this page, step back a page
+      if (users.length === 1 && page > 1) setPage(page - 1);
       refetch();
     } catch (err: any) {
       toast.error(err?.message || "Failed to delete user");
@@ -280,12 +301,12 @@ export default function AdminUsers() {
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {users.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="p-8 text-center text-muted-foreground">No users found</td>
                 </tr>
               ) : (
-                filtered.map((u) => {
+                users.map((u) => {
                   const isLocked = u.accountLockedUntil && u.accountLockedUntil > Date.now();
                   return (
                     <tr key={u.id} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
@@ -380,8 +401,45 @@ export default function AdminUsers() {
         </div>
       </div>
 
-      <div className="text-xs text-muted-foreground text-right">
-        Showing {filtered.length} of {users?.length || 0} users
+      {/* Pagination Footer */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
+        <div>
+          Showing {users.length} of {total} users
+          {total > 0 && ` · Page ${page} of ${totalPages}`}
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            value={pageSize}
+            onChange={(e) => setPageSize(Number(e.target.value))}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs appearance-none cursor-pointer"
+            aria-label="Rows per page"
+          >
+            {PAGE_SIZES.map((n) => (
+              <option key={n} value={n}>{n} / page</option>
+            ))}
+          </select>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 text-xs"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              <ChevronLeft className="h-3.5 w-3.5" /> Prev
+            </Button>
+            <span className="px-2 font-medium tabular-nums">{page} / {totalPages}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 text-xs"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* User Detail Modal */}
