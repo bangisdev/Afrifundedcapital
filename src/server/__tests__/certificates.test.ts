@@ -81,7 +81,9 @@ describe("GET /api/certificates/my", () => {
   it("returns certificates for user", async () => {
     const { status, body } = await authGet(app, "/api/certificates/my", userCookie);
     expect(status).toBe(200);
-    expect(Array.isArray(body)).toBe(true);
+    expect(Array.isArray(body.certificates)).toBe(true);
+    expect(typeof body.total).toBe("number");
+    expect(typeof body.totalPages).toBe("number");
   });
 
   it("returns 401 without auth", async () => {
@@ -148,7 +150,7 @@ describe("POST /api/certificates/generate", () => {
 describe("GET /api/certificates/:id", () => {
   it("returns a certificate with challenge info", async () => {
     const { body: certs } = await authGet(app, "/api/certificates/my", userCookie);
-    const cert = (certs as Record<string, unknown>[])[0];
+    const cert = ((certs as Record<string, unknown>).certificates as Record<string, unknown>[])[0];
     if (!cert) return;
 
     const { status, body } = await authGet(app, `/api/certificates/${cert.id}`, userCookie);
@@ -171,7 +173,7 @@ describe("GET /api/certificates/:id", () => {
 describe("GET /api/certificates/verify/:code", () => {
   it("verifies a valid certificate code", async () => {
     const { body: certs } = await authGet(app, "/api/certificates/my", userCookie);
-    const cert = (certs as Record<string, unknown>[])[0];
+    const cert = ((certs as Record<string, unknown>).certificates as Record<string, unknown>[])[0];
     if (!cert) return;
 
     const { status, body } = await authGet(
@@ -200,7 +202,7 @@ describe("GET /api/certificates/verify/:code", () => {
 describe("GET /api/certificates/:id/pdf", () => {
   it("returns a PDF document", async () => {
     const { body: certs } = await authGet(app, "/api/certificates/my", userCookie);
-    const cert = (certs as Record<string, unknown>[])[0];
+    const cert = ((certs as Record<string, unknown>).certificates as Record<string, unknown>[])[0];
     if (!cert) return;
 
     const res = await app.request(`/api/certificates/${cert.id}/pdf`, {

@@ -33,9 +33,33 @@ vi.mock("@/hooks/use-auth", () => ({ useAuth: () => mockAuthState }));
 const queryDataMap: Record<string, any> = {};
 vi.mock("@/hooks/use-api", () => ({
   useApiQuery: vi.fn((key: string[], path: string, _opts?: any) => {
-    const dataKey = `${key.join("/")}`;
+    // Pages may pass query-suffixed keys (["certificates", "my", "/api/certificates/my?..."]),
+    // so look up by the stable prefix (first two segments).
+    const dataKey = key.slice(0, 2).join("/");
     if (queryDataMap[dataKey] === undefined) return { data: undefined, isLoading: true };
-    return { data: queryDataMap[dataKey], isLoading: false };
+    const base = queryDataMap[dataKey];
+    // Simulate the server-driven certificates envelope for the Certificates page.
+    if (dataKey === "certificates/my" && Array.isArray(base)) {
+      // Parse the query string manually to avoid relying on the global URL constructor.
+      const query = path.includes("?") ? path.split("?")[1] : "";
+      const params = new URLSearchParams(query);
+      const page = Number(params.get("page") || 1);
+      const pageSize = Number(params.get("pageSize") || 10);
+      const total = base.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      return {
+        data: {
+          certificates: base.slice((page - 1) * pageSize, page * pageSize),
+          total,
+          page,
+          pageSize,
+          totalPages,
+          stats: { total, byType: {} },
+        },
+        isLoading: false,
+      };
+    }
+    return { data: base, isLoading: false };
   }),
   useApiMutation: vi.fn((method: string, path: string) => ({
     mutateAsync: vi.fn(async (body?: any) => {

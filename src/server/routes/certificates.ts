@@ -189,13 +189,48 @@ app.post("/generate-on-completion", requireAuth, async (c) => {
 app.get("/my", requireAuth, (c) => {
   const userId = c.get("userId");
   const db = getDb();
+
+  // Pagination params (clamped)
+  const page = Math.max(1, parseInt(c.req.query("page") || "1") || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query("pageSize") || "10") || 10));
+
+  // Total count for this user
+  const totalRow = db
+    .select({ count: count() })
+    .from(certificates)
+    .where(eq(certificates.userId, userId))
+    .get();
+  const total = totalRow?.count || 0;
+
+  // Page of certificates
   const certs = db
     .select()
     .from(certificates)
     .where(eq(certificates.userId, userId))
     .orderBy(desc(certificates.issuedAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize)
     .all();
-  return c.json(certs);
+
+  // User-wide stats (unfiltered)
+  const allCerts = db
+    .select({ type: certificates.type })
+    .from(certificates)
+    .where(eq(certificates.userId, userId))
+    .all();
+  const byType = allCerts.reduce<Record<string, number>>((acc, c) => {
+    acc[c.type] = (acc[c.type] || 0) + 1;
+    return acc;
+  }, {});
+
+  return c.json({
+    certificates: certs,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    stats: { total: allCerts.length, byType },
+  });
 });
 
 // ─── Get certificate by ID ─────────────────────────────────

@@ -33,11 +33,35 @@ const queryDataMap: Record<string, any> = {};
 
 vi.mock("@/hooks/use-api", () => ({
   useApiQuery: vi.fn((key: string[], path: string, _opts?: any) => {
-    const dataKey = `${key.join("/")}`;
+    // The page passes query-suffixed keys (["certificates", "my", "/api/certificates/my?..."]),
+    // so look up by the stable prefix (first two segments).
+    const dataKey = key.slice(0, 2).join("/");
     if (queryDataMap[dataKey] === undefined) {
       return { data: undefined, isLoading: true };
     }
-    return { data: queryDataMap[dataKey], isLoading: false };
+    const base = queryDataMap[dataKey];
+    // Simulate the server-driven certificates list: paginate + stats envelope.
+    if (dataKey === "certificates/my" && Array.isArray(base)) {
+      // Parse the query string manually — the global URL constructor is stubbed in this file.
+      const query = path.includes("?") ? path.split("?")[1] : "";
+      const params = new URLSearchParams(query);
+      const page = Number(params.get("page") || 1);
+      const pageSize = Number(params.get("pageSize") || 10);
+      const total = base.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      return {
+        data: {
+          certificates: base.slice((page - 1) * pageSize, page * pageSize),
+          total,
+          page,
+          pageSize,
+          totalPages,
+          stats: { total, byType: {} },
+        },
+        isLoading: false,
+      };
+    }
+    return { data: base, isLoading: false };
   }),
   useApiMutation: vi.fn((_method: string, _path: string, _onSuccess?: any) => ({
     mutateAsync: vi.fn(),
@@ -380,14 +404,21 @@ describe("Certificates Page", () => {
       expect(screen.getAllByText("PDF").length).toBe(2);
     });
 
-    it("handles many certificates", () => {
+    it("paginates many certificates", async () => {
+      const user = userEvent.setup();
       const certs = Array.from({ length: 15 }, (_, i) =>
         makeCertificate({ id: i + 1, type: "phase_1_passed", certificateNumber: `CERT-${i + 1}` })
       );
       setQueryData({ "certificates/my": certs });
       render(<Certificates />);
-      expect(screen.getByText((t) => t.includes("CERT-1 ") || t.includes("CERT-1\n"))).toBeTruthy();
+      // Page 1 shows the first 10 of 15
+      expect(screen.getByText(/Showing 10 of 15 certificates/)).toBeTruthy();
+      expect(screen.queryByText(/CERT-15/)).toBeNull();
+
+      // Next page shows the remaining 5
+      await user.click(screen.getByText("Next"));
       expect(screen.getByText(/CERT-15/)).toBeTruthy();
+      expect(screen.getByText(/Showing 5 of 15 certificates/)).toBeTruthy();
     });
   });
 });
