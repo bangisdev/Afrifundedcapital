@@ -13,7 +13,42 @@ vi.mock("@/hooks/use-auth", () => ({
 const queryDataMap: Record<string, any> = {};
 vi.mock("@/hooks/use-api", () => ({
   useApiQuery: vi.fn((key: string[]) => {
-    const dataKey = `${key.join("/")}`;
+    const joined = `${key.join("/")}`;
+    // Server-aware pagination: list key looks like admin/payments/api/payments/admin/all?page=1&pageSize=10
+    const listMatch = joined.match(/^admin\/payments\/api\/payments\/admin\/all\?(.*)$/);
+    if (listMatch) {
+      const base = queryDataMap["admin/payments"];
+      if (base === undefined) return { data: undefined, isLoading: true, refetch: vi.fn() };
+      const qp = new URLSearchParams(listMatch[1]);
+      const search = (qp.get("search") || "").toLowerCase();
+      const status = qp.get("status") || "all";
+      const provider = qp.get("provider") || "all";
+      const page = parseInt(qp.get("page") || "1", 10);
+      const pageSize = parseInt(qp.get("pageSize") || "10", 10);
+      const items = base.filter((p: any) => {
+        if (status !== "all" && p.status !== status) return false;
+        if (provider !== "all" && p.provider !== provider) return false;
+        if (search) {
+          const hay = `${p.reference || ""} ${p.userName || ""} ${p.userEmail || ""} ${p.description || ""} ${p.amount || ""}`.toLowerCase();
+          if (!hay.includes(search)) return false;
+        }
+        return true;
+      });
+      const total = items.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      const start = (page - 1) * pageSize;
+      const payments = items.slice(start, start + pageSize);
+      const stats = {
+        total,
+        completed: items.filter((p: any) => p.status === "completed").length,
+        pending: items.filter((p: any) => p.status === "pending").length,
+        failed: items.filter((p: any) => p.status === "failed").length,
+        refunded: items.filter((p: any) => p.status === "refunded").length,
+        revenue: items.reduce((s: number, p: any) => s + (p.status === "completed" ? p.amount || 0 : 0), 0),
+      };
+      return { data: { payments, total, page, pageSize, totalPages, stats }, isLoading: false, refetch: vi.fn() };
+    }
+    const dataKey = joined;
     if (queryDataMap[dataKey] === undefined) return { data: undefined, isLoading: true, refetch: vi.fn() };
     return { data: queryDataMap[dataKey], isLoading: false, refetch: vi.fn() };
   }),
@@ -108,8 +143,11 @@ describe("AdminPayments Page", () => {
         { id: 2, reference: "PSK-002", amount: 30000, status: "completed", provider: "paystack", userId: 2, createdAt: Date.now() },
       ]}); render(<AdminPayments />);
       await user.type(screen.getByPlaceholderText(/Search by reference/), "FLW");
-      expect(screen.getByText("FLW-001")).toBeTruthy();
-      expect(screen.queryByText("PSK-002")).toBeNull();
+      // Search is debounced (300ms) — wait for the query to re-run and filter
+      await waitFor(() => {
+        expect(screen.getByText("FLW-001")).toBeTruthy();
+        expect(screen.queryByText("PSK-002")).toBeNull();
+      });
     });
   });
 

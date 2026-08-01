@@ -154,7 +154,7 @@ describe("GET /api/kyc/admin/all", () => {
     const { status, body } = await authGet(app, "/api/kyc/admin/all", adminCookie);
 
     expect(status).toBe(200);
-    const docs = body as Array<Record<string, unknown>>;
+    const docs = (body as Record<string, unknown>).documents as Array<Record<string, unknown>>;
     expect(Array.isArray(docs)).toBe(true);
     expect(docs.length).toBeGreaterThanOrEqual(2);
   });

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 
@@ -29,11 +29,54 @@ const mockRefetch = vi.fn();
 
 vi.mock("@/hooks/use-api", () => ({
   useApiQuery: vi.fn((key: string[], path: string, _opts?: any) => {
-    const dataKey = `${key.join("/")}`;
+    // The page passes query-suffixed keys (["admin", "users", "/api/users/list?..."]),
+    // so look up by the stable prefix (first two segments).
+    const dataKey = key.slice(0, 2).join("/");
     if (queryDataMap[dataKey] === undefined) {
       return { data: undefined, isLoading: true, refetch: mockRefetch };
     }
-    return { data: queryDataMap[dataKey], isLoading: false, refetch: mockRefetch };
+    const base = queryDataMap[dataKey];
+    // Simulate the server-driven users list: filter + paginate + stats envelope.
+    if (dataKey === "admin/users" && Array.isArray(base)) {
+      const url = new URL(path, "http://localhost");
+      const search = (url.searchParams.get("search") || "").toLowerCase();
+      const role = url.searchParams.get("role");
+      const kyc = url.searchParams.get("kycStatus");
+      const page = Number(url.searchParams.get("page") || 1);
+      const pageSize = Number(url.searchParams.get("pageSize") || 10);
+
+      let filtered = base;
+      if (search) {
+        filtered = filtered.filter((u: any) =>
+          [u.name, u.email, u.phone, u.referralCode].some(
+            (v: any) => v && String(v).toLowerCase().includes(search),
+          ),
+        );
+      }
+      if (role && role !== "all") filtered = filtered.filter((u: any) => u.role === role);
+      if (kyc && kyc !== "all") filtered = filtered.filter((u: any) => u.kycStatus === kyc);
+
+      const total = filtered.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      return {
+        data: {
+          users: filtered.slice((page - 1) * pageSize, page * pageSize),
+          total,
+          page,
+          pageSize,
+          totalPages,
+          stats: {
+            total: base.length,
+            admins: base.filter((u: any) => u.role && u.role !== "user").length,
+            verified: base.filter((u: any) => u.emailVerified).length,
+            locked: base.filter((u: any) => u.accountLockedUntil && u.accountLockedUntil > Date.now()).length,
+          },
+        },
+        isLoading: false,
+        refetch: mockRefetch,
+      };
+    }
+    return { data: base, isLoading: false, refetch: mockRefetch };
   }),
   useApiMutation: vi.fn(() => ({
     mutateAsync: vi.fn(),
@@ -228,8 +271,10 @@ describe("AdminUsers Page", () => {
       });
       render(<AdminUsers />);
       await user.type(screen.getByPlaceholderText(/Search by name/), "alice");
-      expect(screen.getByText("Alice Smith")).toBeTruthy();
-      expect(screen.queryByText("Bob Jones")).toBeNull();
+      await waitFor(() => {
+        expect(screen.getByText("Alice Smith")).toBeTruthy();
+        expect(screen.queryByText("Bob Jones")).toBeNull();
+      });
     });
 
     it("filters users by email", async () => {
@@ -242,8 +287,10 @@ describe("AdminUsers Page", () => {
       });
       render(<AdminUsers />);
       await user.type(screen.getByPlaceholderText(/Search by name/), "bob@test");
-      expect(screen.getByText("Bob")).toBeTruthy();
-      expect(screen.queryByText("Alice")).toBeNull();
+      await waitFor(() => {
+        expect(screen.getByText("Bob")).toBeTruthy();
+        expect(screen.queryByText("Alice")).toBeNull();
+      });
     });
 
     it("filters by phone number", async () => {
@@ -256,7 +303,9 @@ describe("AdminUsers Page", () => {
       });
       render(<AdminUsers />);
       await user.type(screen.getByPlaceholderText(/Search by name/), "801234");
-      expect(screen.getByText("John Doe")).toBeTruthy();
+      await waitFor(() => {
+        expect(screen.getByText("John Doe")).toBeTruthy();
+      });
     });
 
     it("filters by referral code", async () => {
@@ -269,7 +318,10 @@ describe("AdminUsers Page", () => {
       });
       render(<AdminUsers />);
       await user.type(screen.getByPlaceholderText(/Search by name/), "BOB002");
-      expect(screen.getByText("John Doe")).toBeTruthy(); // Unnamed doesn't appear, Bob's referral code matches but name still shows
+      // Bob's referral code matches, so his (default-name) user row remains visible
+      await waitFor(() => {
+        expect(screen.getByText("John Doe")).toBeTruthy();
+      });
     });
 
     it("case-insensitive search", async () => {
@@ -281,7 +333,9 @@ describe("AdminUsers Page", () => {
       });
       render(<AdminUsers />);
       await user.type(screen.getByPlaceholderText(/Search by name/), "ALICE");
-      expect(screen.getByText("Alice Smith")).toBeTruthy();
+      await waitFor(() => {
+        expect(screen.getByText("Alice Smith")).toBeTruthy();
+      });
     });
   });
 
@@ -303,8 +357,10 @@ describe("AdminUsers Page", () => {
       });
       render(<AdminUsers />);
       await user.selectOptions(screen.getByDisplayValue("All Roles"), "super_admin");
-      expect(screen.getByText("Admin User")).toBeTruthy();
-      expect(screen.queryByText("Regular")).toBeNull();
+      await waitFor(() => {
+        expect(screen.getByText("Admin User")).toBeTruthy();
+        expect(screen.queryByText("Regular")).toBeNull();
+      });
     });
 
     it("shows all role options", async () => {
@@ -335,8 +391,10 @@ describe("AdminUsers Page", () => {
       });
       render(<AdminUsers />);
       await user.selectOptions(screen.getByDisplayValue("All KYC Status"), "approved");
-      expect(screen.getByText("Approved User")).toBeTruthy();
-      expect(screen.queryByText("Unverified User")).toBeNull();
+      await waitFor(() => {
+        expect(screen.getByText("Approved User")).toBeTruthy();
+        expect(screen.queryByText("Unverified User")).toBeNull();
+      });
     });
 
     it("shows all KYC status options", async () => {
@@ -367,9 +425,13 @@ describe("AdminUsers Page", () => {
       });
       render(<AdminUsers />);
       await user.type(screen.getByPlaceholderText(/Search by name/), "zzz");
-      expect(screen.queryByText("Alice")).toBeNull();
+      await waitFor(() => {
+        expect(screen.queryByText("Alice")).toBeNull();
+      });
       await user.click(screen.getByText("Clear"));
-      expect(screen.getByText("Alice")).toBeTruthy();
+      await waitFor(() => {
+        expect(screen.getByText("Alice")).toBeTruthy();
+      });
     });
 
     it("shows clear button when role filter is active", async () => {
@@ -469,9 +531,11 @@ describe("AdminUsers Page", () => {
       });
       render(<AdminUsers />);
       await user.type(screen.getByPlaceholderText(/Search by name/), "zzzznotfound");
-      const tds = document.querySelectorAll("td");
-      const emptyTd = Array.from(tds).find((td) => td.textContent?.includes("No users found"));
-      expect(emptyTd).toBeTruthy();
+      await waitFor(() => {
+        const tds = document.querySelectorAll("td");
+        const emptyTd = Array.from(tds).find((td) => td.textContent?.includes("No users found"));
+        expect(emptyTd).toBeTruthy();
+      });
     });
 
     it("shows action buttons for each user", () => {
@@ -708,7 +772,10 @@ describe("AdminUsers Page", () => {
       render(<AdminUsers />);
       expect(screen.getByText(/Showing 2 of 2 users/)).toBeTruthy();
       await user.selectOptions(screen.getByDisplayValue("All Roles"), "super_admin");
-      expect(screen.getByText(/Showing 1 of 2 users/)).toBeTruthy();
+      // Server-driven: total reflects the filtered result set
+      await waitFor(() => {
+        expect(screen.getByText(/Showing 1 of 1 users/)).toBeTruthy();
+      });
     });
   });
 
@@ -729,10 +796,12 @@ describe("AdminUsers Page", () => {
       // Now apply role filter
       await user.selectOptions(screen.getByDisplayValue("All Roles"), "super_admin");
       // Alex matches both search and role filter
-      expect(screen.getByText("Alex")).toBeTruthy();
-      // Alice doesn't match role filter, Bob doesn't match search
-      expect(screen.queryByText("Alice")).toBeNull();
-      expect(screen.queryByText("Bob")).toBeNull();
+      await waitFor(() => {
+        expect(screen.getByText("Alex")).toBeTruthy();
+        // Alice doesn't match role filter, Bob doesn't match search
+        expect(screen.queryByText("Alice")).toBeNull();
+        expect(screen.queryByText("Bob")).toBeNull();
+      });
     });
 
     it("combines search + KYC filter", async () => {
@@ -746,8 +815,10 @@ describe("AdminUsers Page", () => {
       render(<AdminUsers />);
       await user.type(screen.getByPlaceholderText(/Search by name/), "ali");
       await user.selectOptions(screen.getByDisplayValue("All KYC Status"), "approved");
-      expect(screen.getByText("Alice")).toBeTruthy();
-      expect(screen.queryByText("Bob")).toBeNull();
+      await waitFor(() => {
+        expect(screen.getByText("Alice")).toBeTruthy();
+        expect(screen.queryByText("Bob")).toBeNull();
+      });
     });
 
     it("shows no results when filters combine to exclude all", async () => {
@@ -760,9 +831,11 @@ describe("AdminUsers Page", () => {
       render(<AdminUsers />);
       await user.type(screen.getByPlaceholderText(/Search by name/), "alice");
       await user.selectOptions(screen.getByDisplayValue("All Roles"), "super_admin");
-      const tds = document.querySelectorAll("td");
-      const emptyTd = Array.from(tds).find((td) => td.textContent?.includes("No users found"));
-      expect(emptyTd).toBeTruthy();
+      await waitFor(() => {
+        const tds = document.querySelectorAll("td");
+        const emptyTd = Array.from(tds).find((td) => td.textContent?.includes("No users found"));
+        expect(emptyTd).toBeTruthy();
+      });
     });
   });
 
@@ -827,8 +900,10 @@ describe("AdminUsers Page", () => {
 
       // Step 3: Search for Alice
       await user.type(screen.getByPlaceholderText(/Search by name/), "alice");
-      expect(screen.getByText("Alice")).toBeTruthy();
-      expect(screen.queryByText("Bob")).toBeNull();
+      await waitFor(() => {
+        expect(screen.getByText("Alice")).toBeTruthy();
+        expect(screen.queryByText("Bob")).toBeNull();
+      });
     });
 
     it("data consistency: stats match user list", () => {

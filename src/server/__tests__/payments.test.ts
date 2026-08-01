@@ -290,7 +290,8 @@ describe("GET /api/payments/admin/all", () => {
     const { status, body } = await authGet(app, "/api/payments/admin/all", adminCookie);
 
     expect(status).toBe(200);
-    expect(Array.isArray(body)).toBe(true);
+    expect(Array.isArray((body as Record<string, unknown>).payments)).toBe(true);
+    expect((body as Record<string, unknown>).total).toBeGreaterThanOrEqual(0);
   });
 
   it("returns 403 for non-admin users", async () => {
