@@ -351,6 +351,102 @@ describe("POST /api/payments/webhook/flutterwave", () => {
 
     expect(res.status).toBe(401);
   });
+
+  it("re-ensures the coupon redemption when a late webhook arrives after the stale sweep voided it", async () => {
+    const db = getTestDb();
+    const { payments, coupons, couponRedemptions, users } = await import("../schema");
+    const { eq } = await import("drizzle-orm");
+
+    const trader = db.select().from(users).where(eq(users.email, TEST_USER.email)).get();
+    expect(trader).toBeTruthy();
+
+    // Coupon with an existing usage count
+    const coupon = db.insert(coupons).values({
+      code: "LATEWEBHOOK",
+      discountType: "fixed",
+      discountValue: 5000,
+      isActive: true,
+      currentUses: 2,
+      createdBy: trader!.id,
+      createdAt: Date.now(),
+    }).returning().get();
+
+    // Abandoned checkout: stale pending payment (1h old) with a coupon in metadata
+    const payment = db.insert(payments).values({
+      userId: trader!.id,
+      amount: 45000,
+      currency: "NGN",
+      provider: "flutterwave",
+      status: "pending",
+      reference: "LATE-REF-1",
+      description: "Late webhook checkout",
+      metadata: JSON.stringify({ couponId: coupon.id, discount: 5000, originalAmount: 50000 }),
+      createdAt: Date.now() - 60 * 60 * 1000,
+    }).returning().get();
+
+    db.insert(couponRedemptions).values({
+      couponId: coupon.id,
+      userId: trader!.id,
+      paymentId: payment.id,
+      discountAmount: 5000,
+      originalAmount: 50000,
+      redeemedAt: Date.now() - 60 * 60 * 1000,
+    }).run();
+
+    // Sweep marks the payment failed + voids the redemption
+    await authPost(app, "/api/payments/admin/cleanup-stale", adminCookie, {});
+    let redemption = db
+      .select()
+      .from(couponRedemptions)
+      .where(eq(couponRedemptions.paymentId, payment.id))
+      .get();
+    expect(redemption).toBeUndefined();
+    let couponAfterSweep = db.select().from(coupons).where(eq(coupons.id, coupon.id)).get();
+    expect(couponAfterSweep!.currentUses).toBe(1);
+
+    // Late successful webhook arrives
+    const res = await app.request("/api/payments/webhook/flutterwave", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "verif-hash": "test123",
+      },
+      body: JSON.stringify({
+        event: "charge.completed",
+        data: {
+          id: 777,
+          tx_ref: "LATE-REF-1",
+          status: "successful",
+          amount: 45000,
+          currency: "NGN",
+        },
+      }),
+    });
+    expect(res.status).toBe(200);
+
+    // Payment completed
+    const paymentAfter = db
+      .select()
+      .from(payments)
+      .where(eq(payments.reference, "LATE-REF-1"))
+      .get();
+    expect(paymentAfter!.status).toBe("completed");
+
+    // Redemption restored with the real discount from metadata
+    redemption = db
+      .select()
+      .from(couponRedemptions)
+      .where(eq(couponRedemptions.paymentId, payment.id))
+      .get();
+    expect(redemption).toBeTruthy();
+    expect(redemption!.couponId).toBe(coupon.id);
+    expect(redemption!.discountAmount).toBe(5000);
+    expect(redemption!.originalAmount).toBe(50000);
+
+    // Usage counter restored
+    couponAfterSweep = db.select().from(coupons).where(eq(coupons.id, coupon.id)).get();
+    expect(couponAfterSweep!.currentUses).toBe(2);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════

@@ -60,3 +60,60 @@ export function voidStaleRedemptions(
   }
   return { stale: stale.length, voided };
 }
+
+/**
+ * Re-ensure a coupon redemption exists for a payment that just confirmed as
+ * successful. Covers late webhooks/verifications that arrive after the
+ * stale-payment sweep already voided the pre-created redemption: the payment's
+ * metadata still carries couponId/discount, so we restore the redemption row
+ * and its usage counter.
+ * Idempotent — a redemption that already exists (payment confirmed before any
+ * sweep) is left untouched. Returns true if a redemption was (re)created.
+ */
+export function ensureRedemptionForPayment(db: any, payment: any): boolean {
+  let couponId: number | null = null;
+  let discount = 0;
+  let originalAmount: number | null = null;
+
+  try {
+    if (payment.metadata) {
+      const meta = JSON.parse(payment.metadata);
+      couponId = meta.couponId != null ? Number(meta.couponId) : null;
+      discount = Number(meta.discount || 0);
+      originalAmount = meta.originalAmount != null ? Number(meta.originalAmount) : null;
+    }
+  } catch {
+    // Unparseable metadata — nothing to restore
+  }
+
+  if (!couponId) return false;
+
+  // Idempotent — already redeemed
+  const existing = db
+    .select()
+    .from(couponRedemptions)
+    .where(eq(couponRedemptions.paymentId, payment.id))
+    .get();
+  if (existing) return false;
+
+  const coupon = db.select().from(coupons).where(eq(coupons.id, couponId)).get();
+  if (!coupon) return false;
+
+  db.insert(couponRedemptions)
+    .values({
+      couponId,
+      userId: payment.userId,
+      paymentId: payment.id,
+      discountAmount: discount || 0,
+      originalAmount: originalAmount ?? payment.amount,
+      redeemedAt: Date.now(),
+    })
+    .run();
+
+  db.update(coupons)
+    .set({ currentUses: (coupon.currentUses || 0) + 1 })
+    .where(eq(coupons.id, coupon.id))
+    .run();
+
+  return true;
+}

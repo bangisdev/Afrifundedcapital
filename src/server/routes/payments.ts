@@ -5,7 +5,7 @@ import { eq, desc, asc, count, and, or, like, sql, type SQL, type SQLWrapper } f
 import { requireAuth, requireAdmin } from "../middleware";
 import { notify } from "../lib/notifications";
 import { paymentConfirmationEmail } from "../lib/email";
-import { voidRedemptionForPayment, voidStaleRedemptions } from "../lib/payment-sweep";
+import { voidRedemptionForPayment, voidStaleRedemptions, ensureRedemptionForPayment } from "../lib/payment-sweep";
 
 const app = new Hono();
 
@@ -223,6 +223,14 @@ app.post("/verify", requireAuth, async (c) => {
     // Mark payment as completed
     db.update(payments).set({ status: "completed", completedAt: now }).where(eq(payments.id, payment.id)).run();
 
+    // Re-ensure the coupon redemption — a client-side verify can arrive after the
+    // stale-payment sweep voided the pre-created redemption (abandoned-then-paid
+    // checkout). The payment's metadata still carries the couponId, so restore it
+    // and its usage counter (idempotent).
+    try {
+      ensureRedemptionForPayment(db, payment);
+    } catch {}
+
     // Store Flutterwave transaction
     db.insert(flutterwaveTransactions).values({
       paymentId: payment.id,
@@ -411,6 +419,14 @@ app.post("/webhook/flutterwave", async (c) => {
   if (event === "charge.completed" && data.status === "successful") {
     // Mark payment completed
     db.update(payments).set({ status: "completed", completedAt: now }).where(eq(payments.id, payment.id)).run();
+
+    // Re-ensure the coupon redemption — a late webhook can arrive after the
+    // stale-payment sweep voided the pre-created redemption (abandoned-then-paid
+    // checkout). The payment's metadata still carries the couponId, so restore it
+    // and its usage counter (idempotent).
+    try {
+      ensureRedemptionForPayment(db, payment);
+    } catch {}
 
     // Store Flutterwave transaction
     db.insert(flutterwaveTransactions).values({
