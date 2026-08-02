@@ -15,7 +15,7 @@ import {
   getTestDb,
   getTestSqlite,
 } from "./setup";
-import { users } from "../schema";
+import { users, mt5Accounts } from "../schema";
 import { eq } from "drizzle-orm";
 
 let app: Hono;
@@ -97,6 +97,75 @@ describe("GET /api/trading/mt5", () => {
   it("returns 401 without auth", async () => {
     const res = await app.request("/api/trading/mt5");
     expect(res.status).toBe(401);
+  });
+
+  it("sorts accounts by balance when sortBy is provided", async () => {
+    // Seed two extra accounts with distinct balances for the user
+    const db = getTestDb();
+    const sqlite = getTestSqlite();
+    const user = db.select().from(users).where(eq(users.email, "trading-trader@test.com")).get();
+    const now = Date.now();
+    const base = 1000000 + Math.floor(Math.random() * 1000000);
+    const logins = [String(base), String(base + 1), String(base + 2)];
+    const balances = [12000, 5000, 25000];
+    for (let i = 0; i < 3; i++) {
+      sqlite
+        .prepare(
+          "INSERT INTO mt5_accounts (user_id, login, password, investor_password, server, \"group\", leverage, balance, equity, currency, is_active, is_suspended, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .run(
+          user!.id,
+          logins[i],
+          "pw",
+          "ipw",
+          "AfriFundedCapital-Demo",
+          "DEMO\\AFC",
+          100,
+          balances[i],
+          balances[i],
+          "NGN",
+          1,
+          0,
+          now + i
+        );
+    }
+
+    try {
+      const { status, body } = await authGet(
+        app,
+        "/api/trading/mt5?sortBy=balance&sortOrder=asc",
+        userCookie
+      );
+      expect(status).toBe(200);
+      const env = body as Record<string, any>;
+      const bals = (env.accounts as Array<Record<string, number>>).map((a) => a.balance);
+      for (let i = 1; i < bals.length; i++) {
+        expect(bals[i - 1]).toBeLessThanOrEqual(bals[i]);
+      }
+
+      const descRes = await authGet(app, "/api/trading/mt5?sortBy=balance&sortOrder=desc", userCookie);
+      const descEnv = descRes.body as Record<string, any>;
+      const descBals = (descEnv.accounts as Array<Record<string, number>>).map((a) => a.balance);
+      for (let i = 1; i < descBals.length; i++) {
+        expect(descBals[i - 1]).toBeGreaterThanOrEqual(descBals[i]);
+      }
+    } finally {
+      // Cleanup seeded accounts
+      for (const l of logins) {
+        sqlite.prepare("DELETE FROM mt5_accounts WHERE login = ?").run(l);
+      }
+    }
+  });
+
+  it("falls back to the default sort for an unknown sortBy", async () => {
+    const { status, body } = await authGet(app, "/api/trading/mt5?sortBy=notAColumn&sortOrder=asc", userCookie);
+    expect(status).toBe(200);
+    const env = body as Record<string, any>;
+    // Default is createdAt desc — newest first
+    const createdAts = (env.accounts as Array<Record<string, number>>).map((a) => a.createdAt);
+    for (let i = 1; i < createdAts.length; i++) {
+      expect(createdAts[i - 1]).toBeGreaterThanOrEqual(createdAts[i]);
+    }
   });
 });
 

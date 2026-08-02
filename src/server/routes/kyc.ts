@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
 import { kycDocuments, users } from "../schema";
-import { eq, desc, and, or, like, count, sql, type SQL } from "drizzle-orm";
+import { eq, desc, asc, and, or, like, count, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { notify } from "../lib/notifications";
 import { kycApprovedEmail, kycRejectedEmail, kycDocumentUploadedEmail } from "../lib/email";
@@ -22,6 +22,19 @@ app.get("/my", requireAuth, (c) => {
   const page = Math.max(1, qPage);
   const pageSize = Math.min(50, Math.max(1, qPageSize));
 
+  // Sorting (whitelisted columns, asc/desc)
+  const SORTABLE: Record<string, SQLWrapper> = {
+    id: kycDocuments.id,
+    documentType: kycDocuments.documentType,
+    status: kycDocuments.status,
+    uploadedAt: kycDocuments.uploadedAt,
+    reviewedAt: kycDocuments.reviewedAt,
+  };
+  const qSortBy = String(c.req.query("sortBy") || "uploadedAt");
+  const qSortOrder = String(c.req.query("sortOrder") || "desc");
+  const sortCol = SORTABLE[qSortBy] || kycDocuments.uploadedAt;
+  const sortOrder = qSortOrder.toLowerCase() === "asc" ? asc(sortCol) : desc(sortCol);
+
   const whereClause: SQL = eq(kycDocuments.userId, userId);
 
   // Total matching count
@@ -33,7 +46,7 @@ app.get("/my", requireAuth, (c) => {
     .select()
     .from(kycDocuments)
     .where(whereClause)
-    .orderBy(desc(kycDocuments.uploadedAt))
+    .orderBy(sortOrder)
     .limit(pageSize)
     .offset((page - 1) * pageSize)
     .all();

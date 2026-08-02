@@ -148,6 +148,35 @@ describe("GET /api/kyc/my", () => {
     const res = await app.request("/api/kyc/my");
     expect(res.status).toBe(401);
   });
+
+  it("sorts documents by documentType asc", async () => {
+    const { status, body } = await authGet(app, "/api/kyc/my?sortBy=documentType&sortOrder=asc", userCookie);
+    expect(status).toBe(200);
+    const env = body as Record<string, any>;
+    const types = (env.documents as Array<Record<string, string>>).map((d) => d.documentType);
+    const sorted = [...types].sort((a, b) => a.localeCompare(b));
+    expect(types).toEqual(sorted);
+    expect(env.documents.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("sorts documents by documentType desc", async () => {
+    const { status, body } = await authGet(app, "/api/kyc/my?sortBy=documentType&sortOrder=desc", userCookie);
+    expect(status).toBe(200);
+    const env = body as Record<string, any>;
+    const types = (env.documents as Array<Record<string, string>>).map((d) => d.documentType);
+    const sortedDesc = [...types].sort((a, b) => b.localeCompare(a));
+    expect(types).toEqual(sortedDesc);
+  });
+
+  it("falls back to the default sort column for an unknown sortBy", async () => {
+    const { status, body } = await authGet(app, "/api/kyc/my?sortBy=notAColumn&sortOrder=asc", userCookie);
+    expect(status).toBe(200);
+    const env = body as Record<string, any>;
+    // Fallback column is uploadedAt, and sortOrder=asc is respected
+    const uploadedAts = (env.documents as Array<Record<string, number>>).map((d) => d.uploadedAt);
+    const sortedAsc = [...uploadedAts].sort((a, b) => a - b);
+    expect(uploadedAts).toEqual(sortedAsc);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
 import { tradingMetrics, mt5Accounts, drawdownHistory, userChallenges, users } from "../schema";
-import { eq, desc, and, sql, count, like, or, type SQL } from "drizzle-orm";
+import { eq, desc, asc, and, sql, count, like, or, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { maybeGenerateCertificate } from "../lib/certificates";
 import { createNotification } from "../lib/notifications";
@@ -19,6 +19,23 @@ app.get("/mt5", requireAuth, (c) => {
   const page = Math.max(1, qPage);
   const pageSize = Math.min(50, Math.max(1, qPageSize));
 
+  // Sorting (whitelisted columns, asc/desc)
+  const SORTABLE: Record<string, SQLWrapper> = {
+    id: mt5Accounts.id,
+    login: mt5Accounts.login,
+    server: mt5Accounts.server,
+    group: mt5Accounts.group,
+    leverage: mt5Accounts.leverage,
+    balance: mt5Accounts.balance,
+    equity: mt5Accounts.equity,
+    lastSyncAt: mt5Accounts.lastSyncAt,
+    createdAt: mt5Accounts.createdAt,
+  };
+  const qSortBy = String(c.req.query("sortBy") || "createdAt");
+  const qSortOrder = String(c.req.query("sortOrder") || "desc");
+  const sortCol = SORTABLE[qSortBy] || mt5Accounts.createdAt;
+  const sortOrder = qSortOrder.toLowerCase() === "asc" ? asc(sortCol) : desc(sortCol);
+
   const whereClause: SQL = eq(mt5Accounts.userId, userId);
 
   // Total matching count
@@ -30,7 +47,7 @@ app.get("/mt5", requireAuth, (c) => {
     .select()
     .from(mt5Accounts)
     .where(whereClause)
-    .orderBy(desc(mt5Accounts.createdAt))
+    .orderBy(sortOrder)
     .limit(pageSize)
     .offset((page - 1) * pageSize)
     .all();

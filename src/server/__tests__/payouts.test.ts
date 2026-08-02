@@ -13,7 +13,7 @@ import {
   authPut,
   getTestDb,
 } from "./setup";
-import { users, mt5Accounts, fundedAccounts, profitPayouts } from "../schema";
+import { users, mt5Accounts, fundedAccounts, profitPayouts, userChallenges } from "../schema";
 import { eq } from "drizzle-orm";
 
 let app: Hono;
@@ -149,6 +149,68 @@ describe("GET /api/payouts/my/funded", () => {
     expect(account).toHaveProperty("accountSize");
     expect(account).toHaveProperty("profitSharePercent");
     expect(account.isActive).toBe(true);
+  });
+
+  it("sorts funded accounts by accountSize when sortBy is provided", async () => {
+    // Seed two extra funded accounts with distinct sizes for the user
+    const db = getTestDb();
+    const user = db.select().from(users).where(eq(users.email, "payout-trader@test.com")).get();
+    const challenge = db.select().from(userChallenges).where(eq(userChallenges.userId, user!.id)).get();
+    const mt5 = db.select().from(mt5Accounts).where(eq(mt5Accounts.userId, user!.id)).get();
+    const insertedIds: number[] = [];
+    for (const size of [5000, 25000, 15000]) {
+      const res = db
+        .insert(fundedAccounts)
+        .values({
+          userId: user!.id,
+          challengeId: challenge!.id,
+          mt5AccountId: mt5!.id,
+          accountSize: size,
+          currency: "NGN",
+          profitSharePercent: 80,
+          isActive: true,
+          activatedAt: Date.now(),
+        })
+        .returning({ id: fundedAccounts.id })
+        .get();
+      insertedIds.push(res.id);
+    }
+
+    try {
+      const { status, body } = await authGet(
+        app,
+        "/api/payouts/my/funded?sortBy=accountSize&sortOrder=asc",
+        userCookie
+      );
+      expect(status).toBe(200);
+      const env = body as Record<string, any>;
+      const sizes = (env.accounts as Array<Record<string, number>>).map((a) => a.accountSize);
+      for (let i = 1; i < sizes.length; i++) {
+        expect(sizes[i - 1]).toBeLessThanOrEqual(sizes[i]);
+      }
+
+      const descRes = await authGet(app, "/api/payouts/my/funded?sortBy=accountSize&sortOrder=desc", userCookie);
+      const descEnv = descRes.body as Record<string, any>;
+      const descSizes = (descEnv.accounts as Array<Record<string, number>>).map((a) => a.accountSize);
+      for (let i = 1; i < descSizes.length; i++) {
+        expect(descSizes[i - 1]).toBeGreaterThanOrEqual(descSizes[i]);
+      }
+    } finally {
+      for (const id of insertedIds) {
+        db.delete(fundedAccounts).where(eq(fundedAccounts.id, id)).run();
+      }
+    }
+  });
+
+  it("falls back to the default sort for an unknown sortBy", async () => {
+    const { status, body } = await authGet(app, "/api/payouts/my/funded?sortBy=notAColumn&sortOrder=asc", userCookie);
+    expect(status).toBe(200);
+    const env = body as Record<string, any>;
+    // Default is activatedAt desc — newest first
+    const activatedAts = (env.accounts as Array<Record<string, number>>).map((a) => a.activatedAt);
+    for (let i = 1; i < activatedAts.length; i++) {
+      expect(activatedAts[i - 1]).toBeGreaterThanOrEqual(activatedAts[i]);
+    }
   });
 });
 

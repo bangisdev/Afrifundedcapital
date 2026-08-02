@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
 import { profitPayouts, fundedAccounts, userChallenges, users } from "../schema";
-import { eq, desc, and, count, sql, type SQL } from "drizzle-orm";
+import { eq, desc, asc, and, count, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification } from "../lib/notifications";
 import { sendEmail, payoutApprovedEmail, payoutRejectedEmail, payoutPaidEmail } from "../lib/email";
@@ -80,6 +80,22 @@ app.get("/my/funded", requireAuth, (c) => {
   const page = Math.max(1, qPage);
   const pageSize = Math.min(50, Math.max(1, qPageSize));
 
+  // Sorting (whitelisted columns, asc/desc)
+  const SORTABLE: Record<string, SQLWrapper> = {
+    id: fundedAccounts.id,
+    accountSize: fundedAccounts.accountSize,
+    profitSharePercent: fundedAccounts.profitSharePercent,
+    isActive: fundedAccounts.isActive,
+    activatedAt: fundedAccounts.activatedAt,
+    terminatedAt: fundedAccounts.terminatedAt,
+    totalPayouts: fundedAccounts.totalPayouts,
+    lastPayoutAt: fundedAccounts.lastPayoutAt,
+  };
+  const qSortBy = String(c.req.query("sortBy") || "activatedAt");
+  const qSortOrder = String(c.req.query("sortOrder") || "desc");
+  const sortCol = SORTABLE[qSortBy] || fundedAccounts.activatedAt;
+  const sortOrder = qSortOrder.toLowerCase() === "asc" ? asc(sortCol) : desc(sortCol);
+
   const whereClause: SQL = eq(fundedAccounts.userId, userId);
 
   // Total matching count
@@ -91,7 +107,7 @@ app.get("/my/funded", requireAuth, (c) => {
     .select()
     .from(fundedAccounts)
     .where(whereClause)
-    .orderBy(desc(fundedAccounts.activatedAt))
+    .orderBy(sortOrder)
     .limit(pageSize)
     .offset((page - 1) * pageSize)
     .all();
