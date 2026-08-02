@@ -44,7 +44,10 @@ function getStatusConfig(status: string) {
 
 export default function Profile() {
   const { user } = useAuth();
-  const { data: kycDocs, refetch: refetchKyc } = useApiQuery<any[]>(["kyc", "my"], "/api/kyc/my");
+  // Server-driven pagination — request a generous page size so all doc types are visible
+  const kycQuery = "/api/kyc/my?page=1&pageSize=50";
+  const { data: kycDocsData, refetch: refetchKyc } = useApiQuery<any>(["kyc", "my", kycQuery], kycQuery);
+  const kycDocs = kycDocsData?.documents || [];
   const updateProfile = useApiMutation<any, any>("put", "/api/users/profile");
   const uploadKyc = useApiMutation<any, any>("post", "/api/kyc/upload");
   const [saving, setSaving] = useState(false);

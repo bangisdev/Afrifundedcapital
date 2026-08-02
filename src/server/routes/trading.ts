@@ -13,8 +13,48 @@ const app = new Hono();
 app.get("/mt5", requireAuth, (c) => {
   const userId = c.get("userId");
   const db = getDb();
-  const accounts = db.select().from(mt5Accounts).where(eq(mt5Accounts.userId, userId)).all();
-  return c.json(accounts);
+
+  const qPage = Number(c.req.query("page") || 1);
+  const qPageSize = Number(c.req.query("pageSize") || 10);
+  const page = Math.max(1, qPage);
+  const pageSize = Math.min(50, Math.max(1, qPageSize));
+
+  const whereClause: SQL = eq(mt5Accounts.userId, userId);
+
+  // Total matching count
+  const totalRow = db.select({ count: count() }).from(mt5Accounts).where(whereClause).get();
+  const total = totalRow?.count || 0;
+
+  // Page of accounts
+  const accounts = db
+    .select()
+    .from(mt5Accounts)
+    .where(whereClause)
+    .orderBy(desc(mt5Accounts.createdAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize)
+    .all();
+
+  // User-wide stats (unfiltered)
+  const all = db
+    .select({ isActive: mt5Accounts.isActive, isSuspended: mt5Accounts.isSuspended })
+    .from(mt5Accounts)
+    .where(whereClause)
+    .all();
+  const byStatus = {
+    active: all.filter((a) => a.isActive && !a.isSuspended).length,
+    suspended: all.filter((a) => a.isSuspended).length,
+    inactive: all.filter((a) => !a.isActive && !a.isSuspended).length,
+  };
+
+  return c.json({
+    accounts,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    stats: { total: all.length, byStatus },
+  });
 });
 
 // ─── Challenge Metrics ─────────────────────────────────

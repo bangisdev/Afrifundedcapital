@@ -48,11 +48,40 @@ const mockRefetchKyc = vi.fn(async () => ({}));
 
 vi.mock("@/hooks/use-api", () => ({
   useApiQuery: vi.fn((key: string[], path: string, _opts?: any) => {
-    const dataKey = `${key.join("/")}`;
+    // The page passes query-suffixed keys (["kyc", "my", "/api/kyc/my?..."]),
+    // so look up by the stable prefix (first two segments).
+    const dataKey = key.slice(0, 2).join("/");
     if (queryDataMap[dataKey] === undefined) {
       return { data: undefined, isLoading: true, refetch: mockRefetchKyc };
     }
-    return { data: queryDataMap[dataKey], isLoading: false, refetch: mockRefetchKyc };
+    const base = queryDataMap[dataKey];
+    // Simulate the server-driven KYC documents list: paginate + stats envelope.
+    if (dataKey === "kyc/my" && Array.isArray(base)) {
+      const query = path.includes("?") ? path.split("?")[1] : "";
+      const params = new URLSearchParams(query);
+      const page = Number(params.get("page") || 1);
+      const pageSize = Number(params.get("pageSize") || 10);
+      const total = base.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      const byStatus = base.reduce<Record<string, number>>((acc, d: any) => {
+        const status = d.status || "unverified";
+        acc[status] = (acc[status] || 0) + 1;
+        return acc;
+      }, {});
+      return {
+        data: {
+          documents: base.slice((page - 1) * pageSize, page * pageSize),
+          total,
+          page,
+          pageSize,
+          totalPages,
+          stats: { total, byStatus },
+        },
+        isLoading: false,
+        refetch: mockRefetchKyc,
+      };
+    }
+    return { data: base, isLoading: false, refetch: mockRefetchKyc };
   }),
   useApiMutation: vi.fn((method: string, path: string, _onSuccess?: any) => {
     if (path === "/api/kyc/upload") {

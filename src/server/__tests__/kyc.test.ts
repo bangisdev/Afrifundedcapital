@@ -131,12 +131,17 @@ describe("GET /api/kyc/my", () => {
     const { status, body } = await authGet(app, "/api/kyc/my", userCookie);
 
     expect(status).toBe(200);
-    const docs = body as Array<Record<string, unknown>>;
-    expect(Array.isArray(docs)).toBe(true);
-    expect(docs.length).toBeGreaterThanOrEqual(2);
+    const env = body as Record<string, any>;
+    expect(Array.isArray(env.documents)).toBe(true);
+    expect(env.documents.length).toBeGreaterThanOrEqual(2);
+    expect(env.total).toBeGreaterThanOrEqual(2);
+    expect(env.page).toBe(1);
+    expect(env.pageSize).toBe(10);
+    expect(env.totalPages).toBeGreaterThanOrEqual(1);
+    expect(env.stats.total).toBeGreaterThanOrEqual(2);
     // Should strip file data for performance
-    expect(docs[0]).not.toHaveProperty("fileUrl");
-    expect(docs[0]).toHaveProperty("hasFile");
+    expect(env.documents[0]).not.toHaveProperty("fileUrl");
+    expect(env.documents[0]).toHaveProperty("hasFile");
   });
 
   it("returns 401 without auth", async () => {
@@ -175,7 +180,7 @@ describe("POST /api/kyc/admin/:id/approve", () => {
   it("approves a pending document", async () => {
     // Get the document ID
     const { body: docs } = await authGet(app, "/api/kyc/my", userCookie);
-    const docList = docs as Array<Record<string, unknown>>;
+    const docList = (docs as Record<string, any>).documents as Array<Record<string, unknown>>;
     const passportDoc = docList.find((d) => d.documentType === "passport");
     expect(passportDoc).toBeTruthy();
 
@@ -207,7 +212,7 @@ describe("POST /api/kyc/admin/:id/approve", () => {
 describe("POST /api/kyc/admin/:id/reject", () => {
   it("rejects a document with a reason", async () => {
     const { body: docs } = await authGet(app, "/api/kyc/my", userCookie);
-    const docList = docs as Array<Record<string, unknown>>;
+    const docList = (docs as Record<string, any>).documents as Array<Record<string, unknown>>;
     const proofDoc = docList.find((d) => d.documentType === "proof_of_address");
     expect(proofDoc).toBeTruthy();
 
@@ -257,7 +262,7 @@ describe("DELETE /api/kyc/my/:id", () => {
 
   it("cannot delete an approved document", async () => {
     const { body: docs } = await authGet(app, "/api/kyc/my", userCookie);
-    const docList = docs as Array<Record<string, unknown>>;
+    const docList = (docs as Record<string, any>).documents as Array<Record<string, unknown>>;
     const approvedDoc = docList.find((d) => d.status === "approved");
 
     if (approvedDoc) {

@@ -80,12 +80,18 @@ describe("GET /api/trading/mt5", () => {
   it("returns MT5 accounts for the user", async () => {
     const { status, body } = await authGet(app, "/api/trading/mt5", userCookie);
     expect(status).toBe(200);
-    expect(Array.isArray(body)).toBe(true);
-    expect(body.length).toBeGreaterThanOrEqual(1);
-    const account = (body as Record<string, unknown>[])[0];
+    const env = body as Record<string, any>;
+    expect(Array.isArray(env.accounts)).toBe(true);
+    expect(env.accounts.length).toBeGreaterThanOrEqual(1);
+    expect(env.total).toBeGreaterThanOrEqual(1);
+    expect(env.page).toBe(1);
+    expect(env.pageSize).toBe(10);
+    expect(env.totalPages).toBeGreaterThanOrEqual(1);
+    const account = env.accounts[0];
     expect(account).toHaveProperty("login");
     expect(account).toHaveProperty("server");
     expect(account).toHaveProperty("balance");
+    expect(typeof env.stats.byStatus).toBe("object");
   });
 
   it("returns 401 without auth", async () => {
@@ -101,7 +107,7 @@ describe("GET /api/trading/mt5", () => {
 describe("GET /api/trading/challenge/:id/metrics", () => {
   it("returns null when no metrics exist", async () => {
     const { body: challenges } = await authGet(app, "/api/challenges/my", userCookie);
-    const challenge = (challenges as Record<string, unknown>[])[0];
+    const challenge = ((challenges as Record<string, unknown>).challenges as Record<string, unknown>[])[0];
     if (!challenge) return;
 
     const { status, body } = await authGet(app, `/api/trading/challenge/${challenge.id}/metrics`, userCookie);
@@ -122,7 +128,7 @@ describe("GET /api/trading/challenge/:id/metrics", () => {
 describe("GET /api/trading/challenge/:id/history", () => {
   it("returns metrics history array", async () => {
     const { body: challenges } = await authGet(app, "/api/challenges/my", userCookie);
-    const challenge = (challenges as Record<string, unknown>[])[0];
+    const challenge = ((challenges as Record<string, unknown>).challenges as Record<string, unknown>[])[0];
     if (!challenge) return;
 
     const { status, body } = await authGet(app, `/api/trading/challenge/${challenge.id}/history`, userCookie);
@@ -138,7 +144,7 @@ describe("GET /api/trading/challenge/:id/history", () => {
 describe("GET /api/trading/challenge/:id/drawdown", () => {
   it("returns drawdown history array", async () => {
     const { body: challenges } = await authGet(app, "/api/challenges/my", userCookie);
-    const challenge = (challenges as Record<string, unknown>[])[0];
+    const challenge = ((challenges as Record<string, unknown>).challenges as Record<string, unknown>[])[0];
     if (!challenge) return;
 
     const { status, body } = await authGet(app, `/api/trading/challenge/${challenge.id}/drawdown`, userCookie);
@@ -154,7 +160,7 @@ describe("GET /api/trading/challenge/:id/drawdown", () => {
 describe("POST /api/trading/seed-demo", () => {
   it("seeds demo metrics data for a challenge", async () => {
     const { body: challenges } = await authGet(app, "/api/challenges/my", userCookie);
-    const challenge = (challenges as Record<string, unknown>[])[0];
+    const challenge = ((challenges as Record<string, unknown>).challenges as Record<string, unknown>[])[0];
     if (!challenge) return;
 
     const { status, body } = await authPost(app, "/api/trading/seed-demo", userCookie, {
@@ -167,7 +173,7 @@ describe("POST /api/trading/seed-demo", () => {
 
   it("returns seeded: false when metrics already exist", async () => {
     const { body: challenges } = await authGet(app, "/api/challenges/my", userCookie);
-    const challenge = (challenges as Record<string, unknown>[])[0];
+    const challenge = ((challenges as Record<string, unknown>).challenges as Record<string, unknown>[])[0];
     if (!challenge) return;
 
     const { status, body } = await authPost(app, "/api/trading/seed-demo", userCookie, {
@@ -201,7 +207,7 @@ describe("POST /api/trading/seed-demo", () => {
 describe("GET /api/trading/challenge/:id/metrics (after seeding)", () => {
   it("returns latest metrics after seeding", async () => {
     const { body: challenges } = await authGet(app, "/api/challenges/my", userCookie);
-    const challenge = (challenges as Record<string, unknown>[])[0];
+    const challenge = ((challenges as Record<string, unknown>).challenges as Record<string, unknown>[])[0];
     if (!challenge) return;
 
     const { status, body } = await authGet(app, `/api/trading/challenge/${challenge.id}/metrics`, userCookie);
@@ -217,7 +223,7 @@ describe("GET /api/trading/challenge/:id/metrics (after seeding)", () => {
 
   it("returns full history after seeding", async () => {
     const { body: challenges } = await authGet(app, "/api/challenges/my", userCookie);
-    const challenge = (challenges as Record<string, unknown>[])[0];
+    const challenge = ((challenges as Record<string, unknown>).challenges as Record<string, unknown>[])[0];
     if (!challenge) return;
 
     const { status, body } = await authGet(app, `/api/trading/challenge/${challenge.id}/history`, userCookie);
@@ -234,7 +240,7 @@ describe("GET /api/trading/challenge/:id/metrics (after seeding)", () => {
 describe("POST /api/trading/reset-demo", () => {
   it("resets demo metrics for a challenge", async () => {
     const { body: challenges } = await authGet(app, "/api/challenges/my", userCookie);
-    const challenge = (challenges as Record<string, unknown>[])[0];
+    const challenge = ((challenges as Record<string, unknown>).challenges as Record<string, unknown>[])[0];
     if (!challenge) return;
 
     const { status, body } = await authPost(app, "/api/trading/reset-demo", userCookie, {
@@ -270,7 +276,7 @@ describe("POST /api/trading/sync", () => {
 
   it("syncs a specific challenge by ID", async () => {
     const { body: challenges } = await authGet(app, "/api/challenges/my", userCookie);
-    const challenge = (challenges as Record<string, unknown>[])[0];
+    const challenge = ((challenges as Record<string, unknown>).challenges as Record<string, unknown>[])[0];
     if (!challenge) return;
 
     const { status, body } = await authPost(app, "/api/trading/sync", userCookie, {
@@ -300,7 +306,7 @@ describe("POST /api/trading/sync — data verification", () => {
   beforeAll(async () => {
     const sqlite = getTestSqlite();
     const { body: challenges } = await authGet(app, "/api/challenges/my", userCookie);
-    const challenge = (challenges as Record<string, unknown>[])[0];
+    const challenge = ((challenges as Record<string, unknown>).challenges as Record<string, unknown>[])[0];
     syncChallengeId = challenge.id as number;
     syncMt5Id = challenge.mt5AccountId as number;
 
@@ -448,7 +454,7 @@ describe("POST /api/trading/sync — data verification", () => {
 
     // Get both challenges
     const { body: allChallenges } = await authGet(app, "/api/challenges/my", userCookie);
-    const challenges = allChallenges as Record<string, unknown>[];
+    const challenges = (allChallenges as Record<string, unknown>).challenges as Record<string, unknown>[];
     expect(challenges.length).toBeGreaterThanOrEqual(2);
 
     const otherChallenge = challenges.find((c) => c.id !== syncChallengeId);

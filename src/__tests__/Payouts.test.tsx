@@ -70,6 +70,29 @@ vi.mock("@/hooks/use-api", () => ({
         isLoading: false,
       };
     }
+    // Simulate the server-driven funded accounts list: paginate + stats envelope.
+    if (dataKey === "funded/my" && Array.isArray(base)) {
+      const query = path.includes("?") ? path.split("?")[1] : "";
+      const params = new URLSearchParams(query);
+      const page = Number(params.get("page") || 1);
+      const pageSize = Number(params.get("pageSize") || 50);
+      const total = base.length;
+      const byStatus = {
+        active: base.filter((a: any) => a.isActive !== false).length,
+        inactive: base.filter((a: any) => a.isActive === false).length,
+      };
+      return {
+        data: {
+          accounts: base.slice((page - 1) * pageSize, page * pageSize),
+          total,
+          page,
+          pageSize,
+          totalPages: Math.max(1, Math.ceil(total / pageSize)),
+          stats: { total, byStatus },
+        },
+        isLoading: false,
+      };
+    }
     return { data: base, isLoading: false };
   }),
   useApiMutation: vi.fn((_method: string, _path: string, _onSuccess?: any) => ({

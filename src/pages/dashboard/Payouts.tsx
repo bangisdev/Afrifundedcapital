@@ -30,7 +30,10 @@ export default function Payouts() {
 
   const { data, isLoading: pLoading } = useApiQuery<PayoutsResponse>(["payouts", "my", listQuery], listQuery);
   const { data: stats } = useApiQuery<any>(["payouts", "stats"], "/api/payouts/my/stats");
-  const { data: fundedAccounts } = useApiQuery<any[]>(["funded", "my"], "/api/payouts/my/funded");
+  // Server-driven pagination — request a generous page size so the account selector shows all
+  const fundedQuery = "/api/payouts/my/funded?page=1&pageSize=50";
+  const { data: fundedData } = useApiQuery<any>(["funded", "my", fundedQuery], fundedQuery);
+  const fundedAccounts = fundedData?.accounts || [];
   const requestPayout = useApiMutation<any, any>("post", "/api/payouts/request");
   const [showRequest, setShowRequest] = useState(false);
   const [amount, setAmount] = useState("");

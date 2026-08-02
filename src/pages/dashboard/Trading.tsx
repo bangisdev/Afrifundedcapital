@@ -57,7 +57,16 @@ export default function Trading() {
   const challenges = challengesData?.challenges || [];
   const { data: metrics } = useApiQuery<any>(["metrics", "dashboard"], "/api/challenges/metrics");
   const { data: metricsHistory, isLoading: mLoading } = useApiQuery<any[]>(["metrics", "history"], "/api/challenges/my/0/metrics");
-  const { data: mt5Accounts, isLoading: mt5Loading } = useApiQuery<any[]>(["mt5", "my"], "/api/trading/mt5");
+  const [mt5Page, setMt5Page] = useState(1);
+  const [mt5PageSize, setMt5PageSize] = useState(10);
+  const mt5Params = new URLSearchParams();
+  mt5Params.set("page", String(mt5Page));
+  mt5Params.set("pageSize", String(mt5PageSize));
+  const mt5Query = `/api/trading/mt5?${mt5Params.toString()}`;
+  const { data: mt5Data, isLoading: mt5Loading } = useApiQuery<any>(["mt5", "my", mt5Query], mt5Query);
+  const mt5Accounts = mt5Data?.accounts || [];
+  const mt5Total = mt5Data?.total || 0;
+  const mt5TotalPages = mt5Data?.totalPages || 1;
   const seedMutation = useApiMutation<any, any>("post", "/api/trading/seed-demo");
   const resetMutation = useApiMutation<any, any>("post", "/api/trading/reset-demo");
   const syncMutation = useApiMutation<any, any>("post", "/api/trading/sync");
@@ -66,6 +75,16 @@ export default function Trading() {
   const [autoSeeding, setAutoSeeding] = useState(false);
   const [seedResult, setSeedResult] = useState<string | null>(null);
   const autoSeedingRef = useRef(false);
+
+  // Reset to first page whenever page size changes
+  useEffect(() => {
+    setMt5Page(1);
+  }, [mt5PageSize]);
+
+  // Clamp page if the current page exceeds total pages
+  useEffect(() => {
+    if (mt5Page > mt5TotalPages && mt5TotalPages > 0) setMt5Page(1);
+  }, [mt5TotalPages, mt5Page]);
 
   const isLoading = cLoading || mLoading || mt5Loading;
 
@@ -202,6 +221,24 @@ export default function Trading() {
                 </CardContent>
               </Card>
             ))}
+          </div>
+
+          {/* Pagination footer */}
+          <div className="flex items-center justify-between pt-1">
+            <div className="text-[10px] text-muted-foreground">Showing {mt5Total === 0 ? 0 : (mt5Page - 1) * mt5PageSize + 1}–{Math.min(mt5Page * mt5PageSize, mt5Total)} of {mt5Total} accounts</div>
+            <div className="flex items-center gap-2">
+              <select
+                value={mt5PageSize}
+                onChange={(e) => setMt5PageSize(Number(e.target.value))}
+                className="h-7 px-2 rounded-md border border-input bg-background text-[11px] cursor-pointer outline-none"
+                aria-label="Rows per page"
+              >
+                {[10, 25, 50].map((n) => <option key={n} value={n}>{n} / page</option>)}
+              </select>
+              <Button variant="outline" size="sm" className="h-7 px-2.5 text-[11px]" disabled={mt5Page <= 1} onClick={() => setMt5Page((p) => p - 1)}>Prev</Button>
+              <span className="px-2 text-[11px] font-medium tabular-nums">{mt5Page} / {mt5TotalPages}</span>
+              <Button variant="outline" size="sm" className="h-7 px-2.5 text-[11px]" disabled={mt5Page >= mt5TotalPages} onClick={() => setMt5Page((p) => p + 1)}>Next</Button>
+            </div>
           </div>
         </div>
       )}

@@ -16,16 +16,51 @@ const MAX_SIZE_BYTES = 5 * 1024 * 1024;
 app.get("/my", requireAuth, (c) => {
   const userId = c.get("userId");
   const db = getDb();
-  const docs = db.select().from(kycDocuments)
-    .where(eq(kycDocuments.userId, userId))
-    .orderBy(desc(kycDocuments.uploadedAt)).all();
+
+  const qPage = Number(c.req.query("page") || 1);
+  const qPageSize = Number(c.req.query("pageSize") || 10);
+  const page = Math.max(1, qPage);
+  const pageSize = Math.min(50, Math.max(1, qPageSize));
+
+  const whereClause: SQL = eq(kycDocuments.userId, userId);
+
+  // Total matching count
+  const totalRow = db.select({ count: count() }).from(kycDocuments).where(whereClause).get();
+  const total = totalRow?.count || 0;
+
+  // Page of documents
+  const docs = db
+    .select()
+    .from(kycDocuments)
+    .where(whereClause)
+    .orderBy(desc(kycDocuments.uploadedAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize)
+    .all();
+
   // Strip fileData from list responses for performance
   const stripped = docs.map(({ fileUrl, ...rest }) => ({
     ...rest,
     hasFile: !!fileUrl,
     filePreview: fileUrl ? fileUrl.substring(0, 30) + "..." : null,
   }));
-  return c.json(stripped);
+
+  // User-wide stats (unfiltered)
+  const all = db.select({ status: kycDocuments.status }).from(kycDocuments).where(whereClause).all();
+  const byStatus = all.reduce<Record<string, number>>((acc, d) => {
+    const key = d.status || "unverified";
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+
+  return c.json({
+    documents: stripped,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    stats: { total: all.length, byStatus },
+  });
 });
 
 // Get single KYC document (with file data for preview)

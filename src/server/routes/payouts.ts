@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
 import { profitPayouts, fundedAccounts, userChallenges, users } from "../schema";
-import { eq, desc, and, count, sql } from "drizzle-orm";
+import { eq, desc, and, count, sql, type SQL } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification } from "../lib/notifications";
 import { sendEmail, payoutApprovedEmail, payoutRejectedEmail, payoutPaidEmail } from "../lib/email";
@@ -74,8 +74,43 @@ app.get("/my/stats", requireAuth, (c) => {
 app.get("/my/funded", requireAuth, (c) => {
   const userId = c.get("userId");
   const db = getDb();
-  const accounts = db.select().from(fundedAccounts).where(eq(fundedAccounts.userId, userId)).all();
-  return c.json(accounts);
+
+  const qPage = Number(c.req.query("page") || 1);
+  const qPageSize = Number(c.req.query("pageSize") || 10);
+  const page = Math.max(1, qPage);
+  const pageSize = Math.min(50, Math.max(1, qPageSize));
+
+  const whereClause: SQL = eq(fundedAccounts.userId, userId);
+
+  // Total matching count
+  const totalRow = db.select({ count: count() }).from(fundedAccounts).where(whereClause).get();
+  const total = totalRow?.count || 0;
+
+  // Page of accounts
+  const accounts = db
+    .select()
+    .from(fundedAccounts)
+    .where(whereClause)
+    .orderBy(desc(fundedAccounts.activatedAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize)
+    .all();
+
+  // User-wide stats (unfiltered)
+  const all = db.select({ isActive: fundedAccounts.isActive }).from(fundedAccounts).where(whereClause).all();
+  const byStatus = {
+    active: all.filter((a) => a.isActive).length,
+    inactive: all.filter((a) => !a.isActive).length,
+  };
+
+  return c.json({
+    accounts,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    stats: { total: all.length, byStatus },
+  });
 });
 
 // Request payout

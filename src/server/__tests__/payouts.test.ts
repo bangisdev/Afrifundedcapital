@@ -63,8 +63,12 @@ beforeAll(async () => {
   });
 
   // Get challenge and update to funded status (uses PUT, not POST!)
+  // challenges/my returns an envelope { challenges, total, ... } — unwrap it.
   const { body: challenges } = await authGet(app, "/api/challenges/my", userCookie);
-  const challenge = (challenges as Array<{ id: number }>)[0];
+  const challengeList = Array.isArray(challenges)
+    ? challenges
+    : (challenges as Record<string, any>).challenges || [];
+  const challenge = (challengeList as Array<{ id: number }>)[0];
   if (challenge) {
     await authPut(app, `/api/challenges/admin/${challenge.id}/status`, adminCookie, {
       status: "funded",
@@ -134,9 +138,14 @@ describe("GET /api/payouts/my/funded", () => {
   it("returns funded accounts", async () => {
     const { status, body } = await authGet(app, "/api/payouts/my/funded", userCookie);
     expect(status).toBe(200);
-    expect(Array.isArray(body)).toBe(true);
-    expect(body.length).toBeGreaterThanOrEqual(1);
-    const account = (body as Record<string, unknown>[])[0];
+    const env = body as Record<string, any>;
+    expect(Array.isArray(env.accounts)).toBe(true);
+    expect(env.accounts.length).toBeGreaterThanOrEqual(1);
+    expect(env.total).toBeGreaterThanOrEqual(1);
+    expect(env.page).toBe(1);
+    expect(env.pageSize).toBe(10);
+    expect(env.totalPages).toBeGreaterThanOrEqual(1);
+    const account = env.accounts[0];
     expect(account).toHaveProperty("accountSize");
     expect(account).toHaveProperty("profitSharePercent");
     expect(account.isActive).toBe(true);
