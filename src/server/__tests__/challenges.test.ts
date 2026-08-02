@@ -14,8 +14,8 @@ import {
   authDelete,
   getTestDb,
 } from "./setup";
-import { users } from "../schema";
-import { eq } from "drizzle-orm";
+import { users, auditLogs } from "../schema";
+import { eq, desc } from "drizzle-orm";
 
 let app: Hono;
 let userCookie: string;
@@ -160,6 +160,16 @@ describe("POST /api/challenges/admin/templates", () => {
     expect(status).toBe(200);
     expect((body as Record<string, unknown>).name).toBe("Custom Challenge");
     expect((body as Record<string, unknown>).type).toBe("one_step");
+
+    // Audit log entry written by the creating admin
+    const db = getTestDb();
+    const audit = db.select().from(auditLogs)
+      .where(eq(auditLogs.action, "template.created"))
+      .orderBy(desc(auditLogs.timestamp))
+      .get();
+    expect(audit).toBeTruthy();
+    expect(audit?.entity).toBe("challenge_template");
+    expect(audit?.details).toContain("Custom Challenge");
   });
 
   it("returns 403 for non-admin", async () => {
@@ -205,6 +215,15 @@ describe("PUT /api/challenges/admin/templates/:id", () => {
     );
     expect(status).toBe(200);
     expect((body as Record<string, unknown>).success).toBe(true);
+
+    // Audit log entry written by the updating admin
+    const db = getTestDb();
+    const audit = db.select().from(auditLogs)
+      .where(eq(auditLogs.action, "template.updated"))
+      .orderBy(desc(auditLogs.timestamp))
+      .get();
+    expect(audit).toBeTruthy();
+    expect(audit?.entityId).toBe(String(templateId));
   });
 });
 
@@ -226,6 +245,16 @@ describe("POST /api/challenges/admin/sizes", () => {
     });
     expect(status).toBe(200);
     expect((body as Record<string, unknown>).label).toBe("$75,000");
+
+    // Audit log entry written by the creating admin
+    const db = getTestDb();
+    const audit = db.select().from(auditLogs)
+      .where(eq(auditLogs.action, "template_size.created"))
+      .orderBy(desc(auditLogs.timestamp))
+      .get();
+    expect(audit).toBeTruthy();
+    expect(audit?.entity).toBe("account_size");
+    expect(audit?.details).toContain("$75,000");
   });
 });
 
@@ -349,6 +378,15 @@ describe("DELETE /api/challenges/admin/sizes/:id", () => {
     const { status, body } = await authDelete(app, `/api/challenges/admin/sizes/${size.id}`, adminCookie);
     expect(status).toBe(200);
     expect((body as Record<string, unknown>).success).toBe(true);
+
+    // Audit log entry written by the deleting admin
+    const db = getTestDb();
+    const audit = db.select().from(auditLogs)
+      .where(eq(auditLogs.action, "template_size.deleted"))
+      .orderBy(desc(auditLogs.timestamp))
+      .get();
+    expect(audit).toBeTruthy();
+    expect(audit?.entityId).toBe(String(size.id));
   });
 });
 
@@ -374,5 +412,15 @@ describe("DELETE /api/challenges/admin/templates/:id", () => {
     const { status, body } = await authDelete(app, `/api/challenges/admin/templates/${templateId}`, adminCookie);
     expect(status).toBe(200);
     expect((body as Record<string, unknown>).success).toBe(true);
+
+    // Audit log entry written by the deleting admin
+    const db = getTestDb();
+    const audit = db.select().from(auditLogs)
+      .where(eq(auditLogs.action, "template.deleted"))
+      .orderBy(desc(auditLogs.timestamp))
+      .get();
+    expect(audit).toBeTruthy();
+    expect(audit?.entityId).toBe(String(templateId));
+    expect(audit?.details).toContain("Delete Me");
   });
 });

@@ -14,8 +14,8 @@ import {
   authDelete,
   getTestDb,
 } from "./setup";
-import { users, coupons, couponRedemptions } from "../schema";
-import { eq } from "drizzle-orm";
+import { users, coupons, couponRedemptions, auditLogs } from "../schema";
+import { eq, desc } from "drizzle-orm";
 
 let app: Hono;
 let userCookie: string;
@@ -72,6 +72,16 @@ describe("POST /api/coupons/admin/create", () => {
     expect(coupon.code).toBe("SAVE20");
     expect(coupon.discountType).toBe("percentage");
     expect(coupon.discountValue).toBe(20);
+
+    // Audit log entry written by the creating admin
+    const db = getTestDb();
+    const audit = db.select().from(auditLogs)
+      .where(eq(auditLogs.action, "coupon.created"))
+      .orderBy(desc(auditLogs.timestamp))
+      .get();
+    expect(audit).toBeTruthy();
+    expect(audit?.entity).toBe("coupon");
+    expect(audit?.details).toContain("SAVE20");
   });
 
   it("creates a fixed coupon", async () => {
@@ -327,6 +337,16 @@ describe("PUT /api/coupons/admin/:id", () => {
     });
     expect(status).toBe(200);
     expect((body as Record<string, unknown>).success).toBe(true);
+
+    // Audit log entry written by the updating admin
+    const db = getTestDb();
+    const audit = db.select().from(auditLogs)
+      .where(eq(auditLogs.action, "coupon.updated"))
+      .orderBy(desc(auditLogs.timestamp))
+      .get();
+    expect(audit).toBeTruthy();
+    expect(audit?.entityId).toBe(String(coupon.id));
+    expect(audit?.details).toContain("description");
   });
 });
 
@@ -342,5 +362,14 @@ describe("DELETE /api/coupons/admin/:id", () => {
     const { status, body } = await authDelete(app, `/api/coupons/admin/${coupon.id}`, adminCookie);
     expect(status).toBe(200);
     expect((body as Record<string, unknown>).success).toBe(true);
+
+    // Audit log entry written by the deleting admin
+    const db = getTestDb();
+    const audit = db.select().from(auditLogs)
+      .where(eq(auditLogs.action, "coupon.deleted"))
+      .orderBy(desc(auditLogs.timestamp))
+      .get();
+    expect(audit).toBeTruthy();
+    expect(audit?.entityId).toBe(String(coupon.id));
   });
 });

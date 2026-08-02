@@ -4,6 +4,7 @@ import { coupons, couponRedemptions, payments } from "../schema";
 import { eq, desc, asc, and, count, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { voidStaleRedemptions } from "../lib/payment-sweep";
+import { writeAuditLog } from "../lib/audit";
 
 const app = new Hono();
 
@@ -293,6 +294,26 @@ app.post("/admin/create", requireAuth, requireAdmin, async (c) => {
     createdBy: userId,
     createdAt: Date.now(),
   }).returning().get();
+
+  try {
+    writeAuditLog(db, {
+      userId,
+      action: "coupon.created",
+      entity: "coupon",
+      entityId: result.id,
+      details: {
+        code: result.code,
+        discountType: result.discountType,
+        discountValue: result.discountValue,
+        maxUses: result.maxUses,
+        expiresAt: result.expiresAt,
+      },
+      ipAddress: c.req.header("x-forwarded-for"),
+    });
+  } catch (e) {
+    console.warn("[Audit] Failed to log coupon creation:", e);
+  }
+
   return c.json(result);
 });
 
@@ -301,7 +322,27 @@ app.put("/admin/:id", requireAuth, requireAdmin, async (c) => {
   const id = parseInt(c.req.param("id"));
   const body = await c.req.json();
   const db = getDb();
+  const existing = db.select().from(coupons).where(eq(coupons.id, id)).get();
+  if (!existing) return c.json({ error: "Coupon not found" }, 404);
+
   db.update(coupons).set(body).where(eq(coupons.id, id)).run();
+
+  try {
+    writeAuditLog(db, {
+      userId: c.get("userId"),
+      action: "coupon.updated",
+      entity: "coupon",
+      entityId: id,
+      details: {
+        code: existing.code,
+        fields: Object.keys(body),
+      },
+      ipAddress: c.req.header("x-forwarded-for"),
+    });
+  } catch (e) {
+    console.warn("[Audit] Failed to log coupon update:", e);
+  }
+
   return c.json({ success: true });
 });
 
@@ -309,7 +350,28 @@ app.put("/admin/:id", requireAuth, requireAdmin, async (c) => {
 app.delete("/admin/:id", requireAuth, requireAdmin, async (c) => {
   const id = parseInt(c.req.param("id"));
   const db = getDb();
+  const existing = db.select().from(coupons).where(eq(coupons.id, id)).get();
+  if (!existing) return c.json({ error: "Coupon not found" }, 404);
+
   db.delete(coupons).where(eq(coupons.id, id)).run();
+
+  try {
+    writeAuditLog(db, {
+      userId: c.get("userId"),
+      action: "coupon.deleted",
+      entity: "coupon",
+      entityId: id,
+      details: {
+        code: existing.code,
+        discountType: existing.discountType,
+        discountValue: existing.discountValue,
+      },
+      ipAddress: c.req.header("x-forwarded-for"),
+    });
+  } catch (e) {
+    console.warn("[Audit] Failed to log coupon deletion:", e);
+  }
+
   return c.json({ success: true });
 });
 

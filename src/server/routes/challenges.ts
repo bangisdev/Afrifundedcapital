@@ -13,6 +13,7 @@ import { eq, desc, asc, count, sql, and, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification } from "../lib/notifications";
 import { maybeGenerateCertificate } from "../lib/certificates";
+import { writeAuditLog } from "../lib/audit";
 
 let seeded = false;
 
@@ -324,6 +325,24 @@ app.post("/admin/templates", requireAuth, requireAdmin, async (c) => {
     .returning()
     .get();
 
+  try {
+    writeAuditLog(db, {
+      userId,
+      action: "template.created",
+      entity: "challenge_template",
+      entityId: result.id,
+      details: {
+        name: result.name,
+        type: result.type,
+        price: result.price,
+        currency: result.currency,
+      },
+      ipAddress: c.req.header("x-forwarded-for"),
+    });
+  } catch (e) {
+    console.warn("[Audit] Failed to log template creation:", e);
+  }
+
   return c.json(result);
 });
 
@@ -333,10 +352,29 @@ app.put("/admin/templates/:id", requireAuth, requireAdmin, async (c) => {
   const body = await c.req.json();
   const db = getDb();
 
+  const existing = db.select().from(challengeTemplates).where(eq(challengeTemplates.id, id)).get();
+  if (!existing) return c.json({ error: "Template not found" }, 404);
+
   db.update(challengeTemplates)
     .set({ ...body, updatedAt: Date.now() })
     .where(eq(challengeTemplates.id, id))
     .run();
+
+  try {
+    writeAuditLog(db, {
+      userId: c.get("userId"),
+      action: "template.updated",
+      entity: "challenge_template",
+      entityId: id,
+      details: {
+        name: existing.name,
+        fields: Object.keys(body),
+      },
+      ipAddress: c.req.header("x-forwarded-for"),
+    });
+  } catch (e) {
+    console.warn("[Audit] Failed to log template update:", e);
+  }
 
   return c.json({ success: true });
 });
@@ -359,6 +397,24 @@ app.post("/admin/sizes", requireAuth, requireAdmin, async (c) => {
     .returning()
     .get();
 
+  try {
+    writeAuditLog(db, {
+      userId: c.get("userId"),
+      action: "template_size.created",
+      entity: "account_size",
+      entityId: result.id,
+      details: {
+        label: result.label,
+        size: result.size,
+        templateId: result.templateId,
+        price: result.price,
+      },
+      ipAddress: c.req.header("x-forwarded-for"),
+    });
+  } catch (e) {
+    console.warn("[Audit] Failed to log account size creation:", e);
+  }
+
   return c.json(result);
 });
 
@@ -368,10 +424,30 @@ app.put("/admin/sizes/:id", requireAuth, requireAdmin, async (c) => {
   const body = await c.req.json();
   const db = getDb();
 
+  const existing = db.select().from(accountSizes).where(eq(accountSizes.id, id)).get();
+  if (!existing) return c.json({ error: "Account size not found" }, 404);
+
   db.update(accountSizes)
     .set(body)
     .where(eq(accountSizes.id, id))
     .run();
+
+  try {
+    writeAuditLog(db, {
+      userId: c.get("userId"),
+      action: "template_size.updated",
+      entity: "account_size",
+      entityId: id,
+      details: {
+        label: existing.label,
+        templateId: existing.templateId,
+        fields: Object.keys(body),
+      },
+      ipAddress: c.req.header("x-forwarded-for"),
+    });
+  } catch (e) {
+    console.warn("[Audit] Failed to log account size update:", e);
+  }
 
   return c.json({ success: true });
 });
@@ -380,7 +456,28 @@ app.put("/admin/sizes/:id", requireAuth, requireAdmin, async (c) => {
 app.delete("/admin/sizes/:id", requireAuth, requireAdmin, async (c) => {
   const id = parseInt(c.req.param("id"));
   const db = getDb();
+  const existing = db.select().from(accountSizes).where(eq(accountSizes.id, id)).get();
+  if (!existing) return c.json({ error: "Account size not found" }, 404);
+
   db.delete(accountSizes).where(eq(accountSizes.id, id)).run();
+
+  try {
+    writeAuditLog(db, {
+      userId: c.get("userId"),
+      action: "template_size.deleted",
+      entity: "account_size",
+      entityId: id,
+      details: {
+        label: existing.label,
+        size: existing.size,
+        templateId: existing.templateId,
+      },
+      ipAddress: c.req.header("x-forwarded-for"),
+    });
+  } catch (e) {
+    console.warn("[Audit] Failed to log account size deletion:", e);
+  }
+
   return c.json({ success: true });
 });
 
@@ -388,6 +485,8 @@ app.delete("/admin/sizes/:id", requireAuth, requireAdmin, async (c) => {
 app.delete("/admin/templates/:id", requireAuth, requireAdmin, async (c) => {
   const id = parseInt(c.req.param("id"));
   const db = getDb();
+  const existing = db.select().from(challengeTemplates).where(eq(challengeTemplates.id, id)).get();
+  if (!existing) return c.json({ error: "Template not found" }, 404);
   // Check if any user challenges use this template
   const usage = db.select({ cnt: count() }).from(userChallenges).where(eq(userChallenges.templateId, id)).get();
   if (usage && (usage.cnt ?? 0) > 0) {
@@ -395,6 +494,24 @@ app.delete("/admin/templates/:id", requireAuth, requireAdmin, async (c) => {
   }
   db.delete(accountSizes).where(eq(accountSizes.templateId, id)).run();
   db.delete(challengeTemplates).where(eq(challengeTemplates.id, id)).run();
+
+  try {
+    writeAuditLog(db, {
+      userId: c.get("userId"),
+      action: "template.deleted",
+      entity: "challenge_template",
+      entityId: id,
+      details: {
+        name: existing.name,
+        type: existing.type,
+        price: existing.price,
+      },
+      ipAddress: c.req.header("x-forwarded-for"),
+    });
+  } catch (e) {
+    console.warn("[Audit] Failed to log template deletion:", e);
+  }
+
   return c.json({ success: true });
 });
 
