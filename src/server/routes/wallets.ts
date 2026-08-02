@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
 import { wallets, walletTransactions } from "../schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, count, and, or, like, sql, type SQL } from "drizzle-orm";
 import { requireAuth } from "../middleware";
 
 const app = new Hono();
@@ -23,11 +23,66 @@ app.get("/my", requireAuth, (c) => {
 app.get("/transactions", requireAuth, (c) => {
   const userId = c.get("userId");
   const db = getDb();
-  const txns = db.select().from(walletTransactions)
-    .where(eq(walletTransactions.userId, userId))
+
+  const qPage = Number(c.req.query("page") || 1);
+  const qPageSize = Number(c.req.query("pageSize") || 10);
+  const page = Math.max(1, qPage);
+  const pageSize = Math.min(50, Math.max(1, qPageSize));
+
+  // Filters
+  const search = (c.req.query("search") || "").trim();
+  const type = c.req.query("type") || "";
+
+  const conditions: SQL[] = [eq(walletTransactions.userId, userId)];
+  if (search) {
+    const pattern = `%${search}%`;
+    conditions.push(
+      or(
+        like(walletTransactions.description, pattern),
+        like(walletTransactions.type, pattern),
+      )!,
+    );
+  }
+  if (type && type !== "all") conditions.push(eq(walletTransactions.type, type));
+  const whereClause: SQL = and(...conditions)!;
+
+  // Total matching count
+  const totalRow = db
+    .select({ count: count() })
+    .from(walletTransactions)
+    .where(whereClause)
+    .get();
+  const total = totalRow?.count || 0;
+
+  // Page of transactions
+  const items = db
+    .select()
+    .from(walletTransactions)
+    .where(whereClause)
     .orderBy(desc(walletTransactions.createdAt))
-    .limit(100).all();
-  return c.json(txns);
+    .limit(pageSize)
+    .offset((page - 1) * pageSize)
+    .all();
+
+  // User-wide stats (unfiltered)
+  const allTxns = db
+    .select({ type: walletTransactions.type })
+    .from(walletTransactions)
+    .where(eq(walletTransactions.userId, userId))
+    .all();
+  const byType = allTxns.reduce<Record<string, number>>((acc, t) => {
+    acc[t.type] = (acc[t.type] || 0) + 1;
+    return acc;
+  }, {});
+
+  return c.json({
+    transactions: items,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    stats: { total: allTxns.length, byType },
+  });
 });
 
 // Request withdrawal

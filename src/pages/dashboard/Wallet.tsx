@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -12,9 +12,17 @@ import { toast } from "sonner";
 
 type TabView = "transactions" | "payments";
 
+interface TransactionsResponse {
+  transactions: any[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  stats: { total: number; byType: Record<string, number> };
+}
+
 export default function Wallet() {
   const { data: wallet, isLoading: wLoading } = useApiQuery<any>(["wallet", "my"], "/api/wallets/my");
-  const { data: allTransactions, isLoading: tLoading } = useApiQuery<any[]>(["wallet", "txns"], "/api/wallets/transactions");
   const { data: payments, isLoading: pLoading } = useApiQuery<any[]>(["payments", "my"], "/api/payments/my");
   const requestWithdrawal = useApiMutation<any, any>("post", "/api/wallets/withdraw");
   const [showWithdraw, setShowWithdraw] = useState(false);
@@ -24,21 +32,44 @@ export default function Wallet() {
   const [activeTab, setActiveTab] = useState<TabView>("transactions");
   const [txFilter, setTxFilter] = useState("all");
   const [txSearch, setTxSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [selectedPayment, setSelectedPayment] = useState<any>(null);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
 
-  if (wLoading || tLoading || pLoading) {
+  // Debounce the search input
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(txSearch.trim()), 300);
+    return () => clearTimeout(t);
+  }, [txSearch]);
+
+  // Reset to first page whenever filters or page size change
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, txFilter, pageSize]);
+
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  params.set("pageSize", String(pageSize));
+  if (debouncedSearch) params.set("search", debouncedSearch);
+  if (txFilter !== "all") params.set("type", txFilter);
+  const txQuery = `/api/wallets/transactions?${params.toString()}`;
+
+  const { data: txnsData, isLoading: tLoading } = useApiQuery<TransactionsResponse>(["wallet", "txns", txQuery], txQuery);
+
+  const transactions = txnsData?.transactions || [];
+  const total = txnsData?.total || 0;
+  const totalPages = txnsData?.totalPages || 1;
+
+  // Clamp page if the current page exceeds total pages (e.g. after filter changes)
+  useEffect(() => {
+    if (page > totalPages && totalPages > 0) setPage(1);
+  }, [totalPages, page]);
+
+  if (wLoading || pLoading) {
     return <div className="flex items-center justify-center h-64"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
   }
-
-  const filteredTransactions = (allTransactions || []).filter((tx: any) => {
-    if (txFilter !== "all" && tx.type !== txFilter) return false;
-    if (txSearch) {
-      const q = txSearch.toLowerCase();
-      return tx.description?.toLowerCase().includes(q) || tx.type?.toLowerCase().includes(q);
-    }
-    return true;
-  });
 
   const handleWithdraw = async () => {
     const amount = parseInt(withdrawAmount);
@@ -59,6 +90,9 @@ export default function Wallet() {
   const txColor = (type: string) => {
     switch (type) { case "deposit": case "credit": case "referral_bonus": case "commission": case "refund": return "text-foreground"; case "withdrawal": case "challenge_purchase": return "text-destructive"; default: return "text-muted-foreground"; }
   };
+
+  const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
 
   return (
     <div className="space-y-8">
@@ -94,28 +128,59 @@ export default function Wallet() {
             <div className="relative flex-1"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <input type="text" placeholder="Search transactions..." value={txSearch} onChange={(e) => setTxSearch(e.target.value)} className="w-full h-9 pl-8 pr-3 rounded-md border border-input bg-background text-xs placeholder:text-muted-foreground outline-none focus:border-foreground" />
             </div>
-            <select value={txFilter} onChange={(e) => setTxFilter(e.target.value)} className="h-9 px-3 rounded-md border border-input bg-background text-xs cursor-pointer outline-none">
-              <option value="all">All</option><option value="deposit">Deposits</option><option value="withdrawal">Withdrawals</option><option value="challenge_purchase">Purchases</option>
-            </select>
+            <div className="relative">
+              <select value={txFilter} onChange={(e) => setTxFilter(e.target.value)} className="h-9 pl-3 pr-8 rounded-md border border-input bg-background text-xs cursor-pointer outline-none appearance-none">
+                <option value="all">All</option>
+                <option value="deposit">Deposits</option>
+                <option value="withdrawal">Withdrawals</option>
+                <option value="challenge_purchase">Purchases</option>
+              </select>
+              <Filter className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            </div>
           </div>
-          <div className="space-y-1">
-            {filteredTransactions.length === 0 ? (
-              <div className="card-subtle p-8 text-center"><FileText className="h-8 w-8 mx-auto mb-3 text-muted-foreground" /><p className="text-xs text-muted-foreground">No transactions found</p></div>
-            ) : filteredTransactions.map((tx: any) => (
-              <div key={tx.id} className="card-subtle p-3.5 flex items-center justify-between hover:bg-secondary/20 transition-colors">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="h-8 w-8 rounded-full border border-border flex items-center justify-center shrink-0">{txIcon(tx.type)}</div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-medium truncate">{tx.description}</div>
-                    <div className="text-[10px] text-muted-foreground mt-0.5">{tx.createdAt ? new Date(tx.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }) : ""}</div>
+
+          {tLoading && transactions.length === 0 ? (
+            <div className="flex items-center justify-center h-32"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+          ) : transactions.length === 0 ? (
+            <div className="card-subtle p-8 text-center"><FileText className="h-8 w-8 mx-auto mb-3 text-muted-foreground" /><p className="text-xs text-muted-foreground">No transactions found</p></div>
+          ) : (
+            <>
+              <div className="space-y-1">
+                {transactions.map((tx: any) => (
+                  <div key={tx.id} className="card-subtle p-3.5 flex items-center justify-between hover:bg-secondary/20 transition-colors">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="h-8 w-8 rounded-full border border-border flex items-center justify-center shrink-0">{txIcon(tx.type)}</div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-medium truncate">{tx.description}</div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">{tx.createdAt ? new Date(tx.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }) : ""}</div>
+                      </div>
+                    </div>
+                    <div className={`text-sm font-light tabular-nums shrink-0 ml-4 ${txColor(tx.type)}`}>
+                      {tx.type === "withdrawal" || tx.type === "challenge_purchase" ? "-" : "+"}₦{(tx.amount || 0).toLocaleString()}
+                    </div>
                   </div>
-                </div>
-                <div className={`text-sm font-light tabular-nums shrink-0 ml-4 ${txColor(tx.type)}`}>
-                  {tx.type === "withdrawal" || tx.type === "challenge_purchase" ? "-" : "+"}₦{(tx.amount || 0).toLocaleString()}
+                ))}
+              </div>
+
+              {/* Pagination footer */}
+              <div className="flex items-center justify-between pt-1">
+                <div className="text-[10px] text-muted-foreground">Showing {from}–{to} of {total} transactions</div>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={pageSize}
+                    onChange={(e) => setPageSize(Number(e.target.value))}
+                    className="h-7 px-2 rounded-md border border-input bg-background text-[11px] cursor-pointer outline-none"
+                    aria-label="Rows per page"
+                  >
+                    {[10, 25, 50].map((n) => <option key={n} value={n}>{n} / page</option>)}
+                  </select>
+                  <Button variant="outline" size="sm" className="h-7 px-2.5 text-[11px]" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Prev</Button>
+                  <span className="px-2 text-[11px] font-medium tabular-nums">{page} / {totalPages}</span>
+                  <Button variant="outline" size="sm" className="h-7 px-2.5 text-[11px]" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
                 </div>
               </div>
-            ))}
-          </div>
+            </>
+          )}
         </div>
       )}
 

@@ -41,11 +41,45 @@ const mockWithdrawAsync = vi.fn(async () => ({ message: "ok" }));
 
 vi.mock("@/hooks/use-api", () => ({
   useApiQuery: vi.fn((key: string[], path: string, _opts?: any) => {
-    const dataKey = `${key.join("/")}`;
+    // The page passes query-suffixed keys (["wallet", "txns", "/api/wallets/transactions?..."]),
+    // so look up by the stable prefix (first two segments).
+    const dataKey = key.slice(0, 2).join("/");
     if (queryDataMap[dataKey] === undefined) {
       return { data: undefined, isLoading: true };
     }
-    return { data: queryDataMap[dataKey], isLoading: false };
+    const base = queryDataMap[dataKey];
+    // Simulate the server-driven transactions list: search + type filter + paginate + stats envelope.
+    if (dataKey === "wallet/txns" && Array.isArray(base)) {
+      const query = path.includes("?") ? path.split("?")[1] : "";
+      const params = new URLSearchParams(query);
+      const search = (params.get("search") || "").toLowerCase();
+      const type = params.get("type");
+      const page = Number(params.get("page") || 1);
+      const pageSize = Number(params.get("pageSize") || 10);
+
+      let filtered = base;
+      if (search) {
+        filtered = filtered.filter((tx: any) =>
+          [tx.description, tx.type].some((v) => v && String(v).toLowerCase().includes(search)),
+        );
+      }
+      if (type && type !== "all") filtered = filtered.filter((tx: any) => tx.type === type);
+
+      const total = filtered.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      return {
+        data: {
+          transactions: filtered.slice((page - 1) * pageSize, page * pageSize),
+          total,
+          page,
+          pageSize,
+          totalPages,
+          stats: { total: base.length, byType: {} },
+        },
+        isLoading: false,
+      };
+    }
+    return { data: base, isLoading: false };
   }),
   useApiMutation: vi.fn((_method: string, _path: string, _onSuccess?: any) => ({
     mutateAsync: mockWithdrawAsync,
@@ -389,9 +423,11 @@ describe("Wallet Page", () => {
       const searchInput = screen.getByPlaceholderText("Search transactions...");
       await user.type(searchInput, "flutterwave");
 
-      expect(screen.getByText("Flutterwave Payment")).toBeTruthy();
-      expect(screen.queryByText("Bank Transfer")).toBeNull();
-      expect(screen.queryByText("Withdrawal Request")).toBeNull();
+      await waitFor(() => {
+        expect(screen.getByText("Flutterwave Payment")).toBeTruthy();
+        expect(screen.queryByText("Bank Transfer")).toBeNull();
+        expect(screen.queryByText("Withdrawal Request")).toBeNull();
+      });
     });
 
     it("search is case-insensitive", async () => {
@@ -407,8 +443,10 @@ describe("Wallet Page", () => {
       const searchInput = screen.getByPlaceholderText("Search transactions...");
       await user.type(searchInput, "BANK");
 
-      expect(screen.getByText("Bank Transfer")).toBeTruthy();
-      expect(screen.queryByText("Flutterwave Payment")).toBeNull();
+      await waitFor(() => {
+        expect(screen.getByText("Bank Transfer")).toBeTruthy();
+        expect(screen.queryByText("Flutterwave Payment")).toBeNull();
+      });
     });
 
     it("searches by type", async () => {
@@ -424,8 +462,10 @@ describe("Wallet Page", () => {
       const searchInput = screen.getByPlaceholderText("Search transactions...");
       await user.type(searchInput, "withdrawal");
 
-      expect(screen.getByText("Withdrawal")).toBeTruthy();
-      expect(screen.queryByText("Deposit")).toBeNull();
+      await waitFor(() => {
+        expect(screen.getByText("Withdrawal")).toBeTruthy();
+        expect(screen.queryByText("Deposit")).toBeNull();
+      });
     });
   });
 
@@ -511,6 +551,46 @@ describe("Wallet Page", () => {
       await user.selectOptions(filter, "withdrawal");
 
       expect(screen.getByText("No transactions found")).toBeTruthy();
+    });
+  });
+
+  // ─── Transaction pagination ───────────────────────────
+  describe("Transaction Pagination", () => {
+    const manyTransactions = () =>
+      Array.from({ length: 15 }, (_, i) =>
+        makeTransaction({ id: i + 1, type: "deposit", amount: 1000 * (i + 1), description: `Transaction ${i + 1}` }),
+      );
+
+    it("paginates transactions with many records", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "wallet/txns": manyTransactions() });
+      render(<Wallet />);
+
+      // Page 1 shows the first 10
+      expect(screen.getByText("Transaction 1")).toBeTruthy();
+      expect(screen.getByText("Transaction 10")).toBeTruthy();
+      expect(screen.queryByText("Transaction 11")).toBeNull();
+      expect(screen.getByText("Showing 1–10 of 15 transactions")).toBeTruthy();
+
+      // Next page shows the remaining 5
+      await user.click(screen.getByText("Next"));
+      expect(screen.getByText("Transaction 11")).toBeTruthy();
+      expect(screen.getByText("Transaction 15")).toBeTruthy();
+      expect(screen.queryByText("Transaction 1")).toBeNull();
+
+      // Prev returns to page 1
+      await user.click(screen.getByText("Prev"));
+      expect(screen.getByText("Transaction 1")).toBeTruthy();
+    });
+
+    it("changes rows per page", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "wallet/txns": manyTransactions() });
+      render(<Wallet />);
+
+      await user.selectOptions(screen.getByLabelText("Rows per page"), "25");
+      expect(screen.getByText("Transaction 15")).toBeTruthy();
+      expect(screen.getByText("Showing 1–15 of 15 transactions")).toBeTruthy();
     });
   });
 
@@ -907,12 +987,14 @@ describe("Wallet Page", () => {
       // Filter to deposits only
       await user.selectOptions(screen.getByDisplayValue("All"), "deposit");
 
-      // Then search within deposits
+      // Then search within deposits (server-driven + debounced)
       await user.type(screen.getByPlaceholderText("Search transactions..."), "bank");
 
-      expect(screen.getByText("Bank Transfer")).toBeTruthy();
-      expect(screen.queryByText("Flutterwave")).toBeNull();
-      expect(screen.queryByText("Bank Transfer Withdrawal")).toBeNull();
+      await waitFor(() => {
+        expect(screen.getByText("Bank Transfer")).toBeTruthy();
+        expect(screen.queryByText("Flutterwave")).toBeNull();
+        expect(screen.queryByText("Bank Transfer Withdrawal")).toBeNull();
+      });
     });
   });
 });

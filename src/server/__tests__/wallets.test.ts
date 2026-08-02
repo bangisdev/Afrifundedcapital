@@ -10,7 +10,9 @@ import {
   signIn,
   authGet,
   authPost,
+  getTestDb,
 } from "./setup";
+import { walletTransactions } from "../schema";
 
 let app: Hono;
 let userCookie: string;
@@ -61,16 +63,80 @@ describe("GET /api/wallets/my", () => {
 // ═══════════════════════════════════════════════════════════════
 
 describe("GET /api/wallets/transactions", () => {
-  it("returns empty array for new wallet", async () => {
+  it("returns empty envelope for new wallet", async () => {
     const { status, body } = await authGet(app, "/api/wallets/transactions", userCookie);
     expect(status).toBe(200);
-    expect(Array.isArray(body)).toBe(true);
-    expect(body.length).toBe(0);
+    const env = body as Record<string, any>;
+    expect(Array.isArray(env.transactions)).toBe(true);
+    expect(env.transactions.length).toBe(0);
+    expect(env.total).toBe(0);
+    expect(env.page).toBe(1);
+    expect(env.pageSize).toBe(10);
+    expect(env.totalPages).toBe(1);
+    expect(env.stats.total).toBe(0);
+    expect(env.stats.byType).toEqual({});
   });
 
   it("returns 401 without auth", async () => {
     const res = await app.request("/api/wallets/transactions");
     expect(res.status).toBe(401);
+  });
+
+  it("paginates transactions server-side", async () => {
+    // Get the wallet + user id, then seed 15 transactions directly.
+    const { body: walletBody } = await authGet(app, "/api/wallets/my", userCookie);
+    const wallet = walletBody as Record<string, any>;
+    const db = getTestDb();
+    const now = Date.now();
+    for (let i = 1; i <= 15; i++) {
+      db.insert(walletTransactions)
+        .values({
+          walletId: wallet.id,
+          userId: wallet.userId,
+          type: i % 2 === 0 ? "deposit" : "withdrawal",
+          amount: 1000 * i,
+          balanceBefore: 0,
+          balanceAfter: 1000 * i,
+          description: `Transaction ${i}`,
+          createdAt: now - i * 1000,
+        })
+        .run();
+    }
+
+    const page1 = (await authGet(app, "/api/wallets/transactions?page=1&pageSize=10", userCookie))
+      .body as Record<string, any>;
+    expect(page1.transactions.length).toBe(10);
+    expect(page1.total).toBe(15);
+    expect(page1.page).toBe(1);
+    expect(page1.pageSize).toBe(10);
+    expect(page1.totalPages).toBe(2);
+    // Newest first (createdAt desc)
+    expect(String(page1.transactions[0].description)).toBe("Transaction 1");
+
+    const page2 = (await authGet(app, "/api/wallets/transactions?page=2&pageSize=10", userCookie))
+      .body as Record<string, any>;
+    expect(page2.transactions.length).toBe(5);
+    expect(page2.totalPages).toBe(2);
+  });
+
+  it("filters transactions by type", async () => {
+    const { body } = await authGet(app, "/api/wallets/transactions?type=deposit&pageSize=50", userCookie);
+    const env = body as Record<string, any>;
+    expect(env.transactions.length).toBeGreaterThan(0);
+    expect(env.transactions.every((t: any) => t.type === "deposit")).toBe(true);
+    // Stats remain unfiltered
+    expect(env.stats.total).toBe(15);
+  });
+
+  it("searches transactions by description", async () => {
+    const { body } = await authGet(
+      app,
+      `/api/wallets/transactions?search=${encodeURIComponent("Transaction 1")}&pageSize=50`,
+      userCookie,
+    );
+    const env = body as Record<string, any>;
+    expect(env.transactions.length).toBeGreaterThan(0);
+    expect(env.transactions.every((t: any) => String(t.description).includes("Transaction 1"))).toBe(true);
   });
 });
 
