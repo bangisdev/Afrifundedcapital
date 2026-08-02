@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
 import { coupons, couponRedemptions } from "../schema";
-import { eq, desc, asc, and, sql, type SQLWrapper } from "drizzle-orm";
+import { eq, desc, asc, and, count, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 
 const app = new Hono();
@@ -117,6 +117,81 @@ app.post("/redeem", requireAuth, async (c) => {
   }).run();
 
   return c.json({ success: true });
+});
+
+// ─── Get my redeemed coupons (paginated + sortable) ───
+app.get("/my", requireAuth, (c) => {
+  const userId = c.get("userId");
+  const db = getDb();
+
+  const qPage = Number(c.req.query("page") || 1);
+  const qPageSize = Number(c.req.query("pageSize") || 10);
+  const page = Math.max(1, qPage);
+  const pageSize = Math.min(50, Math.max(1, qPageSize));
+
+  // Sorting (whitelisted columns, asc/desc) — "code" sorts on the joined coupons table
+  const SORTABLE: Record<string, SQLWrapper> = {
+    id: couponRedemptions.id,
+    code: coupons.code,
+    discountAmount: couponRedemptions.discountAmount,
+    originalAmount: couponRedemptions.originalAmount,
+    redeemedAt: couponRedemptions.redeemedAt,
+  };
+  const qSortBy = String(c.req.query("sortBy") || "redeemedAt");
+  const qSortOrder = String(c.req.query("sortOrder") || "desc");
+  const sortCol = SORTABLE[qSortBy] || couponRedemptions.redeemedAt;
+  const sortOrder = qSortOrder.toLowerCase() === "asc" ? asc(sortCol) : desc(sortCol);
+
+  const whereClause: SQL = eq(couponRedemptions.userId, userId);
+
+  // Total matching count
+  const totalRow = db
+    .select({ count: count() })
+    .from(couponRedemptions)
+    .leftJoin(coupons, eq(coupons.id, couponRedemptions.couponId))
+    .where(whereClause)
+    .get();
+  const total = totalRow?.count || 0;
+
+  // Page of redemptions with coupon info joined
+  const rows = db
+    .select({
+      redemption: couponRedemptions,
+      couponCode: coupons.code,
+      discountType: coupons.discountType,
+      discountValue: coupons.discountValue,
+    })
+    .from(couponRedemptions)
+    .leftJoin(coupons, eq(coupons.id, couponRedemptions.couponId))
+    .where(whereClause)
+    .orderBy(sortOrder)
+    .limit(pageSize)
+    .offset((page - 1) * pageSize)
+    .all();
+
+  const items = rows.map((r) => ({
+    ...r.redemption,
+    code: r.couponCode || null,
+    discountType: r.discountType || null,
+    discountValue: r.discountValue || null,
+  }));
+
+  // User-wide stats (unfiltered)
+  const all = db
+    .select({ discountAmount: couponRedemptions.discountAmount })
+    .from(couponRedemptions)
+    .where(whereClause)
+    .all();
+  const totalDiscount = all.reduce((s, r) => s + (r.discountAmount || 0), 0);
+
+  return c.json({
+    coupons: items,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    stats: { total: all.length, totalDiscount },
+  });
 });
 
 // List all coupons (admin) with redemption counts

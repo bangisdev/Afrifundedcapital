@@ -76,6 +76,26 @@ vi.mock("@/hooks/use-api", () => ({
         isLoading: false,
       };
     }
+    // Simulate the server-driven coupons list: paginate + stats envelope.
+    if (dataKey === "coupons/my" && Array.isArray(base)) {
+      const query = path.includes("?") ? path.split("?")[1] : "";
+      const params = new URLSearchParams(query);
+      const page = Number(params.get("page") || 1);
+      const pageSize = Number(params.get("pageSize") || 10);
+      const total = base.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      return {
+        data: {
+          coupons: base.slice((page - 1) * pageSize, page * pageSize),
+          total,
+          page,
+          pageSize,
+          totalPages,
+          stats: { total, totalDiscount: 0 },
+        },
+        isLoading: false,
+      };
+    }
     return { data: base, isLoading: false };
   }),
   useApiMutation: vi.fn((method: string, path: string, _onSuccess?: any) => {
@@ -224,6 +244,7 @@ function setQueryData(updates: Record<string, any>) {
   const defaults: Record<string, any> = {
     templates: [],
     "challenges/my": [],
+    "coupons/my": [],
   };
   Object.assign(queryDataMap, defaults, updates);
 }
@@ -1008,6 +1029,63 @@ describe("Challenges Page", () => {
   });
 
   // ─── Full integration ─────────────────────────────────
+  // ─── Coupons Sortable Headers ─────────────────────────
+  describe("Coupons Sortable Headers", () => {
+    const couponData = {
+      "coupons/my": [
+        {
+          id: 1,
+          code: "WELCOME10",
+          discountAmount: 5000,
+          originalAmount: 50000,
+          redeemedAt: Date.now() - 86400000,
+        },
+      ],
+    };
+
+    it("renders coupon sort headers with Redeemed active by default", async () => {
+      const user = userEvent.setup();
+      setQueryData(couponData);
+      render(<Challenges />);
+
+      await user.click(screen.getByTestId("tab-trigger-my-challenges"));
+
+      for (const label of ["Code", "Discount", "Redeemed"]) {
+        expect(await screen.findByRole("button", { name: `Sort by ${label}` })).toBeTruthy();
+      }
+      expect((await screen.findByRole("button", { name: "Sort by Redeemed" })).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("calls the API with sortBy/sortOrder when a coupon header is clicked", async () => {
+      const user = userEvent.setup();
+      setQueryData(couponData);
+      render(<Challenges />);
+
+      await user.click(screen.getByTestId("tab-trigger-my-challenges"));
+      await user.click(await screen.findByRole("button", { name: "Sort by Code" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const couponCall = calls.find((c) => String(c[1]).includes("/api/coupons/my?") && String(c[1]).includes("sortBy=code"));
+      expect(couponCall).toBeTruthy();
+      expect(String(couponCall![1])).toContain("sortOrder=desc");
+      expect(screen.getByRole("button", { name: "Sort by Code" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("toggles to ascending when the active coupon column is clicked again", async () => {
+      const user = userEvent.setup();
+      setQueryData(couponData);
+      render(<Challenges />);
+
+      await user.click(screen.getByTestId("tab-trigger-my-challenges"));
+      await user.click(await screen.findByRole("button", { name: "Sort by Code" }));
+      await user.click(await screen.findByRole("button", { name: "Sort by Code" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const ascCall = calls.find((c) => String(c[1]).includes("/api/coupons/my?") && String(c[1]).includes("sortBy=code&sortOrder=asc"));
+      expect(ascCall).toBeTruthy();
+    });
+  });
+
   describe("Full Integration", () => {
     it("renders complete page with templates and challenges", async () => {
       const user = userEvent.setup();

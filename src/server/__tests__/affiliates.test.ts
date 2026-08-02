@@ -12,7 +12,7 @@ import {
   authPost,
   getTestDb,
 } from "./setup";
-import { users, affiliates, commissions, commissionPayouts } from "../schema";
+import { users, affiliates, referrals, commissions, commissionPayouts } from "../schema";
 import { eq } from "drizzle-orm";
 
 let app: Hono;
@@ -204,6 +204,74 @@ describe("POST /api/affiliates/track", () => {
     });
     expect(status).toBe(200);
     expect((body as Record<string, unknown>).success).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  MY REFERRALS
+// ═══════════════════════════════════════════════════════════════
+
+describe("GET /api/affiliates/referrals", () => {
+  it("returns an empty envelope for a user without referrals", async () => {
+    const { status, body } = await authGet(app, "/api/affiliates/referrals", userCookie);
+    expect(status).toBe(200);
+    const env = body as Record<string, any>;
+    expect(Array.isArray(env.referrals)).toBe(true);
+    expect(env.referrals.length).toBe(0);
+    expect(env.total).toBe(0);
+    expect(env.page).toBe(1);
+    expect(env.pageSize).toBe(10);
+    expect(env.totalPages).toBe(1);
+    expect(env.stats.total).toBe(0);
+  });
+
+  it("returns 401 without auth", async () => {
+    const res = await app.request("/api/affiliates/referrals");
+    expect(res.status).toBe(401);
+  });
+
+  it("lists referrals with referred user info and supports sorting", async () => {
+    const db = getTestDb();
+    const aff = db.select().from(affiliates).where(eq(affiliates.referralCode, "AFFILIATEADMIN01")).get();
+    expect(aff).toBeTruthy();
+
+    // Seed two referred users + referral rows for the admin's affiliate
+    await signUp(app, { name: "Referral Alpha", email: "ref-alpha@test.com", password: "Secure@123" });
+    await signUp(app, { name: "Referral Beta", email: "ref-beta@test.com", password: "Secure@123" });
+    const userA = db.select().from(users).where(eq(users.email, "ref-alpha@test.com")).get();
+    const userB = db.select().from(users).where(eq(users.email, "ref-beta@test.com")).get();
+
+    db.insert(referrals).values({
+      referrerId: aff!.userId,
+      referredId: userA!.id,
+      affiliateId: aff!.id,
+      status: "converted",
+      commissionEarned: 5000,
+      convertedAt: Date.now() - 2000,
+      createdAt: Date.now() - 2000,
+    }).run();
+    db.insert(referrals).values({
+      referrerId: aff!.userId,
+      referredId: userB!.id,
+      affiliateId: aff!.id,
+      status: "pending",
+      createdAt: Date.now() - 1000,
+    }).run();
+
+    const { status, body } = await authGet(app, "/api/affiliates/referrals?sortBy=status&sortOrder=asc", adminCookie);
+    expect(status).toBe(200);
+    const env = body as Record<string, any>;
+    expect(env.total).toBeGreaterThanOrEqual(2);
+    expect(env.referrals.length).toBeGreaterThanOrEqual(2);
+
+    // Joined referred user info is present
+    const names = env.referrals.map((r: any) => r.referredName);
+    expect(names).toContain("Referral Alpha");
+    expect(names).toContain("Referral Beta");
+
+    // Sort by status asc → converted sorts before pending
+    expect(env.referrals[0].status).toBe("converted");
+    expect(env.referrals[env.referrals.length - 1].status).toBe("pending");
   });
 });
 

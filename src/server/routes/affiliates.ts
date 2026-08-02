@@ -15,6 +15,75 @@ app.get("/my", requireAuth, (c) => {
   return c.json(affiliate || null);
 });
 
+// ─── Get my referral list (paginated + sortable) ───────
+app.get("/referrals", requireAuth, (c) => {
+  const userId = c.get("userId");
+  const db = getDb();
+
+  const qPage = Number(c.req.query("page") || 1);
+  const qPageSize = Number(c.req.query("pageSize") || 10);
+  const page = Math.max(1, qPage);
+  const pageSize = Math.min(50, Math.max(1, qPageSize));
+
+  // Sorting (whitelisted columns, asc/desc) — "name" sorts on the joined users table
+  const SORTABLE: Record<string, SQLWrapper> = {
+    id: referrals.id,
+    name: users.name,
+    status: referrals.status,
+    commissionEarned: referrals.commissionEarned,
+    createdAt: referrals.createdAt,
+    convertedAt: referrals.convertedAt,
+  };
+  const qSortBy = String(c.req.query("sortBy") || "createdAt");
+  const qSortOrder = String(c.req.query("sortOrder") || "desc");
+  const sortCol = SORTABLE[qSortBy] || referrals.createdAt;
+  const sortOrder = qSortOrder.toLowerCase() === "asc" ? asc(sortCol) : desc(sortCol);
+
+  const whereClause: SQL = eq(referrals.referrerId, userId);
+
+  // Total matching count
+  const totalRow = db
+    .select({ count: count() })
+    .from(referrals)
+    .leftJoin(users, eq(users.id, referrals.referredId))
+    .where(whereClause)
+    .get();
+  const total = totalRow?.count || 0;
+
+  // Page of referrals with referred user info joined
+  const rows = db
+    .select({ referral: referrals, referredName: users.name, referredEmail: users.email })
+    .from(referrals)
+    .leftJoin(users, eq(users.id, referrals.referredId))
+    .where(whereClause)
+    .orderBy(sortOrder)
+    .limit(pageSize)
+    .offset((page - 1) * pageSize)
+    .all();
+
+  const items = rows.map((r) => ({
+    ...r.referral,
+    referredName: r.referredName || null,
+    referredEmail: r.referredEmail || null,
+  }));
+
+  // User-wide stats (unfiltered)
+  const all = db.select({ status: referrals.status }).from(referrals).where(whereClause).all();
+  const byStatus = all.reduce<Record<string, number>>((acc, r) => {
+    acc[r.status] = (acc[r.status] || 0) + 1;
+    return acc;
+  }, {});
+
+  return c.json({
+    referrals: items,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    stats: { total: all.length, byStatus },
+  });
+});
+
 // Track referral
 app.post("/track", requireAuth, async (c) => {
   const userId = c.get("userId");

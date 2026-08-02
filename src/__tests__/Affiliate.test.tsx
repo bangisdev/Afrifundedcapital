@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
+import { useApiQuery } from "@/hooks/use-api";
 
 // ─── Mock: sonner ──────────────────────────────────────────
 vi.mock("sonner", () => ({
@@ -84,6 +85,30 @@ vi.mock("@/hooks/use-api", () => ({
         isLoading: false,
       };
     }
+    // Simulate the server-driven referrals list: paginate + stats envelope.
+    if (dataKey === "affiliate/referrals" && Array.isArray(base)) {
+      const query = path.includes("?") ? path.split("?")[1] : "";
+      const params = new URLSearchParams(query);
+      const page = Number(params.get("page") || 1);
+      const pageSize = Number(params.get("pageSize") || 10);
+      const total = base.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      const byStatus = base.reduce<Record<string, number>>((acc, r: any) => {
+        acc[r.status] = (acc[r.status] || 0) + 1;
+        return acc;
+      }, {});
+      return {
+        data: {
+          referrals: base.slice((page - 1) * pageSize, page * pageSize),
+          total,
+          page,
+          pageSize,
+          totalPages,
+          stats: { total, byStatus },
+        },
+        isLoading: false,
+      };
+    }
     return { data: base, isLoading: false };
   }),
   useApiMutation: vi.fn((_method: string, _path: string, _onSuccess?: any) => ({
@@ -110,6 +135,18 @@ function makeAffiliate(overrides: any = {}) {
   };
 }
 
+function makeReferral(overrides: any = {}) {
+  return {
+    id: 1,
+    referredName: "John Doe",
+    referredEmail: "john@example.com",
+    status: "converted",
+    commissionEarned: 5000,
+    createdAt: Date.now() - 86400000,
+    ...overrides,
+  };
+}
+
 function makePayout(overrides: any = {}) {
   return {
     id: 1,
@@ -129,7 +166,7 @@ function clearAllQueryData() {
 
 function setQueryData(updates: Record<string, any>) {
   Object.keys(queryDataMap).forEach((k) => delete queryDataMap[k]);
-  Object.assign(queryDataMap, updates);
+  Object.assign(queryDataMap, { "affiliate/payouts": [], "affiliate/referrals": [] }, updates);
 }
 
 // ─── Tests ────────────────────────────────────────────────
@@ -483,6 +520,48 @@ describe("Affiliate Page", () => {
   });
 
   // ─── Payout history pagination ─────────────────────────
+  // ─── Referrals Sortable Headers ────────────────────────
+  describe("Referrals Sortable Headers", () => {
+    const baseData = { "affiliate/my": makeAffiliate(), "affiliate/payouts": [], "affiliate/referrals": [makeReferral()] };
+
+    it("renders referral sort headers with Referred active by default", () => {
+      setQueryData(baseData);
+      render(<Affiliate />);
+
+      for (const label of ["Name", "Status", "Commission", "Referred"]) {
+        expect(screen.getByRole("button", { name: `Sort by ${label}` })).toBeTruthy();
+      }
+      expect(screen.getByRole("button", { name: "Sort by Referred" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("calls the API with sortBy/sortOrder when a referral header is clicked", async () => {
+      const user = userEvent.setup();
+      setQueryData(baseData);
+      render(<Affiliate />);
+
+      await user.click(screen.getByRole("button", { name: "Sort by Status" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const refCall = calls.find((c) => String(c[1]).includes("/api/affiliates/referrals?") && String(c[1]).includes("sortBy=status"));
+      expect(refCall).toBeTruthy();
+      expect(String(refCall![1])).toContain("sortOrder=desc");
+      expect(screen.getByRole("button", { name: "Sort by Status" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("toggles to ascending when the active referral column is clicked again", async () => {
+      const user = userEvent.setup();
+      setQueryData(baseData);
+      render(<Affiliate />);
+
+      await user.click(screen.getByRole("button", { name: "Sort by Status" }));
+      await user.click(screen.getByRole("button", { name: "Sort by Status" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const ascCall = calls.find((c) => String(c[1]).includes("/api/affiliates/referrals?") && String(c[1]).includes("sortBy=status&sortOrder=asc"));
+      expect(ascCall).toBeTruthy();
+    });
+  });
+
   describe("Payout History Pagination", () => {
     const manyPayouts = () =>
       Array.from({ length: 15 }, (_, i) =>

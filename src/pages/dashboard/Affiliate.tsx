@@ -6,11 +6,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Loader2, Copy, Users, TrendingUp, DollarSign, Link2, ExternalLink, ArrowUpRight, Clock, CheckCircle, XCircle, Banknote } from "lucide-react";
+import { Loader2, Copy, Users, TrendingUp, DollarSign, Link2, ExternalLink, ArrowUpRight, Clock, CheckCircle, XCircle, Banknote, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { toast } from "sonner";
 
 interface PayoutsResponse {
   payouts: any[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  stats: { total: number; byStatus: Record<string, number> };
+}
+
+interface ReferralsResponse {
+  referrals: any[];
   total: number;
   page: number;
   pageSize: number;
@@ -31,6 +40,49 @@ export default function Affiliate() {
   const [payoutDetails, setPayoutDetails] = useState("");
   const [pPage, setPPage] = useState(1);
   const [pPageSize, setPPageSize] = useState(10);
+  const [rPage, setRPage] = useState(1);
+  const [rPageSize, setRPageSize] = useState(10);
+
+  // Referrals sorting (whitelisted columns on the server: id, name, status, commissionEarned, createdAt, convertedAt)
+  const [rSortBy, setRSortBy] = useState("createdAt");
+  const [rSortOrder, setRSortOrder] = useState<"asc" | "desc">("desc");
+  const REFERRAL_SORT_COLUMNS: Array<{ key: string; label: string }> = [
+    { key: "name", label: "Name" },
+    { key: "status", label: "Status" },
+    { key: "commissionEarned", label: "Commission" },
+    { key: "createdAt", label: "Referred" },
+  ];
+  const handleReferralSort = (key: string) => {
+    if (rSortBy === key) {
+      setRSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+    } else {
+      setRSortBy(key);
+      setRSortOrder("desc");
+    }
+    setRPage(1);
+  };
+  const referralSortHeader = (sortKey: string, label: string) => {
+    const active = rSortBy === sortKey;
+    return (
+      <button
+        key={sortKey}
+        type="button"
+        onClick={() => handleReferralSort(sortKey)}
+        aria-label={`Sort by ${label}`}
+        aria-pressed={active}
+        className={`inline-flex items-center gap-1 font-medium transition-colors rounded px-1 py-0.5 -mx-1 ${
+          active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        {label}
+        {active ? (
+          rSortOrder === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-50" />
+        )}
+      </button>
+    );
+  };
 
   // Auto-generate code on mount if user has no affiliate record
   useEffect(() => {
@@ -51,11 +103,25 @@ export default function Affiliate() {
 
   const { data: payoutsData, isLoading: pLoading } = useApiQuery<PayoutsResponse>(["affiliate", "payouts", pQuery], pQuery);
 
+  // Referrals list (server-driven pagination + sorting)
+  const rParams = new URLSearchParams();
+  rParams.set("page", String(rPage));
+  rParams.set("pageSize", String(rPageSize));
+  rParams.set("sortBy", rSortBy);
+  rParams.set("sortOrder", rSortOrder);
+  const rQuery = `/api/affiliates/referrals?${rParams.toString()}`;
+
+  const { data: referralsData, isLoading: rLoading } = useApiQuery<ReferralsResponse>(["affiliate", "referrals", rQuery], rQuery);
+
+  const referrals = referralsData?.referrals || [];
+  const rTotal = referralsData?.total || 0;
+  const rTotalPages = referralsData?.totalPages || 1;
+
   const payouts = payoutsData?.payouts || [];
   const pTotal = payoutsData?.total || 0;
   const pTotalPages = payoutsData?.totalPages || 1;
 
-  // Reset to first page whenever page size changes
+  // Reset to first page whenever page size or sort changes
   useEffect(() => {
     setPPage(1);
   }, [pPageSize]);
@@ -65,8 +131,20 @@ export default function Affiliate() {
     if (pPage > pTotalPages && pTotalPages > 0) setPPage(1);
   }, [pTotalPages, pPage]);
 
+  // Reset referrals page whenever page size or sort changes
+  useEffect(() => {
+    setRPage(1);
+  }, [rPageSize, rSortBy, rSortOrder]);
+
+  // Clamp referrals page if the current page exceeds total pages
+  useEffect(() => {
+    if (rPage > rTotalPages && rTotalPages > 0) setRPage(1);
+  }, [rTotalPages, rPage]);
+
   const pFrom = pTotal === 0 ? 0 : (pPage - 1) * pPageSize + 1;
   const pTo = Math.min(pPage * pPageSize, pTotal);
+  const rFrom = rTotal === 0 ? 0 : (rPage - 1) * rPageSize + 1;
+  const rTo = Math.min(rPage * rPageSize, rTotal);
 
   if (isLoading || generateCode.isPending) {
     return (
@@ -276,6 +354,82 @@ export default function Affiliate() {
               </div>
             </div>
           </div>
+        ) : null}
+      </div>
+
+      {/* Referrals Section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            My Referrals
+          </h2>
+          <span className="text-xs text-muted-foreground">{rTotal} referral{rTotal !== 1 ? "s" : ""}</span>
+        </div>
+
+        {rLoading && referrals.length === 0 ? (
+          <div className="flex items-center justify-center py-8"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+        ) : rTotal > 0 ? (
+          <>
+            {/* Sort Toolbar */}
+            <div className="card-subtle px-4 py-2 flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] font-medium text-muted-foreground mr-1">Sort:</span>
+              {REFERRAL_SORT_COLUMNS.map((c) => referralSortHeader(c.key, c.label))}
+            </div>
+
+            <div className="space-y-2">
+              {referrals.map((ref: any) => (
+                <div key={ref.id} className="card-subtle p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
+                      {ref.status === "converted" ? (
+                        <CheckCircle className="h-4 w-4 text-green-500" />
+                      ) : ref.status === "pending" ? (
+                        <Clock className="h-4 w-4 text-amber-500" />
+                      ) : (
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">{ref.referredName || "New Trader"}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {ref.referredEmail || ""} · {ref.createdAt ? new Date(ref.createdAt).toLocaleDateString() : ""}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    {ref.commissionEarned ? (
+                      <span className="text-sm font-medium tabular-nums">₦{ref.commissionEarned.toLocaleString()}</span>
+                    ) : null}
+                    <Badge
+                      variant={ref.status === "converted" ? "default" : ref.status === "pending" ? "secondary" : "outline"}
+                      className="text-[10px]"
+                    >
+                      {ref.status}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Pagination footer */}
+            <div className="flex items-center justify-between pt-1">
+              <div className="text-[10px] text-muted-foreground">Showing {rFrom}–{rTo} of {rTotal} referrals</div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={rPageSize}
+                  onChange={(e) => setRPageSize(Number(e.target.value))}
+                  className="h-7 px-2 rounded-md border border-input bg-background text-[11px] cursor-pointer outline-none"
+                  aria-label="Rows per page"
+                >
+                  {[10, 25, 50].map((n) => <option key={n} value={n}>{n} / page</option>)}
+                </select>
+                <Button variant="outline" size="sm" className="h-7 px-2.5 text-[11px]" disabled={rPage <= 1} onClick={() => setRPage((p) => p - 1)}>Prev</Button>
+                <span className="px-2 text-[11px] font-medium tabular-nums">{rPage} / {rTotalPages}</span>
+                <Button variant="outline" size="sm" className="h-7 px-2.5 text-[11px]" disabled={rPage >= rTotalPages} onClick={() => setRPage((p) => p + 1)}>Next</Button>
+              </div>
+            </div>
+          </>
         ) : null}
       </div>
 

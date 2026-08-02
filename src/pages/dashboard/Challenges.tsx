@@ -19,7 +19,7 @@ import {
   TabsContent,
 } from "@/components/ui/tabs";
 import { useNavigate } from "react-router";
-import { Loader2, CheckCircle, XCircle, ChevronRight, ChevronLeft, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, ChevronRight, ChevronLeft, ArrowUp, ArrowDown, ArrowUpDown, Gift } from "lucide-react";
 import { toast } from "sonner";
 
 type Doc = Record<string, any>;
@@ -31,6 +31,15 @@ interface ChallengesResponse {
   pageSize: number;
   totalPages: number;
   stats: { total: number; byStatus: Record<string, number> };
+}
+
+interface MyCouponsResponse {
+  coupons: any[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  stats: { total: number; totalDiscount: number };
 }
 
 const PAGE_SIZES = [5, 10, 25];
@@ -99,6 +108,70 @@ export default function Challenges() {
   useEffect(() => {
     if (page > myTotalPages) setPage(1);
   }, [myTotalPages, page]);
+
+  // My Coupons (server-driven pagination + sorting)
+  const [cPage, setCPage] = useState(1);
+  const [cPageSize, setCPageSize] = useState(10);
+  // Sorting (whitelisted columns on the server: id, code, discountAmount, originalAmount, redeemedAt)
+  const [cSortBy, setCSortBy] = useState("redeemedAt");
+  const [cSortOrder, setCSortOrder] = useState<"asc" | "desc">("desc");
+  const COUPON_SORT_COLUMNS: Array<{ key: string; label: string }> = [
+    { key: "code", label: "Code" },
+    { key: "discountAmount", label: "Discount" },
+    { key: "redeemedAt", label: "Redeemed" },
+  ];
+  const handleCouponSort = (key: string) => {
+    if (cSortBy === key) {
+      setCSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+    } else {
+      setCSortBy(key);
+      setCSortOrder("desc");
+    }
+    setCPage(1);
+  };
+  const couponSortHeader = (sortKey: string, label: string) => {
+    const active = cSortBy === sortKey;
+    return (
+      <button
+        key={sortKey}
+        type="button"
+        onClick={() => handleCouponSort(sortKey)}
+        aria-label={`Sort by ${label}`}
+        aria-pressed={active}
+        className={`inline-flex items-center gap-1 font-medium transition-colors rounded px-1 py-0.5 -mx-1 ${
+          active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        {label}
+        {active ? (
+          cSortOrder === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-50" />
+        )}
+      </button>
+    );
+  };
+
+  const cParams = new URLSearchParams();
+  cParams.set("page", String(cPage));
+  cParams.set("pageSize", String(cPageSize));
+  cParams.set("sortBy", cSortBy);
+  cParams.set("sortOrder", cSortOrder);
+  const cQuery = `/api/coupons/my?${cParams.toString()}`;
+  const { data: couponsData, isLoading: couponsLoading } = useApiQuery<MyCouponsResponse>(["coupons", "my", cQuery], cQuery);
+  const myCoupons = couponsData?.coupons || [];
+  const cTotal = couponsData?.total || 0;
+  const cTotalPages = couponsData?.totalPages || 1;
+
+  // Reset coupons page whenever page size or sort changes
+  useEffect(() => {
+    setCPage(1);
+  }, [cPageSize, cSortBy, cSortOrder]);
+
+  // Clamp coupons page if the current page exceeds total pages
+  useEffect(() => {
+    if (cPage > cTotalPages && cTotalPages > 0) setCPage(1);
+  }, [cTotalPages, cPage]);
 
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
@@ -345,6 +418,73 @@ export default function Challenges() {
               </div>
             </>
           )}
+
+          {/* My Coupons Section */}
+          <div className="space-y-4 pt-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-medium flex items-center gap-2">
+                <Gift className="h-4 w-4" />
+                My Coupons
+              </h2>
+              <span className="text-xs text-muted-foreground">{cTotal} coupon{cTotal !== 1 ? "s" : ""}</span>
+            </div>
+
+            {couponsLoading && myCoupons.length === 0 ? (
+              <div className="flex items-center justify-center py-8"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+            ) : cTotal > 0 ? (
+              <>
+                {/* Sort Toolbar */}
+                <div className="card-subtle px-4 py-2 flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-medium text-muted-foreground mr-1">Sort:</span>
+                  {COUPON_SORT_COLUMNS.map((c) => couponSortHeader(c.key, c.label))}
+                </div>
+
+                <div className="space-y-2">
+                  {myCoupons.map((cp: any) => (
+                    <div key={cp.id} className="card-subtle p-4 flex items-center justify-between">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
+                          <Gift className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium font-mono tracking-wider">{cp.code || `#${cp.id}`}</div>
+                          <div className="text-[10px] text-muted-foreground">
+                            Redeemed {cp.redeemedAt ? new Date(cp.redeemedAt).toLocaleDateString() : ""}
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-sm font-medium tabular-nums shrink-0 ml-4">
+                        {cp.discountAmount ? `-₦${cp.discountAmount.toLocaleString()}` : "—"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Pagination footer */}
+                <div className="flex items-center justify-between pt-1">
+                  <div className="text-[10px] text-muted-foreground">Showing {cTotal === 0 ? 0 : (cPage - 1) * cPageSize + 1}–{Math.min(cPage * cPageSize, cTotal)} of {cTotal} coupons</div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={cPageSize}
+                      onChange={(e) => setCPageSize(Number(e.target.value))}
+                      className="h-7 px-2 rounded-md border border-input bg-background text-[11px] cursor-pointer outline-none"
+                      aria-label="Rows per page"
+                    >
+                      {[10, 25, 50].map((n) => <option key={n} value={n}>{n} / page</option>)}
+                    </select>
+                    <Button variant="outline" size="sm" className="h-7 px-2.5 text-[11px]" disabled={cPage <= 1} onClick={() => setCPage((p) => p - 1)}>Prev</Button>
+                    <span className="px-2 text-[11px] font-medium tabular-nums">{cPage} / {cTotalPages}</span>
+                    <Button variant="outline" size="sm" className="h-7 px-2.5 text-[11px]" disabled={cPage >= cTotalPages} onClick={() => setCPage((p) => p + 1)}>Next</Button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="card-subtle p-6 text-center">
+                <Gift className="h-6 w-6 mx-auto mb-2 text-muted-foreground" />
+                <p className="text-xs text-muted-foreground">No coupons used yet. Apply a coupon code at checkout to save.</p>
+              </div>
+            )}
+          </div>
         </TabsContent>
       </Tabs>
 

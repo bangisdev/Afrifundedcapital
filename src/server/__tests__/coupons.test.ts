@@ -14,7 +14,7 @@ import {
   authDelete,
   getTestDb,
 } from "./setup";
-import { users } from "../schema";
+import { users, coupons, couponRedemptions } from "../schema";
 import { eq } from "drizzle-orm";
 
 let app: Hono;
@@ -203,6 +203,73 @@ describe("POST /api/coupons/redeem", () => {
   it("returns 400 without required fields", async () => {
     const { status } = await authPost(app, "/api/coupons/redeem", userCookie, {});
     expect(status).toBe(400);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  MY REDEEMED COUPONS
+// ═══════════════════════════════════════════════════════════════
+
+describe("GET /api/coupons/my", () => {
+  it("returns an empty envelope for a user without redemptions", async () => {
+    const { cookie: freshCookie } = await signUp(app, {
+      name: "Coupon Fresh",
+      email: "coupon-fresh@test.com",
+      password: "Secure@123",
+    });
+    const { status, body } = await authGet(app, "/api/coupons/my", freshCookie);
+    expect(status).toBe(200);
+    const env = body as Record<string, any>;
+    expect(Array.isArray(env.coupons)).toBe(true);
+    expect(env.coupons.length).toBe(0);
+    expect(env.total).toBe(0);
+    expect(env.page).toBe(1);
+    expect(env.pageSize).toBe(10);
+    expect(env.totalPages).toBe(1);
+    expect(env.stats.total).toBe(0);
+  });
+
+  it("returns 401 without auth", async () => {
+    const res = await app.request("/api/coupons/my");
+    expect(res.status).toBe(401);
+  });
+
+  it("lists my redeemed coupons with coupon info and supports sorting", async () => {
+    const db = getTestDb();
+    const coupon = db.select().from(coupons).where(eq(coupons.code, "SAVE20")).get();
+    expect(coupon).toBeTruthy();
+    const trader = db.select().from(users).where(eq(users.email, "coupon-trader@test.com")).get();
+    expect(trader).toBeTruthy();
+
+    // Seed two redemptions with staggered amounts + timestamps
+    db.insert(couponRedemptions).values({
+      couponId: coupon!.id,
+      userId: trader!.id,
+      paymentId: 11111,
+      discountAmount: 10000,
+      originalAmount: 50000,
+      redeemedAt: Date.now() - 2000,
+    }).run();
+    db.insert(couponRedemptions).values({
+      couponId: coupon!.id,
+      userId: trader!.id,
+      paymentId: 22222,
+      discountAmount: 5000,
+      originalAmount: 40000,
+      redeemedAt: Date.now() - 1000,
+    }).run();
+
+    const { status, body } = await authGet(app, "/api/coupons/my?sortBy=discountAmount&sortOrder=desc", userCookie);
+    expect(status).toBe(200);
+    const env = body as Record<string, any>;
+    expect(env.total).toBeGreaterThanOrEqual(2);
+    expect(env.coupons.length).toBeGreaterThanOrEqual(2);
+
+    // Joined coupon code is present on each redemption
+    expect(env.coupons[0].code).toBe("SAVE20");
+
+    // Sort by discountAmount desc → highest discount first
+    expect(env.coupons[0].discountAmount).toBe(10000);
   });
 });
 
