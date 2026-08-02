@@ -252,10 +252,16 @@ describe("Overview Page", () => {
   describe("Active Challenges", () => {
     it("shows challenge list when challenges exist", () => {
       setQueryData({
-        "challenges/my": [
-          { id: 1, accountSize: 50000, status: "active" },
-          { id: 2, accountSize: 100000, status: "phase_1_passed" },
-        ],
+        "challenges/my": {
+          challenges: [
+            { id: 1, accountSize: 50000, status: "active" },
+            { id: 2, accountSize: 100000, status: "phase_1_passed" },
+          ],
+          total: 2,
+          page: 1,
+          pageSize: 10,
+          totalPages: 1,
+        },
       });
       render(<Overview />);
       expect(screen.getByText("Your Challenges")).toBeTruthy();
@@ -265,7 +271,13 @@ describe("Overview Page", () => {
 
     it("formats account size and status", () => {
       setQueryData({
-        "challenges/my": [{ id: 1, accountSize: 50000, status: "active" }],
+        "challenges/my": {
+          challenges: [{ id: 1, accountSize: 50000, status: "active" }],
+          total: 1,
+          page: 1,
+          pageSize: 10,
+          totalPages: 1,
+        },
       });
       render(<Overview />);
       expect(screen.getByText((t) => t.includes("50,000"))).toBeTruthy();
@@ -277,7 +289,7 @@ describe("Overview Page", () => {
         accountSize: 10000 * (i + 1),
         status: "active",
       }));
-      setQueryData({ "challenges/my": challenges });
+      setQueryData({ "challenges/my": { challenges, total: challenges.length, page: 1, pageSize: 10, totalPages: 1 } });
       render(<Overview />);
       expect(screen.getByText("Challenge #5")).toBeTruthy();
       expect(screen.queryByText("Challenge #6")).toBeNull();
@@ -286,7 +298,13 @@ describe("Overview Page", () => {
     it("navigates to challenges on challenge click", async () => {
       const user = userEvent.setup();
       setQueryData({
-        "challenges/my": [{ id: 1, accountSize: 50000, status: "active" }],
+        "challenges/my": {
+          challenges: [{ id: 1, accountSize: 50000, status: "active" }],
+          total: 1,
+          page: 1,
+          pageSize: 10,
+          totalPages: 1,
+        },
       });
       render(<Overview />);
       await user.click(screen.getByText("Challenge #1"));
@@ -314,10 +332,16 @@ describe("Overview Page", () => {
     it("renders complete page with all sections", () => {
       setQueryData({
         "metrics/dashboard": { activeChallenges: 2, fundedAccounts: 1, totalChallenges: 5 },
-        "challenges/my": [
-          { id: 1, accountSize: 50000, status: "active" },
-          { id: 2, accountSize: 100000, status: "funded" },
-        ],
+        "challenges/my": {
+          challenges: [
+            { id: 1, accountSize: 50000, status: "active" },
+            { id: 2, accountSize: 100000, status: "funded" },
+          ],
+          total: 2,
+          page: 1,
+          pageSize: 10,
+          totalPages: 1,
+        },
         "wallet/my": { balance: 250000, currency: "NGN" },
       });
       render(<Overview />);
