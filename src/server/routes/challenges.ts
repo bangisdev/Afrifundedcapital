@@ -100,13 +100,48 @@ app.get("/templates/:id", (c) => {
 app.get("/my", requireAuth, (c) => {
   const userId = c.get("userId");
   const db = getDb();
+
+  // Pagination params (clamped)
+  const page = Math.max(1, parseInt(c.req.query("page") || "1") || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query("pageSize") || "10") || 10));
+
+  // Total count for this user
+  const totalRow = db
+    .select({ count: count() })
+    .from(userChallenges)
+    .where(eq(userChallenges.userId, userId))
+    .get();
+  const total = totalRow?.count || 0;
+
+  // Page of challenges
   const challenges = db
     .select()
     .from(userChallenges)
     .where(eq(userChallenges.userId, userId))
     .orderBy(desc(userChallenges.createdAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize)
     .all();
-  return c.json(challenges);
+
+  // User-wide stats (unfiltered)
+  const allChallenges = db
+    .select({ status: userChallenges.status })
+    .from(userChallenges)
+    .where(eq(userChallenges.userId, userId))
+    .all();
+  const byStatus = allChallenges.reduce<Record<string, number>>((acc, ch) => {
+    acc[ch.status] = (acc[ch.status] || 0) + 1;
+    return acc;
+  }, {});
+
+  return c.json({
+    challenges,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    stats: { total: allChallenges.length, byStatus },
+  });
 });
 
 // Get single challenge by id

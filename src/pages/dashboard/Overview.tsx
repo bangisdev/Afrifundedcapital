@@ -17,7 +17,8 @@ export default function Overview() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { data: metrics, isLoading: metricsLoading } = useApiQuery<any>(["metrics", "dashboard"], "/api/challenges/metrics");
-  const { data: challenges, isLoading: challengesLoading } = useApiQuery<any[]>(["challenges", "my"], "/api/challenges/my");
+  const { data: challengesData, isLoading: challengesLoading } = useApiQuery<any>(["challenges", "my"], "/api/challenges/my");
+  const challenges = challengesData?.challenges || [];
   const { data: wallet, isLoading: walletLoading } = useApiQuery<any>(["wallet", "my"], "/api/wallets/my");
   const [bannerDismissed, setBannerDismissed] = useState(
     () => localStorage.getItem(SKIP_BANNER_KEY) === "true",

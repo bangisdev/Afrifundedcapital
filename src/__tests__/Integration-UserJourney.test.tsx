@@ -128,6 +128,26 @@ vi.mock("@/hooks/use-api", () => ({
         isLoading: false,
       };
     }
+    // Simulate the server-driven challenges envelope for the Challenges/Overview/Trading pages.
+    if (dataKey === "challenges/my" && Array.isArray(base)) {
+      const query = path.includes("?") ? path.split("?")[1] : "";
+      const params = new URLSearchParams(query);
+      const page = Number(params.get("page") || 1);
+      const pageSize = Number(params.get("pageSize") || 10);
+      const total = base.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      return {
+        data: {
+          challenges: base.slice((page - 1) * pageSize, page * pageSize),
+          total,
+          page,
+          pageSize,
+          totalPages,
+          stats: { total, byStatus: {} },
+        },
+        isLoading: false,
+      };
+    }
     return { data: base, isLoading: false };
   }),
   useApiMutation: vi.fn((method: string, path: string) => ({

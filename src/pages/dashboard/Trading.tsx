@@ -53,7 +53,8 @@ function MetricCard({ label, value, trend, subtitle, destructive }: {
 
 export default function Trading() {
   const { user } = useAuth();
-  const { data: challenges, isLoading: cLoading } = useApiQuery<any[]>(["challenges", "my"], "/api/challenges/my");
+  const { data: challengesData, isLoading: cLoading } = useApiQuery<any>(["challenges", "my"], "/api/challenges/my");
+  const challenges = challengesData?.challenges || [];
   const { data: metrics } = useApiQuery<any>(["metrics", "dashboard"], "/api/challenges/metrics");
   const { data: metricsHistory, isLoading: mLoading } = useApiQuery<any[]>(["metrics", "history"], "/api/challenges/my/0/metrics");
   const { data: mt5Accounts, isLoading: mt5Loading } = useApiQuery<any[]>(["mt5", "my"], "/api/trading/mt5");

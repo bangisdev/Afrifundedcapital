@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useFlutterwavePayment } from "@/hooks/use-flutterwave";
 import { Button } from "@/components/ui/button";
@@ -19,16 +19,43 @@ import {
   TabsContent,
 } from "@/components/ui/tabs";
 import { useNavigate } from "react-router";
-import { Loader2, CheckCircle, XCircle, ChevronRight } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, ChevronRight, ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
 
 type Doc = Record<string, any>;
+
+interface ChallengesResponse {
+  challenges: any[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  stats: { total: number; byStatus: Record<string, number> };
+}
+
+const PAGE_SIZES = [5, 10, 25];
 
 export default function Challenges() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { data: templates, isLoading: templatesLoading } = useApiQuery<any[]>(["templates"], "/api/challenges/templates");
-  const { data: myChallenges, isLoading: myLoading } = useApiQuery<any[]>(["challenges", "my"], "/api/challenges/my");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  params.set("pageSize", String(pageSize));
+  const listQuery = `/api/challenges/my?${params.toString()}`;
+  const { data: myData, isLoading: myLoading } = useApiQuery<ChallengesResponse>(["challenges", "my", listQuery], listQuery);
+  const myChallenges = myData?.challenges || [];
+  const myTotal = myData?.total || 0;
+  const myTotalPages = myData?.totalPages || 1;
+
+  // Clamp page if the current page exceeds total pages (e.g. after data changes)
+  useEffect(() => {
+    if (page > myTotalPages) setPage(1);
+  }, [myTotalPages, page]);
+
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [couponCode, setCouponCode] = useState("");
@@ -211,31 +238,59 @@ export default function Challenges() {
         </TabsContent>
 
         <TabsContent value="my-challenges" className="space-y-3">
-          {!myChallenges || myChallenges.length === 0 ? (
+          {myChallenges.length === 0 ? (
             <div className="card-subtle p-8 text-center">
               <p className="text-sm text-muted-foreground">No challenges yet. Start your journey!</p>
             </div>
           ) : (
-            myChallenges.map((ch: Doc) => (
-              <button
-                key={ch.id}
-                onClick={() => navigate(`/dashboard/challenges/${ch.id}`)}
-                className="w-full card-subtle p-4 text-left hover:bg-secondary/30 transition-colors"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-medium">Challenge #{ch.id}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      ${ch.accountSize?.toLocaleString()} — Started {ch.createdAt ? new Date(ch.createdAt).toLocaleDateString() : "N/A"}
+            <>
+              {myChallenges.map((ch: Doc) => (
+                <button
+                  key={ch.id}
+                  onClick={() => navigate(`/dashboard/challenges/${ch.id}`)}
+                  className="w-full card-subtle p-4 text-left hover:bg-secondary/30 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-medium">Challenge #{ch.id}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        ${ch.accountSize?.toLocaleString()} — Started {ch.createdAt ? new Date(ch.createdAt).toLocaleDateString() : "N/A"}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {statusBadge(ch.status)}
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {statusBadge(ch.status)}
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </button>
+              ))}
+
+              {/* Pagination Footer */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground pt-1">
+                <div>Showing {myChallenges.length} of {myTotal} challenges · Page {page} of {myTotalPages}</div>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={pageSize}
+                    onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                    className="h-8 rounded-md border border-input bg-background px-2 text-xs appearance-none cursor-pointer"
+                    aria-label="Rows per page"
+                  >
+                    {PAGE_SIZES.map((n) => (
+                      <option key={n} value={n}>{n} / page</option>
+                    ))}
+                  </select>
+                  <div className="flex items-center gap-1">
+                    <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                      <ChevronLeft className="h-3.5 w-3.5" /> Prev
+                    </Button>
+                    <span className="px-2 font-medium tabular-nums">{page} / {myTotalPages}</span>
+                    <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={page >= myTotalPages} onClick={() => setPage((p) => p + 1)}>
+                      Next <ChevronRight className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
                 </div>
-              </button>
-            ))
+              </div>
+            </>
           )}
         </TabsContent>
       </Tabs>

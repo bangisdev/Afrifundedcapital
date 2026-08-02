@@ -114,7 +114,9 @@ describe("GET /api/challenges/my", () => {
   it("returns empty array for new user", async () => {
     const { status, body } = await authGet(app, "/api/challenges/my", userCookie);
     expect(status).toBe(200);
-    expect(Array.isArray(body)).toBe(true);
+    expect(Array.isArray(body.challenges)).toBe(true);
+    expect(typeof body.total).toBe("number");
+    expect(typeof body.totalPages).toBe("number");
   });
 
   it("returns 401 without auth", async () => {
@@ -289,7 +291,7 @@ describe("PUT /api/challenges/admin/:id/status", () => {
     });
 
     const { body: challenges } = await authGet(app, "/api/challenges/my", userCookie);
-    const challenge = (challenges as Record<string, unknown>[])[0];
+    const challenge = ((challenges as Record<string, unknown>).challenges as Record<string, unknown>[])[0];
     expect(challenge).toBeDefined();
 
     const { status, body } = await authPut(
@@ -304,7 +306,7 @@ describe("PUT /api/challenges/admin/:id/status", () => {
 
   it("rejects invalid status", async () => {
     const { body: challenges } = await authGet(app, "/api/challenges/my", userCookie);
-    const challenge = (challenges as Record<string, unknown>[])[0];
+    const challenge = ((challenges as Record<string, unknown>).challenges as Record<string, unknown>[])[0];
     if (!challenge) return;
 
     const { status } = await authPut(
