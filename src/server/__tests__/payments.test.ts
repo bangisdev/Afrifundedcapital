@@ -648,7 +648,7 @@ describe("POST /api/payments/admin/:id/refund", () => {
 
   it("deactivates the challenge, suspends the MT5 account, voids the redemption, and notifies the user when a completed payment is refunded", async () => {
     const db = getTestDb();
-    const { users, payments, challengeTemplates, accountSizes, coupons, userChallenges, mt5Accounts, couponRedemptions, notifications } = await import("../schema");
+    const { users, payments, challengeTemplates, accountSizes, coupons, userChallenges, mt5Accounts, couponRedemptions, notifications, auditLogs } = await import("../schema");
     const { eq } = await import("drizzle-orm");
 
     const trader = db.select().from(users).where(eq(users.email, TEST_USER.email)).get();
@@ -778,6 +778,15 @@ describe("POST /api/payments/admin/:id/refund", () => {
     // User notified
     const notifs = db.select().from(notifications).where(eq(notifications.userId, trader!.id)).all();
     expect(notifs.some((n) => n.title === "Payment Refunded")).toBe(true);
+
+    // Audit log records the admin action + what changed
+    const logs = db.select().from(auditLogs).where(eq(auditLogs.entityId, String(paymentId))).all();
+    const refundLog = logs.find((l) => l.action === "payment.refunded");
+    expect(refundLog).toBeTruthy();
+    const refundDetails = JSON.parse(refundLog!.details || "{}");
+    expect(refundDetails.reference).toBe(payment!.reference);
+    expect(refundDetails.challengeDeactivated).toBe(1);
+    expect(refundDetails.redemptionVoided).toBe(true);
   });
 
   it("is idempotent — refunding an already-refunded payment stays successful without double-voiding", async () => {
@@ -804,7 +813,7 @@ describe("POST /api/payments/admin/:id/refund", () => {
 describe("POST /api/payments/admin/:id/resume", () => {
   it("reactivates the challenge, MT5 account, and funded account after a refund", async () => {
     const db = getTestDb();
-    const { users, payments, challengeTemplates, accountSizes, coupons, userChallenges, mt5Accounts, couponRedemptions, notifications } = await import("../schema");
+    const { users, payments, challengeTemplates, accountSizes, coupons, userChallenges, mt5Accounts, couponRedemptions, notifications, auditLogs } = await import("../schema");
     const { eq } = await import("drizzle-orm");
 
     const trader = db.select().from(users).where(eq(users.email, TEST_USER.email)).get();
@@ -931,6 +940,15 @@ describe("POST /api/payments/admin/:id/resume", () => {
     // User notified
     const notifs = db.select().from(notifications).where(eq(notifications.userId, trader!.id)).all();
     expect(notifs.some((n) => n.title === "Challenge Resumed")).toBe(true);
+
+    // Audit log records the resume action + what changed
+    const logs = db.select().from(auditLogs).where(eq(auditLogs.entityId, String(paymentId))).all();
+    const resumeLog = logs.find((l) => l.action === "payment.resumed");
+    expect(resumeLog).toBeTruthy();
+    const resumeDetails = JSON.parse(resumeLog!.details || "{}");
+    expect(resumeDetails.reference).toBe(payment!.reference);
+    expect(resumeDetails.challengeResumed).toBe(1);
+    expect(resumeDetails.redemptionRestored).toBe(true);
   });
 
   it("returns 404 for a missing payment", async () => {
@@ -945,7 +963,7 @@ describe("POST /api/payments/admin/:id/resume", () => {
 
   it("does not restore the redemption when the coupon has expired", async () => {
     const db = getTestDb();
-    const { users, payments, challengeTemplates, accountSizes, coupons, userChallenges, couponRedemptions } = await import("../schema");
+    const { users, payments, challengeTemplates, accountSizes, coupons, userChallenges, couponRedemptions, auditLogs } = await import("../schema");
     const { eq } = await import("drizzle-orm");
 
     const trader = db.select().from(users).where(eq(users.email, TEST_USER.email)).get();
@@ -1044,11 +1062,17 @@ describe("POST /api/payments/admin/:id/resume", () => {
     expect(redemption).toBeUndefined();
     const couponAfter = db.select().from(coupons).where(eq(coupons.id, coupon.id)).get();
     expect(couponAfter!.currentUses).toBe(0);
+
+    // Audit log captures the reason the coupon wasn't restored
+    const logs = db.select().from(auditLogs).where(eq(auditLogs.entityId, String(paymentId))).all();
+    const resumeLog = logs.find((l) => l.action === "payment.resumed");
+    expect(resumeLog).toBeTruthy();
+    expect(JSON.parse(resumeLog!.details || "{}").redemptionRestoreReason).toBe("expired");
   });
 
   it("does not restore the redemption when the coupon is past its usage limit", async () => {
     const db = getTestDb();
-    const { users, payments, challengeTemplates, accountSizes, coupons, userChallenges, couponRedemptions } = await import("../schema");
+    const { users, payments, challengeTemplates, accountSizes, coupons, userChallenges, couponRedemptions, auditLogs } = await import("../schema");
     const { eq } = await import("drizzle-orm");
 
     const trader = db.select().from(users).where(eq(users.email, TEST_USER.email)).get();

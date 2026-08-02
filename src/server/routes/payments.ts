@@ -6,6 +6,7 @@ import { requireAuth, requireAdmin } from "../middleware";
 import { notify } from "../lib/notifications";
 import { paymentConfirmationEmail } from "../lib/email";
 import { voidRedemptionForPayment, voidStaleRedemptions, ensureRedemptionForPayment, restoreRedemptionIfValid } from "../lib/payment-sweep";
+import { writeAuditLog } from "../lib/audit";
 
 const app = new Hono();
 
@@ -910,6 +911,26 @@ app.post("/admin/:id/refund", requireAuth, requireAdmin, async (c) => {
     }
   } catch {}
 
+  // Record the admin action in the audit log (who refunded, what changed).
+  try {
+    writeAuditLog(db, {
+      userId: c.get("userId"),
+      action: "payment.refunded",
+      entity: "payment",
+      entityId: payment.id,
+      details: {
+        reference: payment.reference,
+        amount: payment.amount,
+        currency: payment.currency,
+        challengeDeactivated,
+        mt5Suspended,
+        fundedAccountTerminated,
+        redemptionVoided,
+      },
+      ipAddress: c.req.header("x-forwarded-for") || undefined,
+    });
+  } catch {}
+
   return c.json({
     success: true,
     challengeDeactivated,
@@ -1005,6 +1026,27 @@ app.post("/admin/:id/resume", requireAuth, requireAdmin, async (c) => {
       });
       userNotified = true;
     }
+  } catch {}
+
+  // Record the admin action in the audit log (who resumed, what changed).
+  try {
+    writeAuditLog(db, {
+      userId: c.get("userId"),
+      action: "payment.resumed",
+      entity: "payment",
+      entityId: payment.id,
+      details: {
+        reference: payment.reference,
+        amount: payment.amount,
+        currency: payment.currency,
+        challengeResumed,
+        mt5Reactivated,
+        fundedAccountReactivated,
+        redemptionRestored,
+        redemptionRestoreReason: redemptionRestoreReason || null,
+      },
+      ipAddress: c.req.header("x-forwarded-for") || undefined,
+    });
   } catch {}
 
   return c.json({
