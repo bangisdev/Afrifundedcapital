@@ -198,6 +198,19 @@ app.get("/admin/all", requireAuth, requireAdmin, (c) => {
   const page = Math.max(1, parseInt(c.req.query("page") || "1") || 1);
   const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query("pageSize") || "20") || 20));
 
+  // Sorting (whitelisted columns, asc/desc)
+  const SORTABLE: Record<string, SQLWrapper> = {
+    id: kycDocuments.id,
+    documentType: kycDocuments.documentType,
+    status: kycDocuments.status,
+    uploadedAt: kycDocuments.uploadedAt,
+    reviewedAt: kycDocuments.reviewedAt,
+  };
+  const qSortBy = String(c.req.query("sortBy") || "uploadedAt");
+  const qSortOrder = String(c.req.query("sortOrder") || "desc");
+  const sortCol = SORTABLE[qSortBy] || kycDocuments.uploadedAt;
+  const sortOrder = qSortOrder.toLowerCase() === "asc" ? asc(sortCol) : desc(sortCol);
+
   // Filters
   const search = (c.req.query("search") || "").trim();
   const status = c.req.query("status") || "";
@@ -233,7 +246,7 @@ app.get("/admin/all", requireAuth, requireAdmin, (c) => {
     .from(kycDocuments)
     .leftJoin(users, eq(users.id, kycDocuments.userId))
     .where(whereClause)
-    .orderBy(desc(kycDocuments.uploadedAt))
+    .orderBy(sortOrder)
     .limit(pageSize)
     .offset((page - 1) * pageSize)
     .all();

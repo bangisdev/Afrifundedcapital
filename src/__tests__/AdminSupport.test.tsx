@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
+import { useApiQuery } from "@/hooks/use-api";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/hooks/use-auth", () => ({
@@ -102,6 +103,49 @@ describe("AdminSupport Page", () => {
       await user.selectOptions(screen.getByDisplayValue("All Status"), "open");
       expect(screen.getByText("Open ticket")).toBeTruthy();
       expect(screen.queryByText("Resolved ticket")).toBeNull();
+    });
+  });
+
+  describe("Sortable Headers", () => {
+    it("renders sortable column headers with the default column active", () => {
+      setQueryData({ "admin/tickets": [
+        { id: 1, subject: "Payment issue", status: "open", priority: "high", userId: 1, category: "payments", createdAt: Date.now() },
+      ]}); render(<AdminSupport />);
+
+      for (const label of ["ID", "Subject", "Priority", "Status", "Created"]) {
+        expect(screen.getByRole("button", { name: `Sort by ${label}` })).toBeTruthy();
+      }
+      // Default sort is createdAt desc → Created is active
+      expect(screen.getByRole("button", { name: "Sort by Created" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("calls the API with sortBy/sortOrder when a header is clicked", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "admin/tickets": [
+        { id: 1, subject: "Payment issue", status: "open", priority: "high", userId: 1, category: "payments", createdAt: Date.now() },
+      ]}); render(<AdminSupport />);
+
+      await user.click(screen.getByRole("button", { name: "Sort by Priority" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const ticketsCall = calls.find((c) => String(c[1]).includes("/api/support/admin/all?") && String(c[1]).includes("sortBy=priority"));
+      expect(ticketsCall).toBeTruthy();
+      expect(String(ticketsCall![1])).toContain("sortOrder=desc");
+      expect(screen.getByRole("button", { name: "Sort by Priority" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("toggles to ascending when the active column is clicked again", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "admin/tickets": [
+        { id: 1, subject: "Payment issue", status: "open", priority: "high", userId: 1, category: "payments", createdAt: Date.now() },
+      ]}); render(<AdminSupport />);
+
+      await user.click(screen.getByRole("button", { name: "Sort by Priority" }));
+      await user.click(screen.getByRole("button", { name: "Sort by Priority" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const ascCall = calls.find((c) => String(c[1]).includes("/api/support/admin/all?") && String(c[1]).includes("sortBy=priority&sortOrder=asc"));
+      expect(ascCall).toBeTruthy();
     });
   });
 

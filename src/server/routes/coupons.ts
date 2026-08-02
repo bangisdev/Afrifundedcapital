@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
 import { coupons, couponRedemptions } from "../schema";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, asc, and, sql, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 
 const app = new Hono();
@@ -122,7 +122,24 @@ app.post("/redeem", requireAuth, async (c) => {
 // List all coupons (admin) with redemption counts
 app.get("/admin/all", requireAuth, requireAdmin, (c) => {
   const db = getDb();
-  const items = db.select().from(coupons).orderBy(desc(coupons.createdAt)).all();
+
+  // Sorting (whitelisted columns, asc/desc)
+  const SORTABLE: Record<string, SQLWrapper> = {
+    id: coupons.id,
+    code: coupons.code,
+    discountType: coupons.discountType,
+    discountValue: coupons.discountValue,
+    currentUses: coupons.currentUses,
+    isActive: coupons.isActive,
+    expiresAt: coupons.expiresAt,
+    createdAt: coupons.createdAt,
+  };
+  const qSortBy = String(c.req.query("sortBy") || "createdAt");
+  const qSortOrder = String(c.req.query("sortOrder") || "desc");
+  const sortCol = SORTABLE[qSortBy] || coupons.createdAt;
+  const sortOrder = qSortOrder.toLowerCase() === "asc" ? asc(sortCol) : desc(sortCol);
+
+  const items = db.select().from(coupons).orderBy(sortOrder).all();
 
   // Enrich each coupon with actual redemption count and total discount given
   const enriched = items.map((coupon) => {

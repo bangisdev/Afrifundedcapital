@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
 import { supportTickets, supportTicketMessages, users } from "../schema";
-import { eq, desc, and, or, like, count, sql, type SQL } from "drizzle-orm";
+import { eq, desc, asc, and, or, like, count, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification } from "../lib/notifications";
 
@@ -120,6 +120,21 @@ app.get("/admin/all", requireAuth, requireAdmin, (c) => {
   const page = Math.max(1, parseInt(c.req.query("page") || "1") || 1);
   const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query("pageSize") || "20") || 20));
 
+  // Sorting (whitelisted columns, asc/desc)
+  const SORTABLE: Record<string, SQLWrapper> = {
+    id: supportTickets.id,
+    subject: supportTickets.subject,
+    category: supportTickets.category,
+    priority: supportTickets.priority,
+    status: supportTickets.status,
+    createdAt: supportTickets.createdAt,
+    updatedAt: supportTickets.updatedAt,
+  };
+  const qSortBy = String(c.req.query("sortBy") || "createdAt");
+  const qSortOrder = String(c.req.query("sortOrder") || "desc");
+  const sortCol = SORTABLE[qSortBy] || supportTickets.createdAt;
+  const sortOrder = qSortOrder.toLowerCase() === "asc" ? asc(sortCol) : desc(sortCol);
+
   // Filters
   const search = (c.req.query("search") || "").trim();
   const status = c.req.query("status") || "";
@@ -157,7 +172,7 @@ app.get("/admin/all", requireAuth, requireAdmin, (c) => {
     .from(supportTickets)
     .leftJoin(users, eq(users.id, supportTickets.userId))
     .where(whereClause)
-    .orderBy(desc(supportTickets.createdAt))
+    .orderBy(sortOrder)
     .limit(pageSize)
     .offset((page - 1) * pageSize)
     .all();

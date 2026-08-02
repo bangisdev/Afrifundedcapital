@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
 import { affiliates, referrals, commissions, commissionPayouts, users, wallets, walletTransactions, settings } from "../schema";
-import { eq, desc, count, sql, and, or, like, type SQL } from "drizzle-orm";
+import { eq, desc, asc, count, sql, and, or, like, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification } from "../lib/notifications";
 
@@ -41,6 +41,20 @@ app.get("/admin/all", requireAuth, requireAdmin, (c) => {
   const page = Math.max(1, parseInt(c.req.query("page") || "1") || 1);
   const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query("pageSize") || "20") || 20));
 
+  // Sorting (whitelisted columns, asc/desc)
+  const SORTABLE: Record<string, SQLWrapper> = {
+    id: affiliates.id,
+    referralCode: affiliates.referralCode,
+    totalReferrals: affiliates.totalReferrals,
+    totalCommissions: affiliates.totalCommissions,
+    isActive: affiliates.isActive,
+    joinedAt: affiliates.joinedAt,
+  };
+  const qSortBy = String(c.req.query("sortBy") || "joinedAt");
+  const qSortOrder = String(c.req.query("sortOrder") || "desc");
+  const sortCol = SORTABLE[qSortBy] || affiliates.joinedAt;
+  const sortOrder = qSortOrder.toLowerCase() === "asc" ? asc(sortCol) : desc(sortCol);
+
   // Filters
   const search = (c.req.query("search") || "").trim();
   const status = c.req.query("status") || "";
@@ -75,7 +89,7 @@ app.get("/admin/all", requireAuth, requireAdmin, (c) => {
     .from(affiliates)
     .leftJoin(users, eq(users.id, affiliates.userId))
     .where(whereClause)
-    .orderBy(desc(affiliates.joinedAt))
+    .orderBy(sortOrder)
     .limit(pageSize)
     .offset((page - 1) * pageSize)
     .all();
@@ -266,6 +280,20 @@ app.get("/admin/payouts", requireAuth, requireAdmin, (c) => {
   const page = Math.max(1, parseInt(c.req.query("page") || "1") || 1);
   const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query("pageSize") || "20") || 20));
 
+  // Sorting (whitelisted columns, asc/desc)
+  const SORTABLE: Record<string, SQLWrapper> = {
+    id: commissionPayouts.id,
+    amount: commissionPayouts.amount,
+    status: commissionPayouts.status,
+    paymentMethod: commissionPayouts.paymentMethod,
+    requestedAt: commissionPayouts.requestedAt,
+    processedAt: commissionPayouts.processedAt,
+  };
+  const qSortBy = String(c.req.query("sortBy") || "requestedAt");
+  const qSortOrder = String(c.req.query("sortOrder") || "desc");
+  const sortCol = SORTABLE[qSortBy] || commissionPayouts.requestedAt;
+  const sortOrder = qSortOrder.toLowerCase() === "asc" ? asc(sortCol) : desc(sortCol);
+
   // Filters
   const search = (c.req.query("search") || "").trim();
   const status = c.req.query("status") || "";
@@ -300,7 +328,7 @@ app.get("/admin/payouts", requireAuth, requireAdmin, (c) => {
     .from(commissionPayouts)
     .leftJoin(users, eq(users.id, commissionPayouts.userId))
     .where(whereClause)
-    .orderBy(desc(commissionPayouts.requestedAt))
+    .orderBy(sortOrder)
     .limit(pageSize)
     .offset((page - 1) * pageSize)
     .all();

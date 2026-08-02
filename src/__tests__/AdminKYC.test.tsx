@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
+import { useApiQuery } from "@/hooks/use-api";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/hooks/use-auth", () => ({
@@ -124,6 +125,52 @@ describe("AdminKyc Page", () => {
       await user.selectOptions(screen.getByDisplayValue("All Status"), "approved");
       // "National ID" appears in both filter dropdown and doc label
       expect(screen.getAllByText("National ID").length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe("Sortable Headers", () => {
+    it("renders sortable column headers with the default column active", () => {
+      setQueryData({ "admin/kyc": [
+        { id: 1, documentType: "passport", status: "pending", userId: 1, uploadedAt: Date.now() },
+      ], "admin/briefUsers": [{ id: 1, name: "John Doe" }] });
+      render(<AdminKyc />);
+
+      for (const label of ["Type", "Status", "Uploaded"]) {
+        expect(screen.getByRole("button", { name: `Sort by ${label}` })).toBeTruthy();
+      }
+      // Default sort is uploadedAt desc → Uploaded is active
+      expect(screen.getByRole("button", { name: "Sort by Uploaded" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("calls the API with sortBy/sortOrder when a header is clicked", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "admin/kyc": [
+        { id: 1, documentType: "passport", status: "pending", userId: 1, uploadedAt: Date.now() },
+      ], "admin/briefUsers": [] });
+      render(<AdminKyc />);
+
+      await user.click(screen.getByRole("button", { name: "Sort by Status" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const kycCall = calls.find((c) => String(c[1]).includes("/api/kyc/admin/all?") && String(c[1]).includes("sortBy=status"));
+      expect(kycCall).toBeTruthy();
+      expect(String(kycCall![1])).toContain("sortOrder=desc");
+      expect(screen.getByRole("button", { name: "Sort by Status" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("toggles to ascending when the active column is clicked again", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "admin/kyc": [
+        { id: 1, documentType: "passport", status: "pending", userId: 1, uploadedAt: Date.now() },
+      ], "admin/briefUsers": [] });
+      render(<AdminKyc />);
+
+      await user.click(screen.getByRole("button", { name: "Sort by Status" }));
+      await user.click(screen.getByRole("button", { name: "Sort by Status" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const ascCall = calls.find((c) => String(c[1]).includes("/api/kyc/admin/all?") && String(c[1]).includes("sortBy=status&sortOrder=asc"));
+      expect(ascCall).toBeTruthy();
     });
   });
 

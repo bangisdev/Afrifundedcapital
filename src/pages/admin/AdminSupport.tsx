@@ -21,6 +21,9 @@ import {
   ChevronRight,
   Search,
   X,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -87,6 +90,8 @@ export default function AdminSupport() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [sortBy, setSortBy] = useState("createdAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { data: messages, isLoading: messagesLoading } = useApiQuery<any[]>(
@@ -101,14 +106,57 @@ export default function AdminSupport() {
     return () => clearTimeout(t);
   }, [search]);
 
-  // Reset to first page whenever filters or page size change
+  // Reset to first page whenever filters, page size, or sort change
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, statusFilter, priorityFilter, pageSize]);
+  }, [debouncedSearch, statusFilter, priorityFilter, pageSize, sortBy, sortOrder]);
+
+  // Sortable columns matching the server whitelist for /api/support/admin/all
+  const SORT_COLUMNS: Array<{ key: string; label: string }> = [
+    { key: "id", label: "ID" },
+    { key: "subject", label: "Subject" },
+    { key: "priority", label: "Priority" },
+    { key: "status", label: "Status" },
+    { key: "createdAt", label: "Created" },
+  ];
+
+  const handleSort = (key: string) => {
+    if (sortBy === key) {
+      setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(key);
+      setSortOrder("desc");
+    }
+  };
+
+  const sortHeader = (sortKey: string, label: string) => {
+    const active = sortBy === sortKey;
+    return (
+      <button
+        key={sortKey}
+        type="button"
+        onClick={() => handleSort(sortKey)}
+        aria-label={`Sort by ${label}`}
+        aria-pressed={active}
+        className={`inline-flex items-center gap-1 text-[11px] font-medium transition-colors rounded px-1.5 py-0.5 ${
+          active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        {label}
+        {active ? (
+          sortOrder === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-50" />
+        )}
+      </button>
+    );
+  };
 
   const params = new URLSearchParams();
   params.set("page", String(page));
   params.set("pageSize", String(pageSize));
+  params.set("sortBy", sortBy);
+  params.set("sortOrder", sortOrder);
   if (debouncedSearch) params.set("search", debouncedSearch);
   if (statusFilter !== "all") params.set("status", statusFilter);
   if (priorityFilter !== "all") params.set("priority", priorityFilter);
@@ -397,6 +445,12 @@ export default function AdminSupport() {
             <X className="h-3 w-3 mr-1" /> Clear
           </Button>
         )}
+      </div>
+
+      {/* Sort toolbar */}
+      <div className="flex items-center gap-0.5" aria-label="Sort support tickets">
+        <span className="text-[10px] text-muted-foreground mr-1">Sort:</span>
+        {SORT_COLUMNS.map((col) => sortHeader(col.key, col.label))}
       </div>
 
       {/* Ticket List */}

@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
+import { useApiQuery } from "@/hooks/use-api";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/hooks/use-auth", () => ({
@@ -13,7 +14,9 @@ vi.mock("@/hooks/use-auth", () => ({
 const queryDataMap: Record<string, any> = {};
 vi.mock("@/hooks/use-api", () => ({
   useApiQuery: vi.fn((key: string[]) => {
-    const dataKey = `${key.join("/")}`;
+    // The page keys coupons queries as ["admin","coupons",queryString] — resolve by base
+    // path so the sort-param variants all match "admin/coupons".
+    const dataKey = `${key.join("/")}`.split("?")[0].replace(/\/+$/, "");
     if (queryDataMap[dataKey] === undefined) return { data: undefined, isLoading: true, refetch: vi.fn() };
     return { data: queryDataMap[dataKey], isLoading: false, refetch: vi.fn() };
   }),
@@ -85,6 +88,49 @@ describe("AdminCoupons Page", () => {
       await user.click(screen.getByText("Create"));
       expect(screen.getByPlaceholderText(/Code/)).toBeTruthy();
       expect(screen.getByPlaceholderText(/Value/)).toBeTruthy();
+    });
+  });
+
+  describe("Sortable Headers", () => {
+    it("renders sortable column headers with the default column active", () => {
+      setQueryData({ "admin/coupons": [
+        { id: 1, code: "SAVE20", discountType: "percentage", discountValue: 20, maxUses: 100, redemptionCount: 15, totalDiscountGiven: 5000 },
+      ]}); render(<AdminCoupons />);
+
+      for (const label of ["Code", "Discount", "Uses", "Expires", "Created"]) {
+        expect(screen.getByRole("button", { name: `Sort by ${label}` })).toBeTruthy();
+      }
+      // Default sort is createdAt desc → Created is active
+      expect(screen.getByRole("button", { name: "Sort by Created" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("calls the API with sortBy/sortOrder when a header is clicked", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "admin/coupons": [
+        { id: 1, code: "SAVE20", discountType: "percentage", discountValue: 20, maxUses: 100, redemptionCount: 15, totalDiscountGiven: 5000 },
+      ]}); render(<AdminCoupons />);
+
+      await user.click(screen.getByRole("button", { name: "Sort by Uses" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const couponsCall = calls.find((c) => String(c[1]).includes("/api/coupons/admin/all?") && String(c[1]).includes("sortBy=currentUses"));
+      expect(couponsCall).toBeTruthy();
+      expect(String(couponsCall![1])).toContain("sortOrder=desc");
+      expect(screen.getByRole("button", { name: "Sort by Uses" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("toggles to ascending when the active column is clicked again", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "admin/coupons": [
+        { id: 1, code: "SAVE20", discountType: "percentage", discountValue: 20, maxUses: 100, redemptionCount: 15, totalDiscountGiven: 5000 },
+      ]}); render(<AdminCoupons />);
+
+      await user.click(screen.getByRole("button", { name: "Sort by Uses" }));
+      await user.click(screen.getByRole("button", { name: "Sort by Uses" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const ascCall = calls.find((c) => String(c[1]).includes("/api/coupons/admin/all?") && String(c[1]).includes("sortBy=currentUses&sortOrder=asc"));
+      expect(ascCall).toBeTruthy();
     });
   });
 

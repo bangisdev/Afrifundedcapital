@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Loader2, CheckCircle, XCircle, CheckCheck, Trash2, DollarSign, Calendar, X, Users, Search, Download } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, CheckCheck, Trash2, DollarSign, Calendar, X, Users, Search, Download, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 
@@ -52,6 +52,10 @@ export default function AdminPayouts() {
   const userSearchTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const userDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Sorting (whitelisted columns on the server: id, amount, status, paymentMethod, requestedAt, processedAt)
+  const [sortBy, setSortBy] = useState("requestedAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
   // Debounced user search
   useEffect(() => {
     if (userSearchTimeout.current) clearTimeout(userSearchTimeout.current);
@@ -87,9 +91,11 @@ export default function AdminPayouts() {
     if (endDate) params.set("endDate", String(toEndOfDay(endDate)));
     if (statusFilter) params.set("status", statusFilter);
     if (userFilter) params.set("userId", String(userFilter.id));
+    params.set("sortBy", sortBy);
+    params.set("sortOrder", sortOrder);
     const qs = params.toString();
     return qs ? `?${qs}` : "";
-  }, [startDate, endDate, statusFilter, userFilter]);
+  }, [startDate, endDate, statusFilter, userFilter, sortBy, sortOrder]);
 
   const allQueryParams = buildQueryParams();
   const { data: payouts, isLoading, refetch } = useApiQuery<any[]>(["admin", "payouts", allQueryParams], `/api/payouts/admin/all${allQueryParams}`);
@@ -109,6 +115,44 @@ export default function AdminPayouts() {
   const [rejectReason, setRejectReason] = useState("");
   const [reasonPreset, setReasonPreset] = useState("");
   const [individualRejectId, setIndividualRejectId] = useState<number | null>(null);
+
+  const SORT_COLUMNS: Array<{ key: string; label: string }> = [
+    { key: "amount", label: "Amount" },
+    { key: "status", label: "Status" },
+    { key: "paymentMethod", label: "Method" },
+    { key: "requestedAt", label: "Requested" },
+    { key: "processedAt", label: "Processed" },
+  ];
+  const handleSort = (key: string) => {
+    if (sortBy === key) {
+      setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(key);
+      setSortOrder("desc");
+    }
+  };
+  const sortHeader = (sortKey: string, label: string) => {
+    const active = sortBy === sortKey;
+    return (
+      <button
+        key={sortKey}
+        type="button"
+        onClick={() => handleSort(sortKey)}
+        aria-label={`Sort by ${label}`}
+        aria-pressed={active}
+        className={`inline-flex items-center gap-1 font-medium transition-colors rounded px-1 py-0.5 -mx-1 ${
+          active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        {label}
+        {active ? (
+          sortOrder === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-50" />
+        )}
+      </button>
+    );
+  };
 
   const applyPreset = (preset: typeof PRESETS[number]) => {
     const range = preset.getRange();
@@ -504,6 +548,15 @@ export default function AdminPayouts() {
           </Button>
         </div>
       )}
+
+      {/* Sort Toolbar */}
+      <div className="card-subtle px-4 py-2 flex items-center gap-1.5 flex-wrap">
+        <span className="text-[10px] font-medium text-muted-foreground mr-1">Sort:</span>
+        {SORT_COLUMNS.map((c) => sortHeader(c.key, c.label))}
+        <span className="ml-auto text-[10px] text-muted-foreground">
+          {(payouts || []).length} result{(payouts || []).length !== 1 ? 's' : ''}
+        </span>
+      </div>
 
       {/* Payout List */}
       <div className="space-y-1">

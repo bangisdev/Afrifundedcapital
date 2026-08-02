@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import {
   Loader2, CheckCircle, XCircle, ArrowLeft, FileText, User, Clock,
   ChevronDown, ChevronLeft, ChevronRight, Eye, AlertTriangle, Image as ImageIcon, X, Download,
+  ArrowUp, ArrowDown, ArrowUpDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -64,6 +65,8 @@ export default function AdminKyc() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [sortBy, setSortBy] = useState("uploadedAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [showImagePreview, setShowImagePreview] = useState<string | null>(null);
 
   // Debounce the search input so we don't hit the API on every keystroke
@@ -72,14 +75,55 @@ export default function AdminKyc() {
     return () => clearTimeout(t);
   }, [search]);
 
-  // Reset to first page whenever filters or page size change
+  // Reset to first page whenever filters, page size, or sort change
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, statusFilter, typeFilter, pageSize]);
+  }, [debouncedSearch, statusFilter, typeFilter, pageSize, sortBy, sortOrder]);
+
+  // Sortable columns matching the server whitelist for /api/kyc/admin/all
+  const SORT_COLUMNS: Array<{ key: string; label: string }> = [
+    { key: "documentType", label: "Type" },
+    { key: "status", label: "Status" },
+    { key: "uploadedAt", label: "Uploaded" },
+  ];
+
+  const handleSort = (key: string) => {
+    if (sortBy === key) {
+      setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(key);
+      setSortOrder("desc");
+    }
+  };
+
+  const sortHeader = (sortKey: string, label: string) => {
+    const active = sortBy === sortKey;
+    return (
+      <button
+        key={sortKey}
+        type="button"
+        onClick={() => handleSort(sortKey)}
+        aria-label={`Sort by ${label}`}
+        aria-pressed={active}
+        className={`inline-flex items-center gap-1 text-[11px] font-medium transition-colors rounded px-1.5 py-0.5 ${
+          active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        {label}
+        {active ? (
+          sortOrder === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-50" />
+        )}
+      </button>
+    );
+  };
 
   const params = new URLSearchParams();
   params.set("page", String(page));
   params.set("pageSize", String(pageSize));
+  params.set("sortBy", sortBy);
+  params.set("sortOrder", sortOrder);
   if (debouncedSearch) params.set("search", debouncedSearch);
   if (statusFilter !== "all") params.set("status", statusFilter);
   if (typeFilter !== "all") params.set("type", typeFilter);
@@ -385,6 +429,12 @@ export default function AdminKyc() {
             <X className="h-3 w-3 mr-1" /> Clear
           </Button>
         )}
+      </div>
+
+      {/* Sort toolbar */}
+      <div className="flex items-center gap-0.5" aria-label="Sort KYC documents">
+        <span className="text-[10px] text-muted-foreground mr-1">Sort:</span>
+        {SORT_COLUMNS.map((col) => sortHeader(col.key, col.label))}
       </div>
 
       {/* Document List */}

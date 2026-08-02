@@ -33,6 +33,9 @@ import {
   Copy,
   ExternalLink,
   X,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -171,9 +174,50 @@ function AffiliatePayoutsTab() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [sortBy, setSortBy] = useState("requestedAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [rejectTarget, setRejectTarget] = useState<PayoutRow | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [processingId, setProcessingId] = useState<number | null>(null);
+
+  // Sortable columns matching the server whitelist for /api/affiliates/admin/payouts
+  const SORT_COLUMNS: Array<{ key: string; label: string }> = [
+    { key: "amount", label: "Amount" },
+    { key: "status", label: "Status" },
+    { key: "requestedAt", label: "Requested" },
+  ];
+
+  const handleSort = (key: string) => {
+    if (sortBy === key) {
+      setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(key);
+      setSortOrder("desc");
+    }
+  };
+
+  const sortHeader = (sortKey: string, label: string) => {
+    const active = sortBy === sortKey;
+    return (
+      <button
+        key={sortKey}
+        type="button"
+        onClick={() => handleSort(sortKey)}
+        aria-label={`Sort by ${label}`}
+        aria-pressed={active}
+        className={`inline-flex items-center gap-1 text-[11px] font-medium transition-colors rounded px-1.5 py-0.5 ${
+          active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        {label}
+        {active ? (
+          sortOrder === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-50" />
+        )}
+      </button>
+    );
+  };
 
   // Debounce the search input so we don't hit the API on every keystroke
   useEffect(() => {
@@ -181,14 +225,16 @@ function AffiliatePayoutsTab() {
     return () => clearTimeout(t);
   }, [search]);
 
-  // Reset to first page whenever filters or page size change
+  // Reset to first page whenever filters, page size, or sort change
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, statusFilter, pageSize]);
+  }, [debouncedSearch, statusFilter, pageSize, sortBy, sortOrder]);
 
   const params = new URLSearchParams();
   params.set("page", String(page));
   params.set("pageSize", String(pageSize));
+  params.set("sortBy", sortBy);
+  params.set("sortOrder", sortOrder);
   if (debouncedSearch) params.set("search", debouncedSearch);
   if (statusFilter !== "all") params.set("status", statusFilter);
   const listQuery = `/api/affiliates/admin/payouts?${params.toString()}`;
@@ -302,6 +348,12 @@ function AffiliatePayoutsTab() {
           </select>
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
         </div>
+      </div>
+
+      {/* Sort toolbar */}
+      <div className="flex items-center gap-0.5" aria-label="Sort affiliate payouts">
+        <span className="text-[10px] text-muted-foreground mr-1">Sort:</span>
+        {SORT_COLUMNS.map((col) => sortHeader(col.key, col.label))}
       </div>
 
       {/* Payout List */}
@@ -640,7 +692,49 @@ function AffiliatesListTab() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [sortBy, setSortBy] = useState("joinedAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  // Sortable columns matching the server whitelist for /api/affiliates/admin/all
+  const SORT_COLUMNS: Array<{ key: string; label: string }> = [
+    { key: "referralCode", label: "Code" },
+    { key: "totalReferrals", label: "Referrals" },
+    { key: "totalCommissions", label: "Commissions" },
+    { key: "joinedAt", label: "Joined" },
+  ];
+
+  const handleSort = (key: string) => {
+    if (sortBy === key) {
+      setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(key);
+      setSortOrder("desc");
+    }
+  };
+
+  const sortHeader = (sortKey: string, label: string) => {
+    const active = sortBy === sortKey;
+    return (
+      <button
+        key={sortKey}
+        type="button"
+        onClick={() => handleSort(sortKey)}
+        aria-label={`Sort by ${label}`}
+        aria-pressed={active}
+        className={`inline-flex items-center gap-1 text-[11px] font-medium transition-colors rounded px-1.5 py-0.5 ${
+          active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        {label}
+        {active ? (
+          sortOrder === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-50" />
+        )}
+      </button>
+    );
+  };
 
   // Debounce the search input so we don't hit the API on every keystroke
   useEffect(() => {
@@ -648,14 +742,16 @@ function AffiliatesListTab() {
     return () => clearTimeout(t);
   }, [search]);
 
-  // Reset to first page whenever filters or page size change
+  // Reset to first page whenever filters, page size, or sort change
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, statusFilter, pageSize]);
+  }, [debouncedSearch, statusFilter, pageSize, sortBy, sortOrder]);
 
   const params = new URLSearchParams();
   params.set("page", String(page));
   params.set("pageSize", String(pageSize));
+  params.set("sortBy", sortBy);
+  params.set("sortOrder", sortOrder);
   if (debouncedSearch) params.set("search", debouncedSearch);
   if (statusFilter !== "all") params.set("status", statusFilter);
   const listQuery = `/api/affiliates/admin/all?${params.toString()}`;
@@ -733,6 +829,12 @@ function AffiliatesListTab() {
           </select>
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
         </div>
+      </div>
+
+      {/* Sort toolbar */}
+      <div className="flex items-center gap-0.5" aria-label="Sort affiliates">
+        <span className="text-[10px] text-muted-foreground mr-1">Sort:</span>
+        {SORT_COLUMNS.map((col) => sortHeader(col.key, col.label))}
       </div>
 
       {/* Affiliates List */}
