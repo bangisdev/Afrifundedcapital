@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { payments, couponRedemptions, coupons } from "../schema";
-import { eq, and, lt } from "drizzle-orm";
+import { eq, and, lt, sql } from "drizzle-orm";
 
 /** How long a pending payment may sit before it's treated as an abandoned checkout. */
 export const STALE_PAYMENT_MS = 30 * 60 * 1000; // 30 minutes
@@ -116,4 +116,80 @@ export function ensureRedemptionForPayment(db: any, payment: any): boolean {
     .run();
 
   return true;
+}
+
+/**
+ * Restore a coupon redemption for a payment when its challenge is resumed,
+ * but ONLY if the coupon is still active and within its usage limits.
+ *
+ * Unlike `ensureRedemptionForPayment` (which restores a redemption that was
+ * pre-created at checkout and later voided by a sweep), this is a fresh
+ * re-grant after a refund, so the coupon's *current* state is validated:
+ * active, not expired, global usage under maxUses, and per-user usage under
+ * maxUsesPerUser.
+ *
+ * Returns `{ restored: true }` on success, or `{ restored: false, reason }`
+ * where reason is one of: no_coupon | already_redeemed | coupon_missing |
+ * inactive | expired | usage_limit | per_user_limit.
+ */
+export function restoreRedemptionIfValid(
+  db: any,
+  payment: any,
+): { restored: boolean; reason?: string } {
+  let couponId: number | null = null;
+  let discount = 0;
+  let originalAmount: number | null = null;
+
+  try {
+    if (payment.metadata) {
+      const meta = JSON.parse(payment.metadata);
+      couponId = meta.couponId != null ? Number(meta.couponId) : null;
+      discount = Number(meta.discount || 0);
+      originalAmount = meta.originalAmount != null ? Number(meta.originalAmount) : null;
+    }
+  } catch {
+    // Unparseable metadata — nothing to restore
+  }
+
+  if (!couponId) return { restored: false, reason: "no_coupon" };
+
+  // Already redeemed — nothing to do (idempotent)
+  const existing = db
+    .select()
+    .from(couponRedemptions)
+    .where(eq(couponRedemptions.paymentId, payment.id))
+    .get();
+  if (existing) return { restored: false, reason: "already_redeemed" };
+
+  const coupon = db.select().from(coupons).where(eq(coupons.id, couponId)).get();
+  if (!coupon) return { restored: false, reason: "coupon_missing" };
+  if (!coupon.isActive) return { restored: false, reason: "inactive" };
+  if (coupon.expiresAt && coupon.expiresAt < Date.now()) return { restored: false, reason: "expired" };
+  if (coupon.maxUses && (coupon.currentUses || 0) >= coupon.maxUses) return { restored: false, reason: "usage_limit" };
+  if (coupon.maxUsesPerUser) {
+    const userUses = db
+      .select({ count: sql<number>`count(*)` })
+      .from(couponRedemptions)
+      .where(and(eq(couponRedemptions.couponId, coupon.id), eq(couponRedemptions.userId, payment.userId)))
+      .get();
+    if (userUses && userUses.count >= coupon.maxUsesPerUser) return { restored: false, reason: "per_user_limit" };
+  }
+
+  db.insert(couponRedemptions)
+    .values({
+      couponId,
+      userId: payment.userId,
+      paymentId: payment.id,
+      discountAmount: discount || 0,
+      originalAmount: originalAmount ?? payment.amount,
+      redeemedAt: Date.now(),
+    })
+    .run();
+
+  db.update(coupons)
+    .set({ currentUses: (coupon.currentUses || 0) + 1 })
+    .where(eq(coupons.id, coupon.id))
+    .run();
+
+  return { restored: true };
 }

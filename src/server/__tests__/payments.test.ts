@@ -906,6 +906,7 @@ describe("POST /api/payments/admin/:id/resume", () => {
     expect(resumeBody.success).toBe(true);
     expect(resumeBody.challengeResumed).toBe(1);
     expect(resumeBody.mt5Reactivated).toBe(1);
+    expect(resumeBody.redemptionRestored).toBe(true);
     expect(resumeBody.userNotified).toBe(true);
 
     // Challenge active again, expiry clock paused while refunded (never shrinks)
@@ -918,11 +919,14 @@ describe("POST /api/payments/admin/:id/resume", () => {
     expect(mt5After!.isActive).toBe(true);
     expect(mt5After!.isSuspended).toBe(false);
 
-    // Coupon redemption stays voided — resume restores trading, not the discount
+    // Coupon redemption restored — the coupon is still active and within limits
     const redemptionAfter = db.select().from(couponRedemptions).where(eq(couponRedemptions.paymentId, paymentId)).get();
-    expect(redemptionAfter).toBeUndefined();
+    expect(redemptionAfter).toBeTruthy();
+    expect(redemptionAfter!.couponId).toBe(coupon.id);
+    expect(redemptionAfter!.discountAmount).toBe(5000);
+    expect(redemptionAfter!.originalAmount).toBe(50000);
     const couponAfter = db.select().from(coupons).where(eq(coupons.id, coupon.id)).get();
-    expect(couponAfter!.currentUses).toBe(0);
+    expect(couponAfter!.currentUses).toBe(1);
 
     // User notified
     const notifs = db.select().from(notifications).where(eq(notifications.userId, trader!.id)).all();
@@ -937,5 +941,208 @@ describe("POST /api/payments/admin/:id/resume", () => {
   it("returns 403 for non-admin users", async () => {
     const { status } = await authPost(app, "/api/payments/admin/1/resume", userCookie);
     expect(status).toBe(403);
+  });
+
+  it("does not restore the redemption when the coupon has expired", async () => {
+    const db = getTestDb();
+    const { users, payments, challengeTemplates, accountSizes, coupons, userChallenges, couponRedemptions } = await import("../schema");
+    const { eq } = await import("drizzle-orm");
+
+    const trader = db.select().from(users).where(eq(users.email, TEST_USER.email)).get();
+    expect(trader).toBeTruthy();
+    const now = Date.now();
+
+    const template = db.insert(challengeTemplates).values({
+      name: "Expired Coupon Resume",
+      description: "Expired coupon resume test",
+      type: "two_step",
+      isActive: true,
+      profitTarget: 10,
+      dailyDrawdown: 5,
+      maxDrawdown: 10,
+      maxLeverage: 100,
+      minTradingDays: 5,
+      maxTradingDays: 30,
+      allowWeekendHolding: false,
+      allowNewsTrading: true,
+      allowEATrading: true,
+      allowCopyTrading: false,
+      price: 50000,
+      currency: "NGN",
+      durationDays: 30,
+      createdBy: trader!.id,
+      createdAt: now,
+      updatedAt: now,
+    }).returning().get();
+
+    const size = db.insert(accountSizes).values({
+      label: "$10,000",
+      size: 10000,
+      currency: "NGN",
+      templateId: template.id,
+      price: 50000,
+      isActive: true,
+      sortOrder: 1,
+    }).returning().get();
+
+    // Valid at checkout time (expires in 1 hour), so initiate applies it
+    const coupon = db.insert(coupons).values({
+      code: "EXPIRED10",
+      discountType: "fixed",
+      discountValue: 5000,
+      isActive: true,
+      maxUses: 5,
+      expiresAt: now + 60 * 60 * 1000,
+      createdBy: trader!.id,
+      createdAt: now,
+    }).returning().get();
+
+    const init = await authPost(app, "/api/payments/initiate", userCookie, {
+      amount: 45000,
+      originalAmount: 50000,
+      currency: "NGN",
+      templateId: String(template.id),
+      accountSizeId: String(size.id),
+      couponCode: "EXPIRED10",
+      description: "Expired Coupon Resume",
+    });
+    expect(init.status).toBe(200);
+    const paymentId = (init.body as Record<string, any>).paymentId as number;
+
+    // Complete via webhook
+    const payment = db.select().from(payments).where(eq(payments.id, paymentId)).get();
+    await app.request("/api/payments/webhook/flutterwave", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "verif-hash": "test123" },
+      body: JSON.stringify({
+        event: "charge.completed",
+        data: {
+          id: Math.floor(100000 + Math.random() * 900000),
+          tx_ref: payment!.reference,
+          status: "successful",
+          amount: 45000,
+          currency: "NGN",
+        },
+      }),
+    });
+
+    // Refund, then let the coupon expire before resuming
+    await authPost(app, `/api/payments/admin/${paymentId}/refund`, adminCookie);
+    db.update(coupons).set({ expiresAt: now - 1000 }).where(eq(coupons.id, coupon.id)).run();
+
+    const resume = await authPost(app, `/api/payments/admin/${paymentId}/resume`, adminCookie);
+    expect(resume.status).toBe(200);
+    const body = resume.body as Record<string, any>;
+    expect(body.success).toBe(true);
+    expect(body.redemptionRestored).toBe(false);
+    expect(body.redemptionRestoreReason).toBe("expired");
+
+    // Challenge still resumes, but no redemption and no usage consumed
+    const challenge = db.select().from(userChallenges).where(eq(userChallenges.paymentId, paymentId)).get();
+    expect(challenge!.status).toBe("active");
+    const redemption = db.select().from(couponRedemptions).where(eq(couponRedemptions.paymentId, paymentId)).get();
+    expect(redemption).toBeUndefined();
+    const couponAfter = db.select().from(coupons).where(eq(coupons.id, coupon.id)).get();
+    expect(couponAfter!.currentUses).toBe(0);
+  });
+
+  it("does not restore the redemption when the coupon is past its usage limit", async () => {
+    const db = getTestDb();
+    const { users, payments, challengeTemplates, accountSizes, coupons, userChallenges, couponRedemptions } = await import("../schema");
+    const { eq } = await import("drizzle-orm");
+
+    const trader = db.select().from(users).where(eq(users.email, TEST_USER.email)).get();
+    expect(trader).toBeTruthy();
+    const now = Date.now();
+
+    const template = db.insert(challengeTemplates).values({
+      name: "Limit Coupon Resume",
+      description: "Usage-limit coupon resume test",
+      type: "two_step",
+      isActive: true,
+      profitTarget: 10,
+      dailyDrawdown: 5,
+      maxDrawdown: 10,
+      maxLeverage: 100,
+      minTradingDays: 5,
+      maxTradingDays: 30,
+      allowWeekendHolding: false,
+      allowNewsTrading: true,
+      allowEATrading: true,
+      allowCopyTrading: false,
+      price: 50000,
+      currency: "NGN",
+      durationDays: 30,
+      createdBy: trader!.id,
+      createdAt: now,
+      updatedAt: now,
+    }).returning().get();
+
+    const size = db.insert(accountSizes).values({
+      label: "$10,000",
+      size: 10000,
+      currency: "NGN",
+      templateId: template.id,
+      price: 50000,
+      isActive: true,
+      sortOrder: 1,
+    }).returning().get();
+
+    const coupon = db.insert(coupons).values({
+      code: "LIMIT10",
+      discountType: "fixed",
+      discountValue: 5000,
+      isActive: true,
+      maxUses: 1,
+      createdBy: trader!.id,
+      createdAt: now,
+    }).returning().get();
+
+    const init = await authPost(app, "/api/payments/initiate", userCookie, {
+      amount: 45000,
+      originalAmount: 50000,
+      currency: "NGN",
+      templateId: String(template.id),
+      accountSizeId: String(size.id),
+      couponCode: "LIMIT10",
+      description: "Limit Coupon Resume",
+    });
+    expect(init.status).toBe(200);
+    const paymentId = (init.body as Record<string, any>).paymentId as number;
+
+    // Complete via webhook
+    const payment = db.select().from(payments).where(eq(payments.id, paymentId)).get();
+    await app.request("/api/payments/webhook/flutterwave", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "verif-hash": "test123" },
+      body: JSON.stringify({
+        event: "charge.completed",
+        data: {
+          id: Math.floor(100000 + Math.random() * 900000),
+          tx_ref: payment!.reference,
+          status: "successful",
+          amount: 45000,
+          currency: "NGN",
+        },
+      }),
+    });
+
+    // Refund, then exhaust the coupon's remaining usage before resuming
+    await authPost(app, `/api/payments/admin/${paymentId}/refund`, adminCookie);
+    db.update(coupons).set({ currentUses: 1 }).where(eq(coupons.id, coupon.id)).run();
+
+    const resume = await authPost(app, `/api/payments/admin/${paymentId}/resume`, adminCookie);
+    expect(resume.status).toBe(200);
+    const body = resume.body as Record<string, any>;
+    expect(body.success).toBe(true);
+    expect(body.redemptionRestored).toBe(false);
+    expect(body.redemptionRestoreReason).toBe("usage_limit");
+
+    const challenge = db.select().from(userChallenges).where(eq(userChallenges.paymentId, paymentId)).get();
+    expect(challenge!.status).toBe("active");
+    const redemption = db.select().from(couponRedemptions).where(eq(couponRedemptions.paymentId, paymentId)).get();
+    expect(redemption).toBeUndefined();
+    const couponAfter = db.select().from(coupons).where(eq(coupons.id, coupon.id)).get();
+    expect(couponAfter!.currentUses).toBe(1);
   });
 });

@@ -5,7 +5,7 @@ import { eq, desc, asc, count, and, or, like, sql, type SQL, type SQLWrapper } f
 import { requireAuth, requireAdmin } from "../middleware";
 import { notify } from "../lib/notifications";
 import { paymentConfirmationEmail } from "../lib/email";
-import { voidRedemptionForPayment, voidStaleRedemptions, ensureRedemptionForPayment } from "../lib/payment-sweep";
+import { voidRedemptionForPayment, voidStaleRedemptions, ensureRedemptionForPayment, restoreRedemptionIfValid } from "../lib/payment-sweep";
 
 const app = new Hono();
 
@@ -926,7 +926,8 @@ app.post("/admin/:id/refund", requireAuth, requireAdmin, async (c) => {
 // funded account that was terminated for a payment refund. The challenge's
 // expiry clock is paused while refunded (expiresAt extended by the refund
 // duration) so the trader doesn't lose trading time. The coupon redemption is
-// intentionally NOT restored — the discount slot was released on refund.
+// restored too — but only if the coupon is still active and within its usage
+// limits, since the discount slot was released on refund.
 app.post("/admin/:id/resume", requireAuth, requireAdmin, async (c) => {
   const id = parseInt(c.req.param("id"));
   const db = getDb();
@@ -980,6 +981,17 @@ app.post("/admin/:id/resume", requireAuth, requireAdmin, async (c) => {
     }
   }
 
+  // Restore the coupon redemption if the coupon is still active and within its
+  // usage limits. Unlike a webhook restore (pre-created redemption), a resume is
+  // a fresh re-grant after a refund, so the coupon's current state is validated.
+  let redemptionRestored = false;
+  let redemptionRestoreReason: string | undefined;
+  try {
+    const restoreResult = restoreRedemptionIfValid(db, payment);
+    redemptionRestored = restoreResult.restored;
+    if (restoreResult.reason) redemptionRestoreReason = restoreResult.reason;
+  } catch {}
+
   // Notify the user that their challenge is back.
   let userNotified = false;
   try {
@@ -1000,6 +1012,8 @@ app.post("/admin/:id/resume", requireAuth, requireAdmin, async (c) => {
     challengeResumed,
     mt5Reactivated,
     fundedAccountReactivated,
+    redemptionRestored,
+    redemptionRestoreReason,
     userNotified,
   });
 });

@@ -577,7 +577,8 @@ export default function AdminPayments() {
             <AlertDialogDescription>
               Reactivate the challenge linked to <strong className="font-mono">{resumeTarget?.reference}</strong>?
               This will set the challenge back to <strong>active</strong>, re-enable its MT5 account,
-              give back the trading time lost while refunded, and notify the user.
+              give back the trading time lost while refunded, restore any coupon used
+              (if still active), and notify the user.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
