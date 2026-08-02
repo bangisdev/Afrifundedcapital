@@ -21,9 +21,17 @@ interface TransactionsResponse {
   stats: { total: number; byType: Record<string, number> };
 }
 
+interface PaymentsResponse {
+  payments: any[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  stats: { total: number; byStatus: Record<string, number> };
+}
+
 export default function Wallet() {
   const { data: wallet, isLoading: wLoading } = useApiQuery<any>(["wallet", "my"], "/api/wallets/my");
-  const { data: payments, isLoading: pLoading } = useApiQuery<any[]>(["payments", "my"], "/api/payments/my");
   const requestWithdrawal = useApiMutation<any, any>("post", "/api/wallets/withdraw");
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState("");
@@ -35,6 +43,8 @@ export default function Wallet() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [pPage, setPPage] = useState(1);
+  const [pPageSize, setPPageSize] = useState(10);
   const [selectedPayment, setSelectedPayment] = useState<any>(null);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
 
@@ -67,7 +77,30 @@ export default function Wallet() {
     if (page > totalPages && totalPages > 0) setPage(1);
   }, [totalPages, page]);
 
-  if (wLoading || pLoading) {
+  // Payments list (server-driven pagination)
+  const pParams = new URLSearchParams();
+  pParams.set("page", String(pPage));
+  pParams.set("pageSize", String(pPageSize));
+  const pQuery = `/api/payments/my?${pParams.toString()}`;
+
+  const { data: paymentsData, isLoading: pLoading } = useApiQuery<PaymentsResponse>(["payments", "my", pQuery], pQuery);
+
+  const payments = paymentsData?.payments || [];
+  const pTotal = paymentsData?.total || 0;
+  const pTotalPages = paymentsData?.totalPages || 1;
+  const completedPayments = paymentsData?.stats?.byStatus?.completed || 0;
+
+  // Reset payments page when page size changes
+  useEffect(() => {
+    setPPage(1);
+  }, [pPageSize]);
+
+  // Clamp payments page if the current page exceeds total pages
+  useEffect(() => {
+    if (pPage > pTotalPages && pTotalPages > 0) setPPage(1);
+  }, [pTotalPages, pPage]);
+
+  if (wLoading) {
     return <div className="flex items-center justify-center h-64"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
   }
 
@@ -93,6 +126,8 @@ export default function Wallet() {
 
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
+  const pFrom = pTotal === 0 ? 0 : (pPage - 1) * pPageSize + 1;
+  const pTo = Math.min(pPage * pPageSize, pTotal);
 
   return (
     <div className="space-y-8">
@@ -108,7 +143,7 @@ export default function Wallet() {
         </div>
         <div className="card-subtle p-6 flex flex-col justify-between">
           <div className="flex items-center gap-2 mb-2"><TrendingUp className="h-3.5 w-3.5 text-muted-foreground" /><span className="stat-label">This Month</span></div>
-          <div className="text-sm font-light">{(payments || []).filter((p: any) => p.status === "completed").length} completed payments</div>
+          <div className="text-sm font-light">{completedPayments} completed payments</div>
         </div>
         <div className="card-subtle p-6 flex flex-col items-start justify-center gap-3">
           <Button size="sm" variant="outline" className="text-xs w-full" onClick={() => setShowWithdraw(true)}>
@@ -185,23 +220,49 @@ export default function Wallet() {
       )}
 
       {activeTab === "payments" && (
-        <div className="space-y-1">
-          {(!payments || payments.length === 0) ? (
+        <div className="space-y-4">
+          {pLoading && payments.length === 0 ? (
+            <div className="flex items-center justify-center h-32"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+          ) : payments.length === 0 ? (
             <div className="card-subtle p-8 text-center"><FileText className="h-8 w-8 mx-auto mb-3 text-muted-foreground" /><p className="text-xs text-muted-foreground">No payments yet</p></div>
-          ) : payments.map((p: any) => (
-            <button key={p.id} onClick={() => { setSelectedPayment(p); setShowPaymentDialog(true); }} className="w-full card-subtle p-3.5 flex items-center justify-between text-left hover:bg-secondary/20 transition-colors">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="h-8 w-8 rounded-full border border-border flex items-center justify-center shrink-0">
-                  {p.status === "completed" ? <CheckCircle className="h-3.5 w-3.5 text-foreground" /> : p.status === "failed" ? <XCircle className="h-3.5 w-3.5 text-destructive" /> : <Clock className="h-3.5 w-3.5 text-muted-foreground" />}
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs font-medium truncate">{p.description || "Challenge Purchase"}</div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">{p.reference?.slice(0, 12)}</div>
+          ) : (
+            <>
+              <div className="space-y-1">
+                {payments.map((p: any) => (
+                  <button key={p.id} onClick={() => { setSelectedPayment(p); setShowPaymentDialog(true); }} className="w-full card-subtle p-3.5 flex items-center justify-between text-left hover:bg-secondary/20 transition-colors">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="h-8 w-8 rounded-full border border-border flex items-center justify-center shrink-0">
+                        {p.status === "completed" ? <CheckCircle className="h-3.5 w-3.5 text-foreground" /> : p.status === "failed" ? <XCircle className="h-3.5 w-3.5 text-destructive" /> : <Clock className="h-3.5 w-3.5 text-muted-foreground" />}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-medium truncate">{p.description || "Challenge Purchase"}</div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">{p.reference?.slice(0, 12)}</div>
+                      </div>
+                    </div>
+                    <span className="text-sm font-light tabular-nums">₦{(p.amount || 0).toLocaleString()}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Pagination footer */}
+              <div className="flex items-center justify-between pt-1">
+                <div className="text-[10px] text-muted-foreground">Showing {pFrom}–{pTo} of {pTotal} payments</div>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={pPageSize}
+                    onChange={(e) => setPPageSize(Number(e.target.value))}
+                    className="h-7 px-2 rounded-md border border-input bg-background text-[11px] cursor-pointer outline-none"
+                    aria-label="Rows per page"
+                  >
+                    {[10, 25, 50].map((n) => <option key={n} value={n}>{n} / page</option>)}
+                  </select>
+                  <Button variant="outline" size="sm" className="h-7 px-2.5 text-[11px]" disabled={pPage <= 1} onClick={() => setPPage((p) => p - 1)}>Prev</Button>
+                  <span className="px-2 text-[11px] font-medium tabular-nums">{pPage} / {pTotalPages}</span>
+                  <Button variant="outline" size="sm" className="h-7 px-2.5 text-[11px]" disabled={pPage >= pTotalPages} onClick={() => setPPage((p) => p + 1)}>Next</Button>
                 </div>
               </div>
-              <span className="text-sm font-light tabular-nums">₦{(p.amount || 0).toLocaleString()}</span>
-            </button>
-          ))}
+            </>
+          )}
         </div>
       )}
 

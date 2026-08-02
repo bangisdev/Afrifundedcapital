@@ -79,6 +79,30 @@ vi.mock("@/hooks/use-api", () => ({
         isLoading: false,
       };
     }
+    // Simulate the server-driven payments list: paginate + stats envelope (byStatus).
+    if (dataKey === "payments/my" && Array.isArray(base)) {
+      const query = path.includes("?") ? path.split("?")[1] : "";
+      const params = new URLSearchParams(query);
+      const page = Number(params.get("page") || 1);
+      const pageSize = Number(params.get("pageSize") || 10);
+      const total = base.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      const byStatus = base.reduce<Record<string, number>>((acc, p: any) => {
+        acc[p.status] = (acc[p.status] || 0) + 1;
+        return acc;
+      }, {});
+      return {
+        data: {
+          payments: base.slice((page - 1) * pageSize, page * pageSize),
+          total,
+          page,
+          pageSize,
+          totalPages,
+          stats: { total, byStatus },
+        },
+        isLoading: false,
+      };
+    }
     return { data: base, isLoading: false };
   }),
   useApiMutation: vi.fn((_method: string, _path: string, _onSuccess?: any) => ({
@@ -654,6 +678,55 @@ describe("Wallet Page", () => {
 
       await user.click(screen.getByText("Payment History"));
       expect(screen.getByText("Challenge Purchase")).toBeTruthy();
+    });
+  });
+
+  // ─── Payment history pagination ───────────────────────
+  describe("Payment History Pagination", () => {
+    const manyPayments = () =>
+      Array.from({ length: 15 }, (_, i) =>
+        makePayment({
+          id: i + 1,
+          amount: 1000 * (i + 1),
+          status: "completed",
+          description: `Purchase ${i + 1}`,
+          reference: `FLW_REF_${String(i + 1).padStart(4, "0")}`,
+        }),
+      );
+
+    it("paginates payments with many records", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "payments/my": manyPayments() });
+      render(<Wallet />);
+
+      await user.click(screen.getByText("Payment History"));
+
+      // Page 1 shows the first 10
+      expect(screen.getByText("Purchase 1")).toBeTruthy();
+      expect(screen.getByText("Purchase 10")).toBeTruthy();
+      expect(screen.queryByText("Purchase 11")).toBeNull();
+      expect(screen.getByText("Showing 1–10 of 15 payments")).toBeTruthy();
+
+      // Next page shows the remaining 5
+      await user.click(screen.getByText("Next"));
+      expect(screen.getByText("Purchase 11")).toBeTruthy();
+      expect(screen.getByText("Purchase 15")).toBeTruthy();
+      expect(screen.queryByText("Purchase 1")).toBeNull();
+
+      // Prev returns to page 1
+      await user.click(screen.getByText("Prev"));
+      expect(screen.getByText("Purchase 1")).toBeTruthy();
+    });
+
+    it("changes rows per page for payments", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "payments/my": manyPayments() });
+      render(<Wallet />);
+
+      await user.click(screen.getByText("Payment History"));
+      await user.selectOptions(screen.getByLabelText("Rows per page"), "25");
+      expect(screen.getByText("Purchase 15")).toBeTruthy();
+      expect(screen.getByText("Showing 1–15 of 15 payments")).toBeTruthy();
     });
   });
 

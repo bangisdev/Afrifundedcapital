@@ -254,14 +254,59 @@ describe("GET /api/payments/my", () => {
     const { status, body } = await authGet(app, "/api/payments/my", userCookie);
 
     expect(status).toBe(200);
-    expect(Array.isArray(body)).toBe(true);
+    const env = body as Record<string, any>;
+    expect(Array.isArray(env.payments)).toBe(true);
     // We initiated 2 payments in earlier tests
-    expect((body as unknown[]).length).toBeGreaterThanOrEqual(1);
+    expect(env.payments.length).toBeGreaterThanOrEqual(1);
+    expect(env.total).toBeGreaterThanOrEqual(1);
+    expect(env.page).toBe(1);
+    expect(env.pageSize).toBe(10);
+    expect(env.totalPages).toBeGreaterThanOrEqual(1);
+    expect(env.stats.total).toBeGreaterThanOrEqual(1);
+    expect(typeof env.stats.byStatus).toBe("object");
   });
 
   it("returns 401 without auth", async () => {
     const res = await app.request("/api/payments/my");
     expect(res.status).toBe(401);
+  });
+
+  it("paginates payments server-side", async () => {
+    // Get the user id from an existing payment, then seed 12 more directly.
+    const { body: first } = await authGet(app, "/api/payments/my", userCookie);
+    const env0 = first as Record<string, any>;
+    const userId = env0.payments[0].userId;
+
+    const db = getTestDb();
+    const { payments } = await import("../schema");
+    const now = Date.now();
+    for (let i = 1; i <= 12; i++) {
+      db.insert(payments)
+        .values({
+          userId,
+          amount: 5000 * i,
+          provider: "flutterwave",
+          status: i % 3 === 0 ? "pending" : "completed",
+          reference: `PAG_${now}_${i}`,
+          description: `Purchase ${i}`,
+          createdAt: now - i * 1000,
+        })
+        .run();
+    }
+
+    const page1 = (await authGet(app, "/api/payments/my?page=1&pageSize=10", userCookie))
+      .body as Record<string, any>;
+    expect(page1.payments.length).toBe(10);
+    expect(page1.pageSize).toBe(10);
+    expect(page1.total).toBeGreaterThanOrEqual(13); // 1 existing + 12 seeded
+    expect(page1.totalPages).toBeGreaterThanOrEqual(2);
+    // Stats are unfiltered by pagination
+    expect(page1.stats.total).toBe(page1.total);
+
+    const page2 = (await authGet(app, "/api/payments/my?page=2&pageSize=10", userCookie))
+      .body as Record<string, any>;
+    expect(page2.payments.length).toBeGreaterThan(0);
+    expect(page2.page).toBe(2);
   });
 });
 
@@ -308,8 +353,8 @@ describe("POST /api/payments/admin/:id/refund", () => {
   it("refunds a payment as admin", async () => {
     // Get the first payment
     const { body: payments } = await authGet(app, "/api/payments/my", userCookie);
-    const paymentList = payments as Array<Record<string, unknown>>;
-    const payment = paymentList[0];
+    const env = payments as Record<string, any>;
+    const payment = env.payments[0];
     expect(payment).toBeTruthy();
 
     const { status, body } = await authPost(
