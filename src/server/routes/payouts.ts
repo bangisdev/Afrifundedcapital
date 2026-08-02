@@ -4,6 +4,7 @@ import { profitPayouts, fundedAccounts, userChallenges, users } from "../schema"
 import { eq, desc, asc, and, count, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification } from "../lib/notifications";
+import { writeAuditLog } from "../lib/audit";
 import { sendEmail, payoutApprovedEmail, payoutRejectedEmail, payoutPaidEmail } from "../lib/email";
 
 const app = new Hono();
@@ -326,6 +327,22 @@ app.post("/admin/:id/approve", requireAuth, requireAdmin, async (c) => {
   const payout = db.select().from(profitPayouts).where(eq(profitPayouts.id, id)).get();
   db.update(profitPayouts).set({ status: "approved", processedAt: Date.now() }).where(eq(profitPayouts.id, id)).run();
   if (payout) {
+    try {
+      writeAuditLog(db, {
+        userId: c.get("userId"),
+        action: "payout.approved",
+        entity: "payout",
+        entityId: payout.id,
+        details: {
+          targetUserId: payout.userId,
+          amount: payout.amount,
+          currency: payout.currency,
+        },
+        ipAddress: c.req.header("x-forwarded-for"),
+      });
+    } catch (e) {
+      console.warn("[Audit] Failed to log payout approval:", e);
+    }
     createNotification(db, payout.userId, {
       type: "payout",
       title: "Payout Approved",
@@ -354,6 +371,23 @@ app.post("/admin/bulk-approve", requireAuth, requireAdmin, async (c) => {
     const payout = db.select().from(profitPayouts).where(eq(profitPayouts.id, id)).get();
     if (payout && payout.status === "pending") {
       db.update(profitPayouts).set({ status: "approved", processedAt: now }).where(eq(profitPayouts.id, id)).run();
+      try {
+        writeAuditLog(db, {
+          userId: c.get("userId"),
+          action: "payout.approved",
+          entity: "payout",
+          entityId: payout.id,
+          details: {
+            targetUserId: payout.userId,
+            amount: payout.amount,
+            currency: payout.currency,
+            bulk: true,
+          },
+          ipAddress: c.req.header("x-forwarded-for"),
+        });
+      } catch (e) {
+        console.warn("[Audit] Failed to log bulk payout approval:", e);
+      }
       createNotification(db, payout.userId, {
         type: "payout",
         title: "Payout Approved",
@@ -374,6 +408,23 @@ app.post("/admin/:id/reject", requireAuth, requireAdmin, async (c) => {
   const payout = db.select().from(profitPayouts).where(eq(profitPayouts.id, id)).get();
   db.update(profitPayouts).set({ status: "rejected", rejectionReason: body.reason, processedAt: Date.now() }).where(eq(profitPayouts.id, id)).run();
   if (payout) {
+    try {
+      writeAuditLog(db, {
+        userId: c.get("userId"),
+        action: "payout.rejected",
+        entity: "payout",
+        entityId: payout.id,
+        details: {
+          targetUserId: payout.userId,
+          amount: payout.amount,
+          currency: payout.currency,
+          reason: body.reason || "Not specified",
+        },
+        ipAddress: c.req.header("x-forwarded-for"),
+      });
+    } catch (e) {
+      console.warn("[Audit] Failed to log payout rejection:", e);
+    }
     createNotification(db, payout.userId, {
       type: "payout",
       title: "Payout Rejected",
@@ -402,6 +453,23 @@ app.post("/admin/bulk-mark-paid", requireAuth, requireAdmin, async (c) => {
     const payout = db.select().from(profitPayouts).where(eq(profitPayouts.id, id)).get();
     if (payout && payout.status === "approved") {
       db.update(profitPayouts).set({ status: "paid", processedAt: now }).where(eq(profitPayouts.id, id)).run();
+      try {
+        writeAuditLog(db, {
+          userId: c.get("userId"),
+          action: "payout.marked_paid",
+          entity: "payout",
+          entityId: payout.id,
+          details: {
+            targetUserId: payout.userId,
+            amount: payout.amount,
+            currency: payout.currency,
+            bulk: true,
+          },
+          ipAddress: c.req.header("x-forwarded-for"),
+        });
+      } catch (e) {
+        console.warn("[Audit] Failed to log bulk payout paid:", e);
+      }
       createNotification(db, payout.userId, {
         type: "payout",
         title: "Payout Sent",
@@ -427,6 +495,22 @@ app.post("/admin/:id/mark-paid", requireAuth, requireAdmin, async (c) => {
   const payout = db.select().from(profitPayouts).where(eq(profitPayouts.id, id)).get();
   db.update(profitPayouts).set({ status: "paid", processedAt: Date.now() }).where(eq(profitPayouts.id, id)).run();
   if (payout) {
+    try {
+      writeAuditLog(db, {
+        userId: c.get("userId"),
+        action: "payout.marked_paid",
+        entity: "payout",
+        entityId: payout.id,
+        details: {
+          targetUserId: payout.userId,
+          amount: payout.amount,
+          currency: payout.currency,
+        },
+        ipAddress: c.req.header("x-forwarded-for"),
+      });
+    } catch (e) {
+      console.warn("[Audit] Failed to log payout paid:", e);
+    }
     createNotification(db, payout.userId, {
       type: "payout",
       title: "Payout Sent",

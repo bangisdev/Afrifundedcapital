@@ -14,6 +14,8 @@ import {
   getTestDb,
   getTestSqlite,
 } from "./setup";
+import { auditLogs } from "../schema";
+import { eq, desc } from "drizzle-orm";
 
 let app: Hono;
 let userCookie: string;
@@ -221,6 +223,16 @@ describe("POST /api/kyc/admin/:id/approve", () => {
 
     expect(status).toBe(200);
     expect((body as Record<string, unknown>).success).toBe(true);
+
+    // Audit log entry written by the approving admin
+    const db = getTestDb();
+    const audit = db.select().from(auditLogs)
+      .where(eq(auditLogs.action, "kyc.approved"))
+      .orderBy(desc(auditLogs.timestamp))
+      .get();
+    expect(audit).toBeTruthy();
+    expect(audit?.entity).toBe("kyc_document");
+    expect(audit?.details).toContain("passport");
   });
 
   it("returns 404 for non-existent document", async () => {
@@ -254,6 +266,16 @@ describe("POST /api/kyc/admin/:id/reject", () => {
 
     expect(status).toBe(200);
     expect((body as Record<string, unknown>).success).toBe(true);
+
+    // Audit log entry written by the rejecting admin, with the reason captured
+    const db = getTestDb();
+    const audit = db.select().from(auditLogs)
+      .where(eq(auditLogs.action, "kyc.rejected"))
+      .orderBy(desc(auditLogs.timestamp))
+      .get();
+    expect(audit).toBeTruthy();
+    expect(audit?.entity).toBe("kyc_document");
+    expect(audit?.details).toContain("Image is blurry");
   });
 
   it("returns 404 for non-existent document", async () => {

@@ -13,8 +13,8 @@ import {
   authPut,
   getTestDb,
 } from "./setup";
-import { users, mt5Accounts, fundedAccounts, profitPayouts, userChallenges } from "../schema";
-import { eq } from "drizzle-orm";
+import { users, mt5Accounts, fundedAccounts, profitPayouts, userChallenges, auditLogs } from "../schema";
+import { eq, desc } from "drizzle-orm";
 
 let app: Hono;
 let userCookie: string;
@@ -306,6 +306,15 @@ describe("POST /api/payouts/admin/:id/approve", () => {
     const updated = db.select().from(profitPayouts).where(eq(profitPayouts.id, payout.id)).get();
     expect(updated?.status).toBe("approved");
     expect(updated?.processedAt).toBeTruthy();
+
+    // Audit log entry written by the approving admin
+    const audit = db.select().from(auditLogs)
+      .where(eq(auditLogs.action, "payout.approved"))
+      .orderBy(desc(auditLogs.timestamp))
+      .get();
+    expect(audit).toBeTruthy();
+    expect(audit?.entity).toBe("payout");
+    expect(audit?.details).toContain(`"amount":${payout.amount}`);
   });
 
   it("returns 403 for non-admin", async () => {
@@ -346,6 +355,14 @@ describe("POST /api/payouts/admin/:id/reject", () => {
     const updated = db.select().from(profitPayouts).where(eq(profitPayouts.id, newPayout.id)).get();
     expect(updated?.status).toBe("rejected");
     expect(updated?.rejectionReason).toBe("Insufficient trading history");
+
+    // Audit log entry written by the rejecting admin with the reason captured
+    const audit = db.select().from(auditLogs)
+      .where(eq(auditLogs.action, "payout.rejected"))
+      .orderBy(desc(auditLogs.timestamp))
+      .get();
+    expect(audit).toBeTruthy();
+    expect(audit?.details).toContain("Insufficient trading history");
   });
 
   it("returns 403 for non-admin", async () => {

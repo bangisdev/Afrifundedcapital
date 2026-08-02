@@ -4,6 +4,7 @@ import { users, sessions, auditLogs, settings, wallets, affiliates } from "../sc
 import { eq, desc, asc, like, count, sql, and, or, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification } from "../lib/notifications";
+import { writeAuditLog } from "../lib/audit";
 
 const app = new Hono();
 
@@ -230,7 +231,29 @@ app.put("/:id/role", requireAuth, requireAdmin, async (c) => {
   const body = await c.req.json();
   const db = getDb();
 
+  const target = db.select().from(users).where(eq(users.id, id)).get();
+  if (!target) return c.json({ error: "User not found" }, 404);
+  const oldRole = target.role || "user";
+
   db.update(users).set({ role: body.role, updatedAt: Date.now() }).where(eq(users.id, id)).run();
+
+  try {
+    writeAuditLog(db, {
+      userId: c.get("userId"),
+      action: "user.role_changed",
+      entity: "user",
+      entityId: id,
+      details: {
+        targetEmail: target.email,
+        fromRole: oldRole,
+        toRole: body.role,
+      },
+      ipAddress: c.req.header("x-forwarded-for"),
+    });
+  } catch (e) {
+    console.warn("[Audit] Failed to log role change:", e);
+  }
+
   return c.json({ success: true });
 });
 
@@ -240,11 +263,31 @@ app.put("/:id/status", requireAuth, requireAdmin, async (c) => {
   const body = await c.req.json();
   const db = getDb();
 
+  const target = db.select().from(users).where(eq(users.id, id)).get();
+  if (!target) return c.json({ error: "User not found" }, 404);
+
   if (body.locked) {
     db.update(users).set({ accountLockedUntil: Date.now() + 24 * 60 * 60 * 1000, updatedAt: Date.now() }).where(eq(users.id, id)).run();
   } else {
     db.update(users).set({ accountLockedUntil: null, loginAttempts: 0, updatedAt: Date.now() }).where(eq(users.id, id)).run();
   }
+
+  try {
+    writeAuditLog(db, {
+      userId: c.get("userId"),
+      action: body.locked ? "user.locked" : "user.unlocked",
+      entity: "user",
+      entityId: id,
+      details: {
+        targetEmail: target.email,
+        locked: !!body.locked,
+      },
+      ipAddress: c.req.header("x-forwarded-for"),
+    });
+  } catch (e) {
+    console.warn("[Audit] Failed to log status change:", e);
+  }
+
   return c.json({ success: true });
 });
 
@@ -302,6 +345,23 @@ app.delete("/:id", requireAuth, requireAdmin, async (c) => {
     sqlite.prepare("DELETE FROM user_challenges WHERE user_id = ?").run(id);
   } catch (e) {
     console.warn("[Users] Cascade delete warning:", e);
+  }
+
+  try {
+    writeAuditLog(db, {
+      userId: callerId,
+      action: "user.deleted",
+      entity: "user",
+      entityId: id,
+      details: {
+        targetEmail: target.email,
+        targetRole: target.role || "user",
+        deletedBy: callerId,
+      },
+      ipAddress: c.req.header("x-forwarded-for"),
+    });
+  } catch (e) {
+    console.warn("[Audit] Failed to log user deletion:", e);
   }
 
   db.delete(users).where(eq(users.id, id)).run();

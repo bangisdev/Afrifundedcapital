@@ -4,6 +4,7 @@ import { kycDocuments, users } from "../schema";
 import { eq, desc, asc, and, or, like, count, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { notify } from "../lib/notifications";
+import { writeAuditLog } from "../lib/audit";
 import { kycApprovedEmail, kycRejectedEmail, kycDocumentUploadedEmail } from "../lib/email";
 
 const app = new Hono();
@@ -325,6 +326,23 @@ app.post("/admin/:id/approve", requireAuth, requireAdmin, async (c) => {
   const userRecord = db.select().from(users).where(eq(users.id, doc.userId)).get();
   const userName = userRecord?.name || "Trader";
 
+  try {
+    writeAuditLog(db, {
+      userId: adminId,
+      action: "kyc.approved",
+      entity: "kyc_document",
+      entityId: doc.id,
+      details: {
+        targetUserId: doc.userId,
+        documentType: doc.documentType,
+        userFullyVerified: hasAllRequired || hasAlternative,
+      },
+      ipAddress: c.req.header("x-forwarded-for"),
+    });
+  } catch (e) {
+    console.warn("[Audit] Failed to log KYC approval:", e);
+  }
+
   if (hasAllRequired || hasAlternative) {
     db.update(users).set({
       kycStatus: "approved",
@@ -367,6 +385,23 @@ app.post("/admin/:id/reject", requireAuth, requireAdmin, async (c) => {
     reviewedBy: adminId,
     reviewedAt: Date.now(),
   }).where(eq(kycDocuments.id, id)).run();
+
+  try {
+    writeAuditLog(db, {
+      userId: adminId,
+      action: "kyc.rejected",
+      entity: "kyc_document",
+      entityId: doc.id,
+      details: {
+        targetUserId: doc.userId,
+        documentType: doc.documentType,
+        reason: body.reason || "Document does not meet requirements",
+      },
+      ipAddress: c.req.header("x-forwarded-for"),
+    });
+  } catch (e) {
+    console.warn("[Audit] Failed to log KYC rejection:", e);
+  }
 
   // Get user name for email
   const userRecord = db.select().from(users).where(eq(users.id, doc.userId)).get();
