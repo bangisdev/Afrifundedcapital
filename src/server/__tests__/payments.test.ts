@@ -640,4 +640,159 @@ describe("POST /api/payments/admin/:id/refund", () => {
     const { status } = await authPost(app, "/api/payments/admin/1/refund", userCookie);
     expect(status).toBe(403);
   });
+
+  it("returns 404 for a missing payment", async () => {
+    const { status } = await authPost(app, "/api/payments/admin/999999/refund", adminCookie);
+    expect(status).toBe(404);
+  });
+
+  it("deactivates the challenge, suspends the MT5 account, voids the redemption, and notifies the user when a completed payment is refunded", async () => {
+    const db = getTestDb();
+    const { users, payments, challengeTemplates, accountSizes, coupons, userChallenges, mt5Accounts, couponRedemptions, notifications } = await import("../schema");
+    const { eq } = await import("drizzle-orm");
+
+    const trader = db.select().from(users).where(eq(users.email, TEST_USER.email)).get();
+    expect(trader).toBeTruthy();
+    const now = Date.now();
+
+    // Seed a catalog entry (template + size + coupon)
+    const template = db.insert(challengeTemplates).values({
+      name: "Refund Flow Challenge",
+      description: "Refund flow test",
+      type: "two_step",
+      isActive: true,
+      profitTarget: 10,
+      dailyDrawdown: 5,
+      maxDrawdown: 10,
+      maxLeverage: 100,
+      minTradingDays: 5,
+      maxTradingDays: 30,
+      allowWeekendHolding: false,
+      allowNewsTrading: true,
+      allowEATrading: true,
+      allowCopyTrading: false,
+      price: 50000,
+      currency: "NGN",
+      durationDays: 30,
+      createdBy: trader!.id,
+      createdAt: now,
+      updatedAt: now,
+    }).returning().get();
+
+    const size = db.insert(accountSizes).values({
+      label: "$10,000",
+      size: 10000,
+      currency: "NGN",
+      templateId: template.id,
+      price: 50000,
+      isActive: true,
+      sortOrder: 1,
+    }).returning().get();
+
+    const coupon = db.insert(coupons).values({
+      code: "REFUND10",
+      discountType: "fixed",
+      discountValue: 5000,
+      isActive: true,
+      maxUses: 5,
+      createdBy: trader!.id,
+      createdAt: now,
+    }).returning().get();
+
+    // Initiate the purchase with the coupon
+    const init = await authPost(app, "/api/payments/initiate", userCookie, {
+      amount: 45000,
+      originalAmount: 50000,
+      currency: "NGN",
+      templateId: String(template.id),
+      accountSizeId: String(size.id),
+      couponCode: "REFUND10",
+      description: "Refund Flow Challenge",
+    });
+    expect(init.status).toBe(200);
+    const initBody = init.body as Record<string, any>;
+    const paymentId = initBody.paymentId as number;
+
+    // Complete it via the sandbox webhook (charge.completed)
+    const payment = db.select().from(payments).where(eq(payments.id, paymentId)).get();
+    const webRes = await app.request("/api/payments/webhook/flutterwave", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "verif-hash": "test123" },
+      body: JSON.stringify({
+        event: "charge.completed",
+        data: {
+          id: Math.floor(100000 + Math.random() * 900000),
+          tx_ref: payment!.reference,
+          status: "successful",
+          amount: 45000,
+          currency: "NGN",
+          customer: { email: TEST_USER.email, name: TEST_USER.name },
+          payment_type: "card",
+        },
+      }),
+    });
+    expect(webRes.status).toBe(200);
+
+    // Pre-conditions: challenge active with a linked MT5 account + a redemption
+    const challenge = db.select().from(userChallenges).where(eq(userChallenges.paymentId, paymentId)).get();
+    expect(challenge).toBeTruthy();
+    expect(challenge!.status).toBe("active");
+    expect(challenge!.mt5AccountId).toBeTruthy();
+
+    const mt5Before = db.select().from(mt5Accounts).where(eq(mt5Accounts.id, challenge!.mt5AccountId!)).get();
+    expect(mt5Before!.isActive).toBe(true);
+    expect(mt5Before!.isSuspended).toBe(false);
+
+    const redemptionBefore = db.select().from(couponRedemptions).where(eq(couponRedemptions.paymentId, paymentId)).get();
+    expect(redemptionBefore).toBeTruthy();
+
+    // Refund as admin
+    const refund = await authPost(app, `/api/payments/admin/${paymentId}/refund`, adminCookie);
+    expect(refund.status).toBe(200);
+    const refundBody = refund.body as Record<string, any>;
+    expect(refundBody.success).toBe(true);
+    expect(refundBody.challengeDeactivated).toBe(1);
+    expect(refundBody.mt5Suspended).toBe(1);
+    expect(refundBody.redemptionVoided).toBe(true);
+    expect(refundBody.userNotified).toBe(true);
+
+    // Payment marked refunded
+    const paymentAfter = db.select().from(payments).where(eq(payments.id, paymentId)).get();
+    expect(paymentAfter!.status).toBe("refunded");
+
+    // Challenge deactivated
+    const challengeAfter = db.select().from(userChallenges).where(eq(userChallenges.paymentId, paymentId)).get();
+    expect(challengeAfter!.status).toBe("refunded");
+
+    // MT5 suspended
+    const mt5After = db.select().from(mt5Accounts).where(eq(mt5Accounts.id, challenge!.mt5AccountId!)).get();
+    expect(mt5After!.isActive).toBe(false);
+    expect(mt5After!.isSuspended).toBe(true);
+
+    // Redemption voided + coupon usage released
+    const redemptionAfter = db.select().from(couponRedemptions).where(eq(couponRedemptions.paymentId, paymentId)).get();
+    expect(redemptionAfter).toBeUndefined();
+    const couponAfter = db.select().from(coupons).where(eq(coupons.id, coupon.id)).get();
+    expect(couponAfter!.currentUses).toBe(0);
+
+    // User notified
+    const notifs = db.select().from(notifications).where(eq(notifications.userId, trader!.id)).all();
+    expect(notifs.some((n) => n.title === "Payment Refunded")).toBe(true);
+  });
+
+  it("is idempotent — refunding an already-refunded payment stays successful without double-voiding", async () => {
+    const db = getTestDb();
+    const { payments } = await import("../schema");
+    const { eq } = await import("drizzle-orm");
+
+    const payment = db.select().from(payments).where(eq(payments.status, "refunded")).get();
+    expect(payment).toBeTruthy();
+
+    const res = await authPost(app, `/api/payments/admin/${payment!.id}/refund`, adminCookie);
+    expect(res.status).toBe(200);
+    const body = res.body as Record<string, any>;
+    expect(body.success).toBe(true);
+    expect(body.challengeDeactivated).toBe(0);
+    expect(body.redemptionVoided).toBe(false);
+  });
 });

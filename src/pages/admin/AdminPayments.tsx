@@ -528,7 +528,8 @@ export default function AdminPayments() {
             <AlertDialogDescription>
               Are you sure you want to refund <strong>{formatNgn(refundTarget?.amount || 0)}</strong> for
               reference <strong className="font-mono">{refundTarget?.reference}</strong>?
-              This will mark the payment as refunded and notify the user.
+              This will mark the payment as refunded, <strong>deactivate the linked challenge</strong>,
+              suspend its MT5 account, void any coupon used, and notify the user.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

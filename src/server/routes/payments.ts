@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
-import { payments, paymentLogs, flutterwaveTransactions, challengeTemplates, accountSizes, userChallenges, mt5Accounts, settings, coupons, couponRedemptions, users, referrals, affiliates, commissions } from "../schema";
+import { payments, paymentLogs, flutterwaveTransactions, challengeTemplates, accountSizes, userChallenges, mt5Accounts, fundedAccounts, settings, coupons, couponRedemptions, users, referrals, affiliates, commissions } from "../schema";
 import { eq, desc, asc, count, and, or, like, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { notify } from "../lib/notifications";
@@ -834,11 +834,90 @@ app.post("/admin/test-webhook", requireAuth, requireAdmin, async (c) => {
 });
 
 // Admin: Refund payment
+// Deactivates any challenge linked to the payment (status → refunded),
+// suspends its MT5 account, terminates any funded account, voids the coupon
+// redemption so coupon usage is released, and notifies the user.
 app.post("/admin/:id/refund", requireAuth, requireAdmin, async (c) => {
   const id = parseInt(c.req.param("id"));
   const db = getDb();
-  db.update(payments).set({ status: "refunded", completedAt: Date.now() }).where(eq(payments.id, id)).run();
-  return c.json({ success: true });
+  const now = Date.now();
+
+  const payment = db.select().from(payments).where(eq(payments.id, id)).get();
+  if (!payment) return c.json({ error: "Payment not found" }, 404);
+
+  db.update(payments).set({ status: "refunded", completedAt: now }).where(eq(payments.id, id)).run();
+
+  let challengeDeactivated = 0;
+  let mt5Suspended = 0;
+  let fundedAccountTerminated = 0;
+
+  // Find challenges created from this payment and deactivate them.
+  const challenges = db.select().from(userChallenges).where(eq(userChallenges.paymentId, id)).all();
+  for (const challenge of challenges) {
+    try {
+      if (challenge.status !== "refunded") {
+        db.update(userChallenges)
+          .set({ status: "refunded", updatedAt: now })
+          .where(eq(userChallenges.id, challenge.id))
+          .run();
+        challengeDeactivated++;
+      }
+
+      // Suspend the linked MT5 account so the trader can no longer trade it.
+      if (challenge.mt5AccountId) {
+        const mt5 = db.select().from(mt5Accounts).where(eq(mt5Accounts.id, challenge.mt5AccountId)).get();
+        if (mt5 && mt5.isActive) {
+          db.update(mt5Accounts)
+            .set({ isActive: false, isSuspended: true })
+            .where(eq(mt5Accounts.id, mt5.id))
+            .run();
+          mt5Suspended++;
+        }
+      }
+
+      // Terminate any funded account created from this challenge.
+      const funded = db.select().from(fundedAccounts).where(eq(fundedAccounts.challengeId, challenge.id)).get();
+      if (funded && funded.isActive) {
+        db.update(fundedAccounts)
+          .set({ isActive: false, terminatedAt: now, terminationReason: "payment_refunded" })
+          .where(eq(fundedAccounts.id, funded.id))
+          .run();
+        fundedAccountTerminated++;
+      }
+    } catch {
+      // Never let one challenge block the refund of the payment
+    }
+  }
+
+  // Void the coupon redemption (idempotent — no-op if already voided).
+  let redemptionVoided = false;
+  try {
+    redemptionVoided = voidRedemptionForPayment(db, id);
+  } catch {}
+
+  // Notify the user so they know the challenge was deactivated.
+  let userNotified = false;
+  try {
+    const payer = db.select().from(users).where(eq(users.id, payment.userId)).get();
+    if (payer) {
+      notify(db, payment.userId, {
+        type: "payment",
+        title: "Payment Refunded",
+        message: `Your payment of ${payment.currency} ${payment.amount.toLocaleString()} has been refunded. ${challengeDeactivated > 0 ? "The linked challenge has been deactivated. " : ""}If you have questions, contact support.`,
+        link: "/dashboard/payments",
+      });
+      userNotified = true;
+    }
+  } catch {}
+
+  return c.json({
+    success: true,
+    challengeDeactivated,
+    mt5Suspended,
+    fundedAccountTerminated,
+    redemptionVoided,
+    userNotified,
+  });
 });
 
 export default app;
