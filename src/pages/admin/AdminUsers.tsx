@@ -18,6 +18,9 @@ import {
   UserCheck,
   UserX,
   Eye,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -108,6 +111,8 @@ export default function AdminUsers() {
   const [kycFilter, setKycFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [sortBy, setSortBy] = useState("createdAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showUserDetail, setShowUserDetail] = useState(false);
   const [editingRole, setEditingRole] = useState<number | null>(null);
@@ -120,14 +125,56 @@ export default function AdminUsers() {
     return () => clearTimeout(t);
   }, [search]);
 
-  // Reset to first page whenever filters or page size change
+  // Reset to first page whenever filters, page size, or sort change
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, roleFilter, kycFilter, pageSize]);
+  }, [debouncedSearch, roleFilter, kycFilter, pageSize, sortBy, sortOrder]);
+
+  // Sortable columns matching the server whitelist for /api/users/list
+  const SORT_COLUMNS: Array<{ key: string; label: string }> = [
+    { key: "name", label: "User" },
+    { key: "role", label: "Role" },
+    { key: "kycStatus", label: "KYC" },
+    { key: "createdAt", label: "Joined" },
+  ];
+
+  const handleSort = (key: string) => {
+    if (sortBy === key) {
+      setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(key);
+      setSortOrder("desc");
+    }
+  };
+
+  const sortHeader = (sortKey: string, label: string) => {
+    const active = sortBy === sortKey;
+    return (
+      <button
+        key={sortKey}
+        type="button"
+        onClick={() => handleSort(sortKey)}
+        aria-label={`Sort by ${label}`}
+        aria-pressed={active}
+        className={`inline-flex items-center gap-1 font-medium transition-colors rounded px-1 py-0.5 -mx-1 ${
+          active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        {label}
+        {active ? (
+          sortOrder === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-50" />
+        )}
+      </button>
+    );
+  };
 
   const params = new URLSearchParams();
   params.set("page", String(page));
   params.set("pageSize", String(pageSize));
+  params.set("sortBy", sortBy);
+  params.set("sortOrder", sortOrder);
   if (debouncedSearch) params.set("search", debouncedSearch);
   if (roleFilter !== "all") params.set("role", roleFilter);
   if (kycFilter !== "all") params.set("kycStatus", kycFilter);
@@ -292,11 +339,11 @@ export default function AdminUsers() {
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b bg-muted/50">
-                <th className="text-left p-3 font-medium text-muted-foreground">User</th>
-                <th className="text-left p-3 font-medium text-muted-foreground hidden md:table-cell">Role</th>
-                <th className="text-left p-3 font-medium text-muted-foreground hidden lg:table-cell">KYC</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">{sortHeader("name", "User")}</th>
+                <th className="text-left p-3 font-medium text-muted-foreground hidden md:table-cell">{sortHeader("role", "Role")}</th>
+                <th className="text-left p-3 font-medium text-muted-foreground hidden lg:table-cell">{sortHeader("kycStatus", "KYC")}</th>
                 <th className="text-left p-3 font-medium text-muted-foreground hidden lg:table-cell">Status</th>
-                <th className="text-left p-3 font-medium text-muted-foreground hidden xl:table-cell">Joined</th>
+                <th className="text-left p-3 font-medium text-muted-foreground hidden xl:table-cell">{sortHeader("createdAt", "Joined")}</th>
                 <th className="text-right p-3 font-medium text-muted-foreground">Actions</th>
               </tr>
             </thead>

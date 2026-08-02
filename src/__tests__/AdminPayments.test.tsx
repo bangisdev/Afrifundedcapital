@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
+import { useApiQuery } from "@/hooks/use-api";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/hooks/use-auth", () => ({
@@ -146,6 +147,49 @@ describe("AdminPayments Page", () => {
         expect(screen.getByText("FLW-001")).toBeTruthy();
         expect(screen.queryByText("PSK-002")).toBeNull();
       });
+    });
+  });
+
+  describe("Sortable Headers", () => {
+    it("renders sortable column headers with the default column active", () => {
+      setQueryData({ "admin/payments": [
+        { id: 1, reference: "FLW-001", amount: 50000, status: "completed", provider: "flutterwave", userId: 1, createdAt: Date.now() },
+      ]}); render(<AdminPayments />);
+
+      for (const label of ["Reference", "Amount", "Provider", "Status", "Date"]) {
+        expect(screen.getByRole("button", { name: `Sort by ${label}` })).toBeTruthy();
+      }
+      // Default sort is createdAt desc → Date is active
+      expect(screen.getByRole("button", { name: "Sort by Date" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("calls the API with sortBy/sortOrder when a header is clicked", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "admin/payments": [
+        { id: 1, reference: "FLW-001", amount: 50000, status: "completed", provider: "flutterwave", userId: 1, createdAt: Date.now() },
+      ]}); render(<AdminPayments />);
+
+      await user.click(screen.getByRole("button", { name: "Sort by Amount" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const paymentsCall = calls.find((c) => String(c[1]).includes("/api/payments/admin/all?") && String(c[1]).includes("sortBy=amount"));
+      expect(paymentsCall).toBeTruthy();
+      expect(String(paymentsCall![1])).toContain("sortOrder=desc");
+      expect(screen.getByRole("button", { name: "Sort by Amount" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("toggles to ascending when the active column is clicked again", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "admin/payments": [
+        { id: 1, reference: "FLW-001", amount: 50000, status: "completed", provider: "flutterwave", userId: 1, createdAt: Date.now() },
+      ]}); render(<AdminPayments />);
+
+      await user.click(screen.getByRole("button", { name: "Sort by Amount" }));
+      await user.click(screen.getByRole("button", { name: "Sort by Amount" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const ascCall = calls.find((c) => String(c[1]).includes("/api/payments/admin/all?") && String(c[1]).includes("sortBy=amount&sortOrder=asc"));
+      expect(ascCall).toBeTruthy();
     });
   });
 

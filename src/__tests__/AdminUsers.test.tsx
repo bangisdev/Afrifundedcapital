@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
+import { useApiQuery } from "@/hooks/use-api";
 
 // ─── Mock: sonner ──────────────────────────────────────────
 vi.mock("sonner", () => ({
@@ -549,6 +550,47 @@ describe("AdminUsers Page", () => {
     });
   });
 
+  // ─── Sortable headers ──────────────────────────────────
+  describe("Sortable Headers", () => {
+    it("renders sortable column headers with the default column active", () => {
+      setQueryData({ "admin/users": [makeUser()] });
+      render(<AdminUsers />);
+
+      for (const label of ["User", "Role", "KYC", "Joined"]) {
+        expect(screen.getByRole("button", { name: `Sort by ${label}` })).toBeTruthy();
+      }
+      // Default sort is createdAt desc → Joined is active
+      expect(screen.getByRole("button", { name: "Sort by Joined" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("calls the API with sortBy/sortOrder when a header is clicked", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "admin/users": [makeUser()] });
+      render(<AdminUsers />);
+
+      await user.click(screen.getByRole("button", { name: "Sort by Role" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const usersCall = calls.find((c) => String(c[1]).includes("/api/users/list?") && String(c[1]).includes("sortBy=role"));
+      expect(usersCall).toBeTruthy();
+      expect(String(usersCall![1])).toContain("sortOrder=desc");
+      expect(screen.getByRole("button", { name: "Sort by Role" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("toggles to ascending when the active column is clicked again", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "admin/users": [makeUser()] });
+      render(<AdminUsers />);
+
+      await user.click(screen.getByRole("button", { name: "Sort by Role" }));
+      await user.click(screen.getByRole("button", { name: "Sort by Role" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const ascCall = calls.find((c) => String(c[1]).includes("/api/users/list?") && String(c[1]).includes("sortBy=role&sortOrder=asc"));
+      expect(ascCall).toBeTruthy();
+    });
+  });
+
   // ─── User detail modal ──────────────────────────────────
   describe("User Detail Modal", () => {
     it("opens detail modal on view click", async () => {
@@ -620,8 +662,10 @@ describe("AdminUsers Page", () => {
         "admin/users": [makeUser({ role: "user", name: "Regular" })],
       });
       render(<AdminUsers />);
-      const roleBadge = screen.getByText("User", { selector: "button" });
-      await user.click(roleBadge);
+      // "User" appears in both the sort header (aria-label) and the role badge — pick the badge
+      const roleBadge = screen.getAllByText("User", { selector: "button" }).find((el) => !el.getAttribute("aria-label"));
+      expect(roleBadge).toBeTruthy();
+      await user.click(roleBadge!);
       const selects = document.querySelectorAll("select");
       expect(selects.length).toBeGreaterThanOrEqual(3);
     });

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
 import { users, sessions, auditLogs, settings, wallets, affiliates } from "../schema";
-import { eq, desc, like, count, sql, and, or, type SQL } from "drizzle-orm";
+import { eq, desc, asc, like, count, sql, and, or, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification } from "../lib/notifications";
 
@@ -114,6 +114,20 @@ app.get("/list", requireAuth, requireAdmin, (c) => {
   const page = Math.max(1, parseInt(c.req.query("page") || "1") || 1);
   const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query("pageSize") || "20") || 20));
 
+  // Sorting (whitelisted columns, asc/desc)
+  const SORTABLE: Record<string, SQLWrapper> = {
+    id: users.id,
+    name: users.name,
+    email: users.email,
+    role: users.role,
+    kycStatus: users.kycStatus,
+    createdAt: users.createdAt,
+  };
+  const qSortBy = String(c.req.query("sortBy") || "createdAt");
+  const qSortOrder = String(c.req.query("sortOrder") || "desc");
+  const sortCol = SORTABLE[qSortBy] || users.createdAt;
+  const sortOrder = qSortOrder.toLowerCase() === "asc" ? asc(sortCol) : desc(sortCol);
+
   // Filters
   const search = (c.req.query("search") || "").trim();
   const role = c.req.query("role") || "";
@@ -144,7 +158,7 @@ app.get("/list", requireAuth, requireAdmin, (c) => {
     .select()
     .from(users)
     .where(whereClause)
-    .orderBy(desc(users.createdAt))
+    .orderBy(sortOrder)
     .limit(pageSize)
     .offset((page - 1) * pageSize)
     .all();

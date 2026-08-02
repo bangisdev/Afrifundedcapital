@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
+import { useApiQuery } from "@/hooks/use-api";
 
 // ─── Mock: sonner ──────────────────────────────────────────
 vi.mock("sonner", () => ({
@@ -30,7 +31,9 @@ const mockMutateAsync = vi.fn().mockResolvedValue({ id: 99 });
 
 vi.mock("@/hooks/use-api", () => ({
   useApiQuery: vi.fn((key: string[]) => {
-    const dataKey = `${key.join("/")}`;
+    // The challenges list passes a query-suffixed key (["admin", "allChallenges", "/api/..."]),
+    // so look up by the stable prefix (first two segments).
+    const dataKey = key.slice(0, 2).join("/");
     if (queryDataMap[dataKey] === undefined) {
       return { data: undefined, isLoading: true, refetch: mockRefetch };
     }
@@ -489,6 +492,51 @@ describe("AdminChallenges Page", () => {
       expect(screen.getByText("User 10")).toBeTruthy();
       expect(screen.getByText("User 20")).toBeTruthy();
       expect(screen.getByText("User 30")).toBeTruthy();
+    });
+  });
+
+  // ─── Sortable challenges headers ───────────────────────
+  describe("Sortable Challenges Headers", () => {
+    it("renders sortable column headers with the default column active", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "admin/allChallenges": [makeChallenge()] });
+      render(<AdminChallenges />);
+      await user.click(screen.getByText(/All Challenges/));
+
+      for (const label of ["ID", "Account Size", "Amount Paid", "Status", "Created"]) {
+        expect(screen.getByRole("button", { name: `Sort by ${label}` })).toBeTruthy();
+      }
+      // Default sort is createdAt desc → Created is active
+      expect(screen.getByRole("button", { name: "Sort by Created" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("calls the API with sortBy/sortOrder when a header is clicked", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "admin/allChallenges": [makeChallenge()] });
+      render(<AdminChallenges />);
+      await user.click(screen.getByText(/All Challenges/));
+
+      await user.click(screen.getByRole("button", { name: "Sort by Account Size" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const challengesCall = calls.find((c) => String(c[1]).includes("/api/challenges/admin/all?") && String(c[1]).includes("sortBy=accountSize"));
+      expect(challengesCall).toBeTruthy();
+      expect(String(challengesCall![1])).toContain("sortOrder=desc");
+      expect(screen.getByRole("button", { name: "Sort by Account Size" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("toggles to ascending when the active column is clicked again", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "admin/allChallenges": [makeChallenge()] });
+      render(<AdminChallenges />);
+      await user.click(screen.getByText(/All Challenges/));
+
+      await user.click(screen.getByRole("button", { name: "Sort by Account Size" }));
+      await user.click(screen.getByRole("button", { name: "Sort by Account Size" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const ascCall = calls.find((c) => String(c[1]).includes("/api/challenges/admin/all?") && String(c[1]).includes("sortBy=accountSize&sortOrder=asc"));
+      expect(ascCall).toBeTruthy();
     });
   });
 

@@ -18,6 +18,9 @@ import {
   Search,
   X,
   RotateCcw,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -77,6 +80,8 @@ export default function AdminPayments() {
   const [providerFilter, setProviderFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [sortBy, setSortBy] = useState("createdAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [refundTarget, setRefundTarget] = useState<any>(null);
   const [tab, setTab] = useState<"transactions" | "analytics">("transactions");
 
@@ -86,14 +91,57 @@ export default function AdminPayments() {
     return () => clearTimeout(t);
   }, [search]);
 
-  // Reset to first page whenever filters or page size change
+  // Reset to first page whenever filters, page size, or sort change
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, statusFilter, providerFilter, pageSize]);
+  }, [debouncedSearch, statusFilter, providerFilter, pageSize, sortBy, sortOrder]);
+
+  // Sortable columns matching the server whitelist for /api/payments/admin/all
+  const SORT_COLUMNS: Array<{ key: string; label: string }> = [
+    { key: "reference", label: "Reference" },
+    { key: "amount", label: "Amount" },
+    { key: "provider", label: "Provider" },
+    { key: "status", label: "Status" },
+    { key: "createdAt", label: "Date" },
+  ];
+
+  const handleSort = (key: string) => {
+    if (sortBy === key) {
+      setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(key);
+      setSortOrder("desc");
+    }
+  };
+
+  const sortHeader = (sortKey: string, label: string) => {
+    const active = sortBy === sortKey;
+    return (
+      <button
+        key={sortKey}
+        type="button"
+        onClick={() => handleSort(sortKey)}
+        aria-label={`Sort by ${label}`}
+        aria-pressed={active}
+        className={`inline-flex items-center gap-1 font-medium transition-colors rounded px-1 py-0.5 -mx-1 ${
+          active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        {label}
+        {active ? (
+          sortOrder === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-50" />
+        )}
+      </button>
+    );
+  };
 
   const params = new URLSearchParams();
   params.set("page", String(page));
   params.set("pageSize", String(pageSize));
+  params.set("sortBy", sortBy);
+  params.set("sortOrder", sortOrder);
   if (debouncedSearch) params.set("search", debouncedSearch);
   if (statusFilter !== "all") params.set("status", statusFilter);
   if (providerFilter !== "all") params.set("provider", providerFilter);
@@ -243,12 +291,12 @@ export default function AdminPayments() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b bg-muted/50">
-                    <th className="text-left p-3 font-medium text-muted-foreground">Reference</th>
+                    <th className="text-left p-3 font-medium text-muted-foreground">{sortHeader("reference", "Reference")}</th>
                     <th className="text-left p-3 font-medium text-muted-foreground hidden md:table-cell">User</th>
-                    <th className="text-right p-3 font-medium text-muted-foreground">Amount</th>
-                    <th className="text-left p-3 font-medium text-muted-foreground hidden lg:table-cell">Provider</th>
-                    <th className="text-left p-3 font-medium text-muted-foreground">Status</th>
-                    <th className="text-left p-3 font-medium text-muted-foreground hidden xl:table-cell">Date</th>
+                    <th className="text-right p-3 font-medium text-muted-foreground">{sortHeader("amount", "Amount")}</th>
+                    <th className="text-left p-3 font-medium text-muted-foreground hidden lg:table-cell">{sortHeader("provider", "Provider")}</th>
+                    <th className="text-left p-3 font-medium text-muted-foreground">{sortHeader("status", "Status")}</th>
+                    <th className="text-left p-3 font-medium text-muted-foreground hidden xl:table-cell">{sortHeader("createdAt", "Date")}</th>
                     <th className="text-right p-3 font-medium text-muted-foreground">Actions</th>
                   </tr>
                 </thead>

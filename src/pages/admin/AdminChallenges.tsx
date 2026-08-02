@@ -16,6 +16,9 @@ import {
   Users,
   CheckCircle,
   DollarSign,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -86,10 +89,56 @@ export default function AdminChallenges() {
     ["admin", "templates"],
     "/api/challenges/templates"
   );
+  const [challengeSortBy, setChallengeSortBy] = useState("createdAt");
+  const [challengeSortOrder, setChallengeSortOrder] = useState<"asc" | "desc">("desc");
+  // Sortable columns matching the server whitelist for /api/challenges/admin/all
+  const CHALLENGE_SORT_COLUMNS: Array<{ key: string; label: string }> = [
+    { key: "id", label: "ID" },
+    { key: "accountSize", label: "Account Size" },
+    { key: "amountPaid", label: "Amount Paid" },
+    { key: "status", label: "Status" },
+    { key: "createdAt", label: "Created" },
+  ];
+  const challengeParams = new URLSearchParams();
+  challengeParams.set("sortBy", challengeSortBy);
+  challengeParams.set("sortOrder", challengeSortOrder);
+  const challengesQuery = `/api/challenges/admin/all?${challengeParams.toString()}`;
   const { data: allChallenges, isLoading: cLoading } = useApiQuery<any[]>(
-    ["admin", "allChallenges"],
-    "/api/challenges/admin/all"
+    ["admin", "allChallenges", challengesQuery],
+    challengesQuery
   );
+
+  const handleChallengeSort = (key: string) => {
+    if (challengeSortBy === key) {
+      setChallengeSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+    } else {
+      setChallengeSortBy(key);
+      setChallengeSortOrder("desc");
+    }
+  };
+
+  const challengeSortHeader = (sortKey: string, label: string) => {
+    const active = challengeSortBy === sortKey;
+    return (
+      <button
+        key={sortKey}
+        type="button"
+        onClick={() => handleChallengeSort(sortKey)}
+        aria-label={`Sort by ${label}`}
+        aria-pressed={active}
+        className={`inline-flex items-center gap-1 font-medium transition-colors rounded px-1 py-0.5 -mx-1 ${
+          active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        {label}
+        {active ? (
+          challengeSortOrder === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-50" />
+        )}
+      </button>
+    );
+  };
 
   const createTemplate = useApiMutation<any, any>("post", "/api/challenges/admin/templates");
   const createSize = useApiMutation<any, any>("post", "/api/challenges/admin/sizes");
@@ -400,12 +449,12 @@ export default function AdminChallenges() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b bg-muted/50">
-                    <th className="text-left p-3 font-medium text-muted-foreground">ID</th>
+                    <th className="text-left p-3 font-medium text-muted-foreground">{challengeSortHeader("id", "ID")}</th>
                     <th className="text-left p-3 font-medium text-muted-foreground">User</th>
-                    <th className="text-left p-3 font-medium text-muted-foreground">Account Size</th>
-                    <th className="text-left p-3 font-medium text-muted-foreground">Amount Paid</th>
-                    <th className="text-left p-3 font-medium text-muted-foreground">Status</th>
-                    <th className="text-left p-3 font-medium text-muted-foreground">Created</th>
+                    <th className="text-left p-3 font-medium text-muted-foreground">{challengeSortHeader("accountSize", "Account Size")}</th>
+                    <th className="text-left p-3 font-medium text-muted-foreground">{challengeSortHeader("amountPaid", "Amount Paid")}</th>
+                    <th className="text-left p-3 font-medium text-muted-foreground">{challengeSortHeader("status", "Status")}</th>
+                    <th className="text-left p-3 font-medium text-muted-foreground">{challengeSortHeader("createdAt", "Created")}</th>
                   </tr>
                 </thead>
                 <tbody>

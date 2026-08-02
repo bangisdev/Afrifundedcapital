@@ -9,7 +9,7 @@ import {
   payments,
   mt5Accounts,
 } from "../schema";
-import { eq, desc, count, sql, and } from "drizzle-orm";
+import { eq, desc, asc, count, sql, and, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification } from "../lib/notifications";
 import { maybeGenerateCertificate } from "../lib/certificates";
@@ -232,10 +232,24 @@ app.get("/my/:id/metrics", requireAuth, (c) => {
 // Admin: List all challenges
 app.get("/admin/all", requireAuth, requireAdmin, (c) => {
   const db = getDb();
+
+  // Sorting (whitelisted columns, asc/desc)
+  const SORTABLE: Record<string, SQLWrapper> = {
+    id: userChallenges.id,
+    accountSize: userChallenges.accountSize,
+    amountPaid: userChallenges.amountPaid,
+    status: userChallenges.status,
+    createdAt: userChallenges.createdAt,
+  };
+  const qSortBy = String(c.req.query("sortBy") || "createdAt");
+  const qSortOrder = String(c.req.query("sortOrder") || "desc");
+  const sortCol = SORTABLE[qSortBy] || userChallenges.createdAt;
+  const sortOrder = qSortOrder.toLowerCase() === "asc" ? asc(sortCol) : desc(sortCol);
+
   const challenges = db
     .select()
     .from(userChallenges)
-    .orderBy(desc(userChallenges.createdAt))
+    .orderBy(sortOrder)
     .all();
   return c.json(challenges);
 });
