@@ -796,3 +796,146 @@ describe("POST /api/payments/admin/:id/refund", () => {
     expect(body.redemptionVoided).toBe(false);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════
+//  ADMIN RESUME
+// ═══════════════════════════════════════════════════════════════
+
+describe("POST /api/payments/admin/:id/resume", () => {
+  it("reactivates the challenge, MT5 account, and funded account after a refund", async () => {
+    const db = getTestDb();
+    const { users, payments, challengeTemplates, accountSizes, coupons, userChallenges, mt5Accounts, couponRedemptions, notifications } = await import("../schema");
+    const { eq } = await import("drizzle-orm");
+
+    const trader = db.select().from(users).where(eq(users.email, TEST_USER.email)).get();
+    expect(trader).toBeTruthy();
+    const now = Date.now();
+
+    // Seed a catalog entry (template + size + coupon)
+    const template = db.insert(challengeTemplates).values({
+      name: "Resume Flow Challenge",
+      description: "Resume flow test",
+      type: "two_step",
+      isActive: true,
+      profitTarget: 10,
+      dailyDrawdown: 5,
+      maxDrawdown: 10,
+      maxLeverage: 100,
+      minTradingDays: 5,
+      maxTradingDays: 30,
+      allowWeekendHolding: false,
+      allowNewsTrading: true,
+      allowEATrading: true,
+      allowCopyTrading: false,
+      price: 50000,
+      currency: "NGN",
+      durationDays: 30,
+      createdBy: trader!.id,
+      createdAt: now,
+      updatedAt: now,
+    }).returning().get();
+
+    const size = db.insert(accountSizes).values({
+      label: "$10,000",
+      size: 10000,
+      currency: "NGN",
+      templateId: template.id,
+      price: 50000,
+      isActive: true,
+      sortOrder: 1,
+    }).returning().get();
+
+    const coupon = db.insert(coupons).values({
+      code: "RESUME10",
+      discountType: "fixed",
+      discountValue: 5000,
+      isActive: true,
+      maxUses: 5,
+      createdBy: trader!.id,
+      createdAt: now,
+    }).returning().get();
+
+    // Initiate the purchase with the coupon
+    const init = await authPost(app, "/api/payments/initiate", userCookie, {
+      amount: 45000,
+      originalAmount: 50000,
+      currency: "NGN",
+      templateId: String(template.id),
+      accountSizeId: String(size.id),
+      couponCode: "RESUME10",
+      description: "Resume Flow Challenge",
+    });
+    expect(init.status).toBe(200);
+    const initBody = init.body as Record<string, any>;
+    const paymentId = initBody.paymentId as number;
+
+    // Complete it via the sandbox webhook
+    const payment = db.select().from(payments).where(eq(payments.id, paymentId)).get();
+    const webRes = await app.request("/api/payments/webhook/flutterwave", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "verif-hash": "test123" },
+      body: JSON.stringify({
+        event: "charge.completed",
+        data: {
+          id: Math.floor(100000 + Math.random() * 900000),
+          tx_ref: payment!.reference,
+          status: "successful",
+          amount: 45000,
+          currency: "NGN",
+          customer: { email: TEST_USER.email, name: TEST_USER.name },
+          payment_type: "card",
+        },
+      }),
+    });
+    expect(webRes.status).toBe(200);
+
+    // Refund first (deactivates challenge + suspends MT5)
+    const refund = await authPost(app, `/api/payments/admin/${paymentId}/refund`, adminCookie);
+    expect(refund.status).toBe(200);
+
+    const challenge = db.select().from(userChallenges).where(eq(userChallenges.paymentId, paymentId)).get();
+    expect(challenge).toBeTruthy();
+    expect(challenge!.status).toBe("refunded");
+    expect(challenge!.mt5AccountId).toBeTruthy();
+    const originalExpiry = challenge!.expiresAt;
+
+    // ── Resume ────────────────────────────────────────────────
+    const resume = await authPost(app, `/api/payments/admin/${paymentId}/resume`, adminCookie);
+    expect(resume.status).toBe(200);
+    const resumeBody = resume.body as Record<string, any>;
+    expect(resumeBody.success).toBe(true);
+    expect(resumeBody.challengeResumed).toBe(1);
+    expect(resumeBody.mt5Reactivated).toBe(1);
+    expect(resumeBody.userNotified).toBe(true);
+
+    // Challenge active again, expiry clock paused while refunded (never shrinks)
+    const challengeAfter = db.select().from(userChallenges).where(eq(userChallenges.paymentId, paymentId)).get();
+    expect(challengeAfter!.status).toBe("active");
+    expect(challengeAfter!.expiresAt).toBeGreaterThanOrEqual(originalExpiry!);
+
+    // MT5 account re-enabled
+    const mt5After = db.select().from(mt5Accounts).where(eq(mt5Accounts.id, challenge!.mt5AccountId!)).get();
+    expect(mt5After!.isActive).toBe(true);
+    expect(mt5After!.isSuspended).toBe(false);
+
+    // Coupon redemption stays voided — resume restores trading, not the discount
+    const redemptionAfter = db.select().from(couponRedemptions).where(eq(couponRedemptions.paymentId, paymentId)).get();
+    expect(redemptionAfter).toBeUndefined();
+    const couponAfter = db.select().from(coupons).where(eq(coupons.id, coupon.id)).get();
+    expect(couponAfter!.currentUses).toBe(0);
+
+    // User notified
+    const notifs = db.select().from(notifications).where(eq(notifications.userId, trader!.id)).all();
+    expect(notifs.some((n) => n.title === "Challenge Resumed")).toBe(true);
+  });
+
+  it("returns 404 for a missing payment", async () => {
+    const { status } = await authPost(app, "/api/payments/admin/999999/resume", adminCookie);
+    expect(status).toBe(404);
+  });
+
+  it("returns 403 for non-admin users", async () => {
+    const { status } = await authPost(app, "/api/payments/admin/1/resume", userCookie);
+    expect(status).toBe(403);
+  });
+});

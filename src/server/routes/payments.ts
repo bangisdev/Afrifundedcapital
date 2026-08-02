@@ -920,4 +920,88 @@ app.post("/admin/:id/refund", requireAuth, requireAdmin, async (c) => {
   });
 });
 
+// Admin: Resume a refunded payment's challenge
+// The inverse of a refund — reactivates any challenge linked to the payment
+// (status refunded → active), re-enables its MT5 account, and re-activates any
+// funded account that was terminated for a payment refund. The challenge's
+// expiry clock is paused while refunded (expiresAt extended by the refund
+// duration) so the trader doesn't lose trading time. The coupon redemption is
+// intentionally NOT restored — the discount slot was released on refund.
+app.post("/admin/:id/resume", requireAuth, requireAdmin, async (c) => {
+  const id = parseInt(c.req.param("id"));
+  const db = getDb();
+  const now = Date.now();
+
+  const payment = db.select().from(payments).where(eq(payments.id, id)).get();
+  if (!payment) return c.json({ error: "Payment not found" }, 404);
+
+  let challengeResumed = 0;
+  let mt5Reactivated = 0;
+  let fundedAccountReactivated = 0;
+
+  // Reactivate challenges that were refunded for this payment.
+  const challenges = db.select().from(userChallenges).where(eq(userChallenges.paymentId, id)).all();
+  for (const challenge of challenges) {
+    try {
+      if (challenge.status === "refunded") {
+        // Pause-the-clock: give back the time the challenge spent refunded.
+        const elapsedRefundedMs = Math.max(0, now - (challenge.updatedAt || now));
+        const nextExpiry = challenge.expiresAt ? challenge.expiresAt + elapsedRefundedMs : null;
+        db.update(userChallenges)
+          .set({ status: "active", expiresAt: nextExpiry, updatedAt: now })
+          .where(eq(userChallenges.id, challenge.id))
+          .run();
+        challengeResumed++;
+      }
+
+      // Re-enable the linked MT5 account.
+      if (challenge.mt5AccountId) {
+        const mt5 = db.select().from(mt5Accounts).where(eq(mt5Accounts.id, challenge.mt5AccountId!)).get();
+        if (mt5 && !mt5.isActive) {
+          db.update(mt5Accounts)
+            .set({ isActive: true, isSuspended: false })
+            .where(eq(mt5Accounts.id, mt5.id))
+            .run();
+          mt5Reactivated++;
+        }
+      }
+
+      // Re-activate any funded account terminated because of the refund.
+      const funded = db.select().from(fundedAccounts).where(eq(fundedAccounts.challengeId, challenge.id)).get();
+      if (funded && !funded.isActive && funded.terminationReason === "payment_refunded") {
+        db.update(fundedAccounts)
+          .set({ isActive: true, terminatedAt: null, terminationReason: null })
+          .where(eq(fundedAccounts.id, funded.id))
+          .run();
+        fundedAccountReactivated++;
+      }
+    } catch {
+      // Never let one challenge block the resume of the payment
+    }
+  }
+
+  // Notify the user that their challenge is back.
+  let userNotified = false;
+  try {
+    const payer = db.select().from(users).where(eq(users.id, payment.userId)).get();
+    if (payer) {
+      notify(db, payment.userId, {
+        type: "challenge",
+        title: "Challenge Resumed",
+        message: `Your challenge linked to payment ${payment.reference} has been reactivated. ${challengeResumed > 0 ? "You can resume trading. " : ""}Your account is active again.`,
+        link: "/dashboard/challenges",
+      });
+      userNotified = true;
+    }
+  } catch {}
+
+  return c.json({
+    success: true,
+    challengeResumed,
+    mt5Reactivated,
+    fundedAccountReactivated,
+    userNotified,
+  });
+});
+
 export default app;

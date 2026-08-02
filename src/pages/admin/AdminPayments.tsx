@@ -19,6 +19,7 @@ import {
   Search,
   X,
   RotateCcw,
+  Play,
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
@@ -74,6 +75,7 @@ export default function AdminPayments() {
   const { data: stats } = useApiQuery<any>(["admin", "paymentStats"], "/api/payments/admin/stats");
   const { data: revenueGrowth } = useApiQuery<any>(["admin", "revenueGrowth"], "/api/payments/admin/revenue-growth");
   const refundPayment = useApiMutation<any, any>("post", "/api/payments/admin/${id}/refund");
+  const resumePayment = useApiMutation<any, any>("post", "/api/payments/admin/${id}/resume");
   const cleanupStale = useApiMutation<any, any>("post", "/api/payments/admin/cleanup-stale");
 
   const [search, setSearch] = useState("");
@@ -85,6 +87,7 @@ export default function AdminPayments() {
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [refundTarget, setRefundTarget] = useState<any>(null);
+  const [resumeTarget, setResumeTarget] = useState<any>(null);
   const [tab, setTab] = useState<"transactions" | "analytics">("transactions");
 
   // Debounce the search input so we don't hit the API on every keystroke
@@ -170,6 +173,18 @@ export default function AdminPayments() {
       refetch();
     } catch (err: any) {
       toast.error(err?.message || "Failed to refund");
+    }
+  };
+
+  const handleResume = async () => {
+    if (!resumeTarget) return;
+    try {
+      await resumePayment.mutateAsync({ id: resumeTarget.id });
+      toast.success(`Challenge for ${resumeTarget.reference} resumed`);
+      setResumeTarget(null);
+      refetch();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to resume challenge");
     }
   };
 
@@ -375,6 +390,16 @@ export default function AdminPayments() {
                                 <RotateCcw className="h-3 w-3 mr-1" /> Refund
                               </Button>
                             )}
+                            {p.status === "refunded" && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-[10px] text-emerald-600"
+                                onClick={() => setResumeTarget(p)}
+                              >
+                                <Play className="h-3 w-3 mr-1" /> Resume
+                              </Button>
+                            )}
                           </td>
                         </tr>
                       );
@@ -539,6 +564,29 @@ export default function AdminPayments() {
               onClick={handleRefund}
             >
               Refund Payment
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Resume Challenge Confirmation Dialog */}
+      <AlertDialog open={!!resumeTarget} onOpenChange={(open) => !open && setResumeTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Resume Challenge</AlertDialogTitle>
+            <AlertDialogDescription>
+              Reactivate the challenge linked to <strong className="font-mono">{resumeTarget?.reference}</strong>?
+              This will set the challenge back to <strong>active</strong>, re-enable its MT5 account,
+              give back the trading time lost while refunded, and notify the user.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-emerald-600 text-white hover:bg-emerald-700"
+              onClick={handleResume}
+            >
+              Resume Challenge
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
