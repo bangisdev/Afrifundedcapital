@@ -232,6 +232,70 @@ describe("AdminPayments Page", () => {
     });
   });
 
+  describe("Resume Challenge", () => {
+    it("shows Resume button for refunded payments", () => {
+      setQueryData({ "admin/payments": [
+        { id: 2, reference: "FLW-REFUNDED", amount: 50000, status: "refunded", provider: "flutterwave", userId: 1, createdAt: Date.now() },
+      ]}); render(<AdminPayments />);
+      expect(screen.getByRole("button", { name: /Resume/i })).toBeTruthy();
+    });
+
+    it("does not show Resume button for completed payments", () => {
+      setQueryData({ "admin/payments": [
+        { id: 1, reference: "FLW-001", amount: 50000, status: "completed", provider: "flutterwave", userId: 1, createdAt: Date.now() },
+      ]}); render(<AdminPayments />);
+      expect(screen.queryByRole("button", { name: /Resume/i })).toBeNull();
+    });
+
+    it("shows why the coupon was not restored in the success toast", async () => {
+      const { useApiMutation } = await import("@/hooks/use-api");
+      (useApiMutation as any).mockImplementation((method: string, path: string) => {
+        if (path && path.includes("resume")) {
+          return { mutateAsync: vi.fn().mockResolvedValue({ success: true, redemptionRestored: false, redemptionRestoreReason: "expired" }), isPending: false };
+        }
+        return { mutateAsync: vi.fn(), isPending: false };
+      });
+
+      const user = userEvent.setup();
+      setQueryData({ "admin/payments": [
+        { id: 2, reference: "FLW-REFUNDED", amount: 50000, status: "refunded", provider: "flutterwave", userId: 1, createdAt: Date.now() },
+      ]});
+      render(<AdminPayments />);
+
+      await user.click(screen.getByRole("button", { name: /Resume/i }));
+      await user.click(screen.getByTestId("alert-confirm"));
+
+      await waitFor(() => {
+        expect(toast.success).toHaveBeenCalledWith(
+          expect.stringContaining("coupon not restored: Coupon has expired"),
+        );
+      });
+    });
+
+    it("shows a plain success toast when the coupon was restored", async () => {
+      const { useApiMutation } = await import("@/hooks/use-api");
+      (useApiMutation as any).mockImplementation((method: string, path: string) => {
+        if (path && path.includes("resume")) {
+          return { mutateAsync: vi.fn().mockResolvedValue({ success: true, redemptionRestored: true }), isPending: false };
+        }
+        return { mutateAsync: vi.fn(), isPending: false };
+      });
+
+      const user = userEvent.setup();
+      setQueryData({ "admin/payments": [
+        { id: 2, reference: "FLW-REFUNDED", amount: 50000, status: "refunded", provider: "flutterwave", userId: 1, createdAt: Date.now() },
+      ]});
+      render(<AdminPayments />);
+
+      await user.click(screen.getByRole("button", { name: /Resume/i }));
+      await user.click(screen.getByTestId("alert-confirm"));
+
+      await waitFor(() => {
+        expect(toast.success).toHaveBeenCalledWith("Challenge for FLW-REFUNDED resumed");
+      });
+    });
+  });
+
   describe("Full Integration", () => {
     it("renders complete page with all sections", () => {
       setQueryData({}); render(<AdminPayments />);

@@ -47,6 +47,17 @@ const PAGE_SIZES = [10, 25, 50];
 
 const EMPTY_STATS = { total: 0, completed: 0, pending: 0, failed: 0, refunded: 0, revenue: 0 };
 
+// Human-readable labels for why a coupon wasn't restored on resume.
+const RESTORE_REASON_LABELS: Record<string, string> = {
+  no_coupon: "No coupon was used on this payment",
+  already_redeemed: "Coupon was already redeemed",
+  coupon_missing: "Coupon no longer exists",
+  inactive: "Coupon is no longer active",
+  expired: "Coupon has expired",
+  usage_limit: "Coupon has reached its usage limit",
+  per_user_limit: "Coupon usage limit reached for this user",
+};
+
 function formatNgn(n: number) {
   return `₦${n.toLocaleString()}`;
 }
@@ -179,8 +190,13 @@ export default function AdminPayments() {
   const handleResume = async () => {
     if (!resumeTarget) return;
     try {
-      await resumePayment.mutateAsync({ id: resumeTarget.id });
-      toast.success(`Challenge for ${resumeTarget.reference} resumed`);
+      const res = await resumePayment.mutateAsync({ id: resumeTarget.id });
+      let message = `Challenge for ${resumeTarget.reference} resumed`;
+      if (res && res.redemptionRestored === false && res.redemptionRestoreReason) {
+        const label = RESTORE_REASON_LABELS[res.redemptionRestoreReason] || res.redemptionRestoreReason;
+        message += ` — coupon not restored: ${label}`;
+      }
+      toast.success(message);
       setResumeTarget(null);
       refetch();
     } catch (err: any) {
