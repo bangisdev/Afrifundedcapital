@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
 import { notifications, users } from "../schema";
-import { eq, desc, count, and, or, like, sql, type SQL } from "drizzle-orm";
+import { eq, desc, asc, count, and, or, like, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 
 const app = new Hono();
@@ -26,6 +26,19 @@ app.get("/my", requireAuth, (c) => {
   // Pagination params (clamped)
   const page = Math.max(1, parseInt(c.req.query("page") || "1") || 1);
   const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query("pageSize") || "10") || 10));
+
+  // Sorting (whitelisted columns, asc/desc)
+  const SORTABLE: Record<string, SQLWrapper> = {
+    id: notifications.id,
+    type: notifications.type,
+    title: notifications.title,
+    read: notifications.read,
+    createdAt: notifications.createdAt,
+  };
+  const qSortBy = String(c.req.query("sortBy") || "createdAt");
+  const qSortOrder = String(c.req.query("sortOrder") || "desc");
+  const sortCol = SORTABLE[qSortBy] || notifications.createdAt;
+  const sortOrder = qSortOrder.toLowerCase() === "asc" ? asc(sortCol) : desc(sortCol);
 
   // Filters
   const search = (c.req.query("search") || "").trim();
@@ -57,7 +70,7 @@ app.get("/my", requireAuth, (c) => {
     .select()
     .from(notifications)
     .where(whereClause)
-    .orderBy(desc(notifications.createdAt))
+    .orderBy(sortOrder)
     .limit(pageSize)
     .offset((page - 1) * pageSize)
     .all();

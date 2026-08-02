@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
+import { useApiQuery } from "@/hooks/use-api";
 
 // ─── Mock: sonner ──────────────────────────────────────────
 vi.mock("sonner", () => ({
@@ -238,6 +239,53 @@ describe("Notifications Page", () => {
         c.className.includes("bg-secondary/20")
       );
       expect(hasUnreadBg).toBeFalsy();
+    });
+  });
+
+  // ─── Sortable headers ─────────────────────────────────
+  describe("Sortable Headers", () => {
+    it("renders sortable column headers with the default column active", () => {
+      setQueryData({
+        "notifications/my": [makeNotification({ title: "Payment Received" })],
+      });
+      render(<Notifications />);
+
+      for (const label of ["Title", "Type", "Read", "Date"]) {
+        expect(screen.getByRole("button", { name: `Sort by ${label}` })).toBeTruthy();
+      }
+      // Default sort is createdAt desc → Date is active
+      expect(screen.getByRole("button", { name: "Sort by Date" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("calls the API with sortBy/sortOrder when a header is clicked", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "notifications/my": [makeNotification({ title: "Payment Received" })],
+      });
+      render(<Notifications />);
+
+      await user.click(screen.getByRole("button", { name: "Sort by Type" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const myCall = calls.find((c) => String(c[1]).includes("/api/notifications/my?") && String(c[1]).includes("sortBy=type"));
+      expect(myCall).toBeTruthy();
+      expect(String(myCall![1])).toContain("sortOrder=desc");
+      expect(screen.getByRole("button", { name: "Sort by Type" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("toggles to ascending when the active column is clicked again", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "notifications/my": [makeNotification({ title: "Payment Received" })],
+      });
+      render(<Notifications />);
+
+      await user.click(screen.getByRole("button", { name: "Sort by Type" }));
+      await user.click(screen.getByRole("button", { name: "Sort by Type" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const ascCall = calls.find((c) => String(c[1]).includes("/api/notifications/my?") && String(c[1]).includes("sortBy=type&sortOrder=asc"));
+      expect(ascCall).toBeTruthy();
     });
   });
 

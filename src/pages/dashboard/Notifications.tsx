@@ -7,6 +7,7 @@ import {
   Loader2, Bell, Search, CheckCheck, DollarSign, ShieldCheck,
   ShieldX, AlertTriangle, Award, UserPlus, Ticket, Gift,
   Settings, BarChart3, ChevronDown, ChevronLeft, ChevronRight,
+  ArrowUp, ArrowDown, ArrowUpDown,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -67,6 +68,47 @@ export default function Notifications() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
+  // Sorting (whitelisted columns on the server: id, type, title, read, createdAt)
+  const [sortBy, setSortBy] = useState("createdAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const SORT_COLUMNS: Array<{ key: string; label: string }> = [
+    { key: "title", label: "Title" },
+    { key: "type", label: "Type" },
+    { key: "read", label: "Read" },
+    { key: "createdAt", label: "Date" },
+  ];
+  const handleSort = (key: string) => {
+    if (sortBy === key) {
+      setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(key);
+      setSortOrder("desc");
+    }
+    setPage(1);
+  };
+  const sortHeader = (sortKey: string, label: string) => {
+    const active = sortBy === sortKey;
+    return (
+      <button
+        key={sortKey}
+        type="button"
+        onClick={() => handleSort(sortKey)}
+        aria-label={`Sort by ${label}`}
+        aria-pressed={active}
+        className={`inline-flex items-center gap-1 font-medium transition-colors rounded px-1 py-0.5 -mx-1 ${
+          active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        {label}
+        {active ? (
+          sortOrder === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-50" />
+        )}
+      </button>
+    );
+  };
+
   const markRead = useApiMutation<any, any>("put", "/api/notifications/${id}/read");
   const markAllRead = useApiMutation<any, any>("put", "/api/notifications/read-all");
   const deleteNotif = useApiMutation<any, any>("delete", "/api/notifications/${id}");
@@ -77,14 +119,16 @@ export default function Notifications() {
     return () => clearTimeout(t);
   }, [search]);
 
-  // Reset to first page whenever filters or page size change
+  // Reset to first page whenever filters, sort, or page size change
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, filterType, pageSize]);
+  }, [debouncedSearch, filterType, pageSize, sortBy, sortOrder]);
 
   const params = new URLSearchParams();
   params.set("page", String(page));
   params.set("pageSize", String(pageSize));
+  params.set("sortBy", sortBy);
+  params.set("sortOrder", sortOrder);
   if (debouncedSearch) params.set("search", debouncedSearch);
   if (filterType !== "all") params.set("type", filterType);
   const listQuery = `/api/notifications/my?${params.toString()}`;
@@ -138,6 +182,16 @@ export default function Notifications() {
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
         </div>
       </div>
+
+      {notifications.length > 0 && (
+        <div className="card-subtle px-4 py-2 flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10px] font-medium text-muted-foreground mr-1">Sort:</span>
+          {SORT_COLUMNS.map((c) => sortHeader(c.key, c.label))}
+          <span className="ml-auto text-[10px] text-muted-foreground">
+            {total} notification{total !== 1 ? 's' : ''}
+          </span>
+        </div>
+      )}
 
       <div className="space-y-1">
         {notifications.length === 0 ? (

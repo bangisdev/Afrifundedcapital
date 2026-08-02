@@ -105,6 +105,20 @@ app.get("/my", requireAuth, (c) => {
   const page = Math.max(1, parseInt(c.req.query("page") || "1") || 1);
   const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query("pageSize") || "10") || 10));
 
+  // Sorting (whitelisted columns, asc/desc)
+  const SORTABLE: Record<string, SQLWrapper> = {
+    id: userChallenges.id,
+    status: userChallenges.status,
+    accountSize: userChallenges.accountSize,
+    amountPaid: userChallenges.amountPaid,
+    currentPhase: userChallenges.currentPhase,
+    createdAt: userChallenges.createdAt,
+  };
+  const qSortBy = String(c.req.query("sortBy") || "createdAt");
+  const qSortOrder = String(c.req.query("sortOrder") || "desc");
+  const sortCol = SORTABLE[qSortBy] || userChallenges.createdAt;
+  const sortOrder = qSortOrder.toLowerCase() === "asc" ? asc(sortCol) : desc(sortCol);
+
   // Total count for this user
   const totalRow = db
     .select({ count: count() })
@@ -118,7 +132,7 @@ app.get("/my", requireAuth, (c) => {
     .select()
     .from(userChallenges)
     .where(eq(userChallenges.userId, userId))
-    .orderBy(desc(userChallenges.createdAt))
+    .orderBy(sortOrder)
     .limit(pageSize)
     .offset((page - 1) * pageSize)
     .all();

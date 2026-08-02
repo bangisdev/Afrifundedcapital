@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
+import { useApiQuery } from "@/hooks/use-api";
 
 // ─── Mock: sonner ──────────────────────────────────────────
 vi.mock("sonner", () => ({
@@ -787,6 +788,67 @@ describe("Challenges Page", () => {
       await user.click(screen.getByText("Challenge #42"));
 
       expect(mockNavigate).toHaveBeenCalledWith("/dashboard/challenges/42");
+    });
+  });
+
+  // ─── Sortable headers ─────────────────────────────────
+  describe("Sortable Headers", () => {
+    it("renders sortable column headers with the default column active", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "challenges/my": [makeChallenge({ id: 10, accountSize: 10000, status: "active" })],
+      });
+      render(<Challenges />);
+
+      await user.click(screen.getByTestId("tab-trigger-my-challenges"));
+      await waitFor(() => {
+        expect(screen.getByText("Challenge #10")).toBeTruthy();
+      });
+
+      for (const label of ["ID", "Account Size", "Amount Paid", "Status", "Created"]) {
+        expect(screen.getByRole("button", { name: `Sort by ${label}` })).toBeTruthy();
+      }
+      // Default sort is createdAt desc → Created is active
+      expect(screen.getByRole("button", { name: "Sort by Created" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("calls the API with sortBy/sortOrder when a header is clicked", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "challenges/my": [makeChallenge({ id: 10, accountSize: 10000, status: "active" })],
+      });
+      render(<Challenges />);
+
+      await user.click(screen.getByTestId("tab-trigger-my-challenges"));
+      await waitFor(() => {
+        expect(screen.getByText("Challenge #10")).toBeTruthy();
+      });
+      await user.click(screen.getByRole("button", { name: "Sort by Status" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const myCall = calls.find((c) => String(c[1]).includes("/api/challenges/my?") && String(c[1]).includes("sortBy=status"));
+      expect(myCall).toBeTruthy();
+      expect(String(myCall![1])).toContain("sortOrder=desc");
+      expect(screen.getByRole("button", { name: "Sort by Status" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("toggles to ascending when the active column is clicked again", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "challenges/my": [makeChallenge({ id: 10, accountSize: 10000, status: "active" })],
+      });
+      render(<Challenges />);
+
+      await user.click(screen.getByTestId("tab-trigger-my-challenges"));
+      await waitFor(() => {
+        expect(screen.getByText("Challenge #10")).toBeTruthy();
+      });
+      await user.click(screen.getByRole("button", { name: "Sort by Status" }));
+      await user.click(screen.getByRole("button", { name: "Sort by Status" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const ascCall = calls.find((c) => String(c[1]).includes("/api/challenges/my?") && String(c[1]).includes("sortBy=status&sortOrder=asc"));
+      expect(ascCall).toBeTruthy();
     });
   });
 

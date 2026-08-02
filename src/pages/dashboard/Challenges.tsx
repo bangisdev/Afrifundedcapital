@@ -19,7 +19,7 @@ import {
   TabsContent,
 } from "@/components/ui/tabs";
 import { useNavigate } from "react-router";
-import { Loader2, CheckCircle, XCircle, ChevronRight, ChevronLeft } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, ChevronRight, ChevronLeft, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { toast } from "sonner";
 
 type Doc = Record<string, any>;
@@ -42,9 +42,53 @@ export default function Challenges() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
+  // Sorting (whitelisted columns on the server: id, status, accountSize, amountPaid, currentPhase, createdAt)
+  const [sortBy, setSortBy] = useState("createdAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const SORT_COLUMNS: Array<{ key: string; label: string }> = [
+    { key: "id", label: "ID" },
+    { key: "accountSize", label: "Account Size" },
+    { key: "amountPaid", label: "Amount Paid" },
+    { key: "status", label: "Status" },
+    { key: "createdAt", label: "Created" },
+  ];
+  const handleSort = (key: string) => {
+    if (sortBy === key) {
+      setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(key);
+      setSortOrder("desc");
+    }
+    setPage(1);
+  };
+  const sortHeader = (sortKey: string, label: string) => {
+    const active = sortBy === sortKey;
+    return (
+      <button
+        key={sortKey}
+        type="button"
+        onClick={() => handleSort(sortKey)}
+        aria-label={`Sort by ${label}`}
+        aria-pressed={active}
+        className={`inline-flex items-center gap-1 font-medium transition-colors rounded px-1 py-0.5 -mx-1 ${
+          active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        {label}
+        {active ? (
+          sortOrder === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-50" />
+        )}
+      </button>
+    );
+  };
+
   const params = new URLSearchParams();
   params.set("page", String(page));
   params.set("pageSize", String(pageSize));
+  params.set("sortBy", sortBy);
+  params.set("sortOrder", sortOrder);
   const listQuery = `/api/challenges/my?${params.toString()}`;
   const { data: myData, isLoading: myLoading } = useApiQuery<ChallengesResponse>(["challenges", "my", listQuery], listQuery);
   const myChallenges = myData?.challenges || [];
@@ -244,6 +288,15 @@ export default function Challenges() {
             </div>
           ) : (
             <>
+              {/* Sort Toolbar */}
+              <div className="card-subtle px-4 py-2 flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] font-medium text-muted-foreground mr-1">Sort:</span>
+                {SORT_COLUMNS.map((c) => sortHeader(c.key, c.label))}
+                <span className="ml-auto text-[10px] text-muted-foreground">
+                  {myTotal} challenge{myTotal !== 1 ? 's' : ''}
+                </span>
+              </div>
+
               {myChallenges.map((ch: Doc) => (
                 <button
                   key={ch.id}
