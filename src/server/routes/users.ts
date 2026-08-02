@@ -215,16 +215,6 @@ app.get("/growth", requireAuth, requireAdmin, (c) => {
   });
 });
 
-// Admin: Get single user details
-app.get("/:id", requireAuth, requireAdmin, (c) => {
-  const id = parseInt(c.req.param("id"));
-  const db = getDb();
-  const user = db.select().from(users).where(eq(users.id, id)).get();
-  if (!user) return c.json({ error: "User not found" }, 404);
-  const { twoFactorSecret, accountLockedUntil, loginAttempts, ...safe } = user;
-  return c.json(safe);
-});
-
 // Admin: Update user role
 app.put("/:id/role", requireAuth, requireAdmin, async (c) => {
   const id = parseInt(c.req.param("id"));
@@ -420,6 +410,9 @@ app.get("/audit-logs", requireAuth, requireAdmin, (c) => {
     ...log,
     userName,
     userEmail,
+    // The join is null when the acting user has been deleted since the event —
+    // flag it so the UI can show "Deleted user #id" instead of a bare user id.
+    userDeleted: !userName && !userEmail ? true : false,
   }));
 
   // Platform-wide stats (unfiltered)
@@ -466,6 +459,18 @@ app.get("/settings", requireAuth, requireAdmin, (c) => {
   const db = getDb();
   const allSettings = db.select().from(settings).all();
   return c.json(allSettings.map((s) => ({ ...s, value: JSON.parse(s.value) })));
+});
+
+// Admin: Get single user details
+// NOTE: registered AFTER the static admin routes (/audit-logs, /brief, /settings)
+// so the :id param never shadows them (Hono matches in registration order).
+app.get("/:id", requireAuth, requireAdmin, (c) => {
+  const id = parseInt(c.req.param("id"));
+  const db = getDb();
+  const user = db.select().from(users).where(eq(users.id, id)).get();
+  if (!user) return c.json({ error: "User not found" }, 404);
+  const { twoFactorSecret, accountLockedUntil, loginAttempts, ...safe } = user;
+  return c.json(safe);
 });
 
 // Security: Notify password changed

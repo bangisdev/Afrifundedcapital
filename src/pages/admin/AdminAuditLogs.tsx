@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  UserRound,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -29,6 +30,52 @@ function formatDateTime(ts: number | null) {
   return new Date(ts).toLocaleString("en-US", {
     year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
   });
+}
+
+function getInitials(name: string | null | undefined): string {
+  if (!name) return "";
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() || "")
+    .join("");
+}
+
+function ActorCell({ log }: { log: any }) {
+  const name = log.userName;
+  const email = log.userEmail;
+  const initials = getInitials(name);
+
+  if (name || email) {
+    return (
+      <div className="flex items-center gap-2 min-w-0">
+        <div className="h-6 w-6 rounded-full bg-secondary flex items-center justify-center shrink-0">
+          {initials ? (
+            <span className="text-[9px] font-medium text-muted-foreground">{initials}</span>
+          ) : (
+            <UserRound className="h-3 w-3 text-muted-foreground" />
+          )}
+        </div>
+        <div className="min-w-0">
+          {name && <div className="text-xs font-medium truncate">{name}</div>}
+          {email && <div className="text-[10px] text-muted-foreground truncate">{email}</div>}
+        </div>
+      </div>
+    );
+  }
+
+  // Actor's account no longer exists — show a clear label instead of a bare id
+  return (
+    <div className="flex items-center gap-2 min-w-0">
+      <div className="h-6 w-6 rounded-full bg-secondary/50 flex items-center justify-center shrink-0">
+        <UserRound className="h-3 w-3 text-muted-foreground/70" />
+      </div>
+      <div className="text-xs text-muted-foreground truncate">
+        {log.userDeleted ? `Deleted user #${log.userId ?? "—"}` : `User #${log.userId ?? "—"}`}
+      </div>
+    </div>
+  );
 }
 
 export default function AdminAuditLogs() {
@@ -131,16 +178,25 @@ export default function AdminAuditLogs() {
           <div className="card-subtle p-8 text-center text-muted-foreground text-xs">No audit log entries found</div>
         ) : (
           logs.map((log: any) => (
-            <div key={log.id} className="card-subtle p-3 flex items-center justify-between text-xs">
-              <div className="min-w-0">
-                <span className="font-medium">{log.action}</span>{" "}
-                <span className="text-muted-foreground">on {log.entity}</span>
-                {log.entityId && <span className="text-muted-foreground"> #{log.entityId}</span>}
-                <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                  {log.userName || log.userEmail || `User ${log.userId || "—"}`}
+            <div key={log.id} className="card-subtle p-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <ActorCell log={log} />
+                <div className="min-w-0">
+                  <div className="text-xs">
+                    <span className="font-medium">{log.action}</span>{" "}
+                    <span className="text-muted-foreground">on {log.entity}</span>
+                    {log.entityId && <span className="text-muted-foreground"> #{log.entityId}</span>}
+                  </div>
+                  {log.details && (
+                    <div className="text-[10px] text-muted-foreground/80 mt-0.5 font-mono truncate">
+                      {typeof log.details === "string" ? log.details : JSON.stringify(log.details)}
+                    </div>
+                  )}
                 </div>
               </div>
-              <span className="text-muted-foreground shrink-0 ml-3">{log.timestamp ? formatDateTime(log.timestamp) : ""}</span>
+              <span className="text-muted-foreground text-xs shrink-0 ml-3">
+                {log.timestamp ? formatDateTime(log.timestamp) : ""}
+              </span>
             </div>
           ))
         )}
