@@ -846,6 +846,74 @@ app.post("/admin/:id/refund", requireAuth, requireAdmin, async (c) => {
   const payment = db.select().from(payments).where(eq(payments.id, id)).get();
   if (!payment) return c.json({ error: "Payment not found" }, 404);
 
+  // ── Flutterwave gateway refund (best-effort) ─────────────────
+  // Money is actually returned to the customer via Flutterwave's refund API.
+  // The local deactivation below always runs (admin intent: revoke the
+  // challenge), but the response + audit log report whether the money moved.
+  let refundGateway: { status: string; error?: string; amountRefunded?: number } = { status: "skipped" };
+  try {
+    // Resolve the secret key (settings table takes priority, then env)
+    let secretKey = process.env.FLW_SECRET_KEY || "";
+    try {
+      const setting = db.select().from(settings).where(eq(settings.key, "flutterwave_config")).get();
+      if (setting) {
+        const config = JSON.parse(setting.value);
+        if (config.secretKey) secretKey = config.secretKey;
+      }
+    } catch {}
+
+    // Find the Flutterwave transaction stored for this payment
+    const flwTx = db
+      .select()
+      .from(flutterwaveTransactions)
+      .where(eq(flutterwaveTransactions.paymentId, id))
+      .orderBy(desc(flutterwaveTransactions.createdAt))
+      .get();
+
+    if (!flwTx) {
+      refundGateway = { status: "skipped", error: "No Flutterwave transaction on file for this payment" };
+    } else if (!secretKey) {
+      refundGateway = { status: "skipped", error: "Flutterwave secret key not configured" };
+    } else {
+      const response = await fetch(
+        `https://api.flutterwave.com/v3/transactions/${encodeURIComponent(flwTx.transactionId)}/refund`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${secretKey}`,
+          },
+          body: JSON.stringify({}),
+        },
+      );
+      const result: any = await response.json();
+
+      // Log every gateway attempt for the webhook/refund trail
+      db.insert(paymentLogs).values({
+        paymentId: payment.id,
+        provider: "flutterwave",
+        event: "refund",
+        data: JSON.stringify(result),
+        ipAddress: c.req.header("x-forwarded-for") || "unknown",
+        createdAt: now,
+      }).run();
+
+      if (response.ok && result.status === "success") {
+        refundGateway = {
+          status: "success",
+          amountRefunded: Number(result.data?.amount_refunded || payment.amount),
+        };
+      } else {
+        refundGateway = {
+          status: "failed",
+          error: String(result.message || `Flutterwave refund failed (HTTP ${response.status})`),
+        };
+      }
+    }
+  } catch (err: any) {
+    refundGateway = { status: "failed", error: err?.message || "Refund API request failed" };
+  }
+
   db.update(payments).set({ status: "refunded", completedAt: now }).where(eq(payments.id, id)).run();
 
   let challengeDeactivated = 0;
@@ -926,6 +994,8 @@ app.post("/admin/:id/refund", requireAuth, requireAdmin, async (c) => {
         mt5Suspended,
         fundedAccountTerminated,
         redemptionVoided,
+        refundGateway: refundGateway.status,
+        refundGatewayError: refundGateway.error || null,
       },
       ipAddress: c.req.header("x-forwarded-for") || undefined,
     });
@@ -937,6 +1007,7 @@ app.post("/admin/:id/refund", requireAuth, requireAdmin, async (c) => {
     mt5Suspended,
     fundedAccountTerminated,
     redemptionVoided,
+    refundGateway,
     userNotified,
   });
 });

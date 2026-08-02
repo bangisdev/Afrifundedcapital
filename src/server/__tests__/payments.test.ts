@@ -1,7 +1,7 @@
 /**
  * Payments endpoint tests — flutterwave config, initiate, verify, webhook.
  */
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import type { Hono } from "hono";
 import {
   buildTestApp,
@@ -619,6 +619,28 @@ describe("GET /api/payments/admin/all", () => {
 // ═══════════════════════════════════════════════════════════════
 
 describe("POST /api/payments/admin/:id/refund", () => {
+  beforeAll(() => {
+    // Stub Flutterwave's refund API — the full-flow tests complete payments via
+    // a webhook with synthetic transaction ids, so the gateway call must be
+    // mocked rather than hitting the real API.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          status: "success",
+          message: "Refund initiated",
+          data: { id: 4242, amount_refunded: 45000, status: "completed" },
+        }),
+      }),
+    );
+  });
+
+  afterAll(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("refunds a payment as admin", async () => {
     // Get the first payment
     const { body: payments } = await authGet(app, "/api/payments/my", userCookie);
@@ -634,6 +656,23 @@ describe("POST /api/payments/admin/:id/refund", () => {
 
     expect(status).toBe(200);
     expect((body as Record<string, unknown>).success).toBe(true);
+  });
+
+  it("skips the gateway refund when no Flutterwave transaction exists", async () => {
+    // A payment created via /initiate without completing checkout has no
+    // Flutterwave transaction on file, so the gateway call is skipped.
+    const { body: initResult } = await authPost(app, "/api/payments/initiate", userCookie, {
+      amount: 25000,
+      currency: "NGN",
+    });
+    const paymentId = (initResult as Record<string, unknown>).paymentId as number;
+
+    const { status, body } = await authPost(app, `/api/payments/admin/${paymentId}/refund`, adminCookie);
+    expect(status).toBe(200);
+    const refundBody = body as Record<string, any>;
+    expect(refundBody.success).toBe(true);
+    expect(refundBody.refundGateway.status).toBe("skipped");
+    expect(refundBody.refundGateway.error).toContain("No Flutterwave transaction");
   });
 
   it("returns 403 for non-admin users", async () => {
@@ -754,6 +793,8 @@ describe("POST /api/payments/admin/:id/refund", () => {
     expect(refundBody.challengeDeactivated).toBe(1);
     expect(refundBody.mt5Suspended).toBe(1);
     expect(refundBody.redemptionVoided).toBe(true);
+    expect(refundBody.refundGateway.status).toBe("success");
+    expect(refundBody.refundGateway.amountRefunded).toBe(45000);
     expect(refundBody.userNotified).toBe(true);
 
     // Payment marked refunded
@@ -787,6 +828,7 @@ describe("POST /api/payments/admin/:id/refund", () => {
     expect(refundDetails.reference).toBe(payment!.reference);
     expect(refundDetails.challengeDeactivated).toBe(1);
     expect(refundDetails.redemptionVoided).toBe(true);
+    expect(refundDetails.refundGateway).toBe("success");
   });
 
   it("is idempotent — refunding an already-refunded payment stays successful without double-voiding", async () => {
