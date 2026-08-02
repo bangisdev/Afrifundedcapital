@@ -156,6 +156,11 @@ app.post("/initiate", requireAuth, async (c) => {
         originalAmount: body.originalAmount || body.amount,
         redeemedAt: now,
       }).run();
+      // Keep the coupon usage counter in sync
+      const coupon = db.select().from(coupons).where(eq(coupons.id, couponId)).get();
+      if (coupon) {
+        db.update(coupons).set({ currentUses: (coupon.currentUses || 0) + 1 }).where(eq(coupons.id, coupon.id)).run();
+      }
     } catch {}
   }
 
@@ -344,6 +349,20 @@ app.post("/verify", requireAuth, async (c) => {
 
   // Payment failed verification
   db.update(payments).set({ status: "failed" }).where(eq(payments.id, payment.id)).run();
+
+  // Void any pre-created coupon redemption so failed payments don't consume usage
+  // or show up in the user's My Coupons list.
+  try {
+    const redemption = db.select().from(couponRedemptions).where(eq(couponRedemptions.paymentId, payment.id)).get();
+    if (redemption) {
+      db.delete(couponRedemptions).where(eq(couponRedemptions.id, redemption.id)).run();
+      const coupon = db.select().from(coupons).where(eq(coupons.id, redemption.couponId)).get();
+      if (coupon && (coupon.currentUses || 0) > 0) {
+        db.update(coupons).set({ currentUses: (coupon.currentUses || 0) - 1 }).where(eq(coupons.id, coupon.id)).run();
+      }
+    }
+  } catch {}
+
   return c.json({ status: "failed", message: "Payment verification failed" });
 });
 

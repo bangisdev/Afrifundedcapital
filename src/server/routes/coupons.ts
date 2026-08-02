@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
-import { coupons, couponRedemptions } from "../schema";
+import { coupons, couponRedemptions, payments } from "../schema";
 import { eq, desc, asc, and, count, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 
@@ -107,16 +107,48 @@ app.post("/redeem", requireAuth, async (c) => {
     .get();
   if (existing) return c.json({ success: true, message: "Already redeemed" });
 
+  const coupon = db.select().from(coupons).where(eq(coupons.id, couponId)).get();
+  if (!coupon) return c.json({ error: "Coupon not found" }, 404);
+
+  // Record the real discount. Callers may pass the amounts directly; otherwise we
+  // derive them from the linked payment so redemptions reflect actual savings.
+  let discountAmount = Number(body.discountAmount) || 0;
+  let originalAmount = Number(body.originalAmount) || 0;
+
+  if (!discountAmount && !originalAmount) {
+    const payment = db.select().from(payments).where(eq(payments.id, paymentId)).get();
+    if (payment) {
+      originalAmount = payment.amount || 0;
+      if (coupon.discountType === "percentage") {
+        discountAmount = Math.round(originalAmount * (coupon.discountValue / 100));
+      } else {
+        discountAmount = Math.min(coupon.discountValue, originalAmount);
+      }
+    }
+  } else if (!originalAmount) {
+    originalAmount = discountAmount;
+  } else if (!discountAmount && originalAmount > 0) {
+    // Caller supplied only the original amount — compute the discount from the coupon
+    if (coupon.discountType === "percentage") {
+      discountAmount = Math.round(originalAmount * (coupon.discountValue / 100));
+    } else {
+      discountAmount = Math.min(coupon.discountValue, originalAmount);
+    }
+  }
+
   db.insert(couponRedemptions).values({
     couponId,
     userId,
     paymentId,
-    discountAmount: 0,
-    originalAmount: 0,
+    discountAmount,
+    originalAmount,
     redeemedAt: Date.now(),
   }).run();
 
-  return c.json({ success: true });
+  // Keep the coupon usage counter in sync
+  db.update(coupons).set({ currentUses: (coupon.currentUses || 0) + 1 }).where(eq(coupons.id, coupon.id)).run();
+
+  return c.json({ success: true, discountAmount, originalAmount });
 });
 
 // ─── Get my redeemed coupons (paginated + sortable) ───

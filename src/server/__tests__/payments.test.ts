@@ -152,6 +152,14 @@ describe("POST /api/payments/initiate", () => {
     expect(status).toBe(200);
     expect((body as Record<string, unknown>).discount).toBe(5000); // 10% of 50000
     expect((body as Record<string, unknown>).finalAmount).toBe(45000);
+
+    // The redemption is recorded with the real discount (visible in My Coupons)
+    const { body: myBody } = await authGet(app, "/api/coupons/my", userCookie);
+    const redemptions = (myBody as Record<string, any>).coupons;
+    const redemption = redemptions.find((r: any) => r.code === "TESTDISCOUNT");
+    expect(redemption).toBeTruthy();
+    expect(redemption.discountAmount).toBe(5000);
+    expect(redemption.originalAmount).toBe(50000);
   });
 
   it("rejects payment without auth", async () => {

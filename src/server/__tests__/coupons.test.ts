@@ -176,24 +176,64 @@ describe("POST /api/coupons/validate", () => {
 // ═══════════════════════════════════════════════════════════════
 
 describe("POST /api/coupons/redeem", () => {
-  it("records a coupon redemption", async () => {
+  async function getCouponByCode(code: string) {
     const { body: coupons } = await authGet(app, "/api/coupons/admin/all", adminCookie);
-    const coupon = (coupons as Record<string, unknown>[])[0];
+    return (coupons as Record<string, unknown>[]).find((c) => c.code === code);
+  }
+
+  it("records a coupon redemption with the real discount amount", async () => {
+    const coupon = await getCouponByCode("FLAT5000");
+    expect(coupon).toBeTruthy();
 
     const { status, body } = await authPost(app, "/api/coupons/redeem", userCookie, {
-      couponId: coupon.id,
+      couponId: coupon!.id,
       paymentId: 99999,
+      discountAmount: 7500,
+      originalAmount: 50000,
     });
     expect(status).toBe(200);
     expect((body as Record<string, unknown>).success).toBe(true);
+    expect((body as Record<string, unknown>).discountAmount).toBe(7500);
+
+    // The redemption now shows real savings in My Coupons
+    const { body: myBody } = await authGet(app, "/api/coupons/my", userCookie);
+    const myCoupons = (myBody as Record<string, any>).coupons;
+    const redemption = myCoupons.find((r: any) => r.paymentId === 99999);
+    expect(redemption).toBeTruthy();
+    expect(redemption.discountAmount).toBe(7500);
+    expect(redemption.originalAmount).toBe(50000);
+  });
+
+  it("derives the discount from the linked payment when amounts are not provided", async () => {
+    // Create a real payment so the endpoint can derive the original amount
+    const { body: initBody } = await authPost(app, "/api/payments/initiate", userCookie, {
+      amount: 50000,
+      originalAmount: 50000,
+      currency: "NGN",
+      description: "Challenge with coupon",
+    });
+    const paymentId = (initBody as Record<string, unknown>).paymentId as number;
+
+    const coupon = await getCouponByCode("FLAT5000");
+    expect(coupon).toBeTruthy();
+
+    const { status, body } = await authPost(app, "/api/coupons/redeem", userCookie, {
+      couponId: coupon!.id,
+      paymentId,
+    });
+    expect(status).toBe(200);
+    const result = body as Record<string, unknown>;
+    // FLAT5000 is a fixed ₦5,000 coupon → derived discount is 5000 against a 50000 payment
+    expect(result.discountAmount).toBe(5000);
+    expect(result.originalAmount).toBe(50000);
   });
 
   it("returns already redeemed for duplicate", async () => {
-    const { body: coupons } = await authGet(app, "/api/coupons/admin/all", adminCookie);
-    const coupon = (coupons as Record<string, unknown>[])[0];
+    const coupon = await getCouponByCode("FLAT5000");
+    expect(coupon).toBeTruthy();
 
     const { body } = await authPost(app, "/api/coupons/redeem", userCookie, {
-      couponId: coupon.id,
+      couponId: coupon!.id,
       paymentId: 99999,
     });
     expect((body as Record<string, unknown>).success).toBe(true);
