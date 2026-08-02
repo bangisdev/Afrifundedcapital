@@ -758,6 +758,81 @@ app.post("/admin/cleanup-stale", requireAuth, requireAdmin, (c) => {
   });
 });
 
+// ─── Admin: Fire a sample webhook to test endpoint + signature ──
+app.post("/admin/test-webhook", requireAuth, requireAdmin, async (c) => {
+  const db = getDb();
+  let body: Record<string, unknown> = {};
+  try { body = await c.req.json(); } catch {}
+
+  // Resolve the currently configured secret hash so the sample is signed
+  // exactly the way Flutterwave's dashboard would sign a real webhook.
+  let secretHash = process.env.FLW_SECRET_HASH || "";
+  try {
+    const setting = db.select().from(settings).where(eq(settings.key, "flutterwave_config")).get();
+    if (setting) {
+      const config = JSON.parse(setting.value);
+      if (config.secretHash) secretHash = config.secretHash;
+    }
+  } catch {}
+
+  const now = Date.now();
+  let paymentId: number | null = null;
+  let usedPayment = false;
+  let txRef = `AFC-TEST-${now}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+  let amount = 5000;
+  let currency = "NGN";
+
+  // Optional: target a specific pending payment so the full pipeline runs
+  // (payment completed → challenge + MT5 account if it has template/size).
+  const rawPaymentId = body.paymentId ? parseInt(String(body.paymentId)) : null;
+  if (rawPaymentId) {
+    const target = db.select().from(payments).where(eq(payments.id, rawPaymentId)).get();
+    if (target) {
+      paymentId = target.id;
+      usedPayment = true;
+      txRef = target.reference;
+      amount = target.amount;
+      currency = target.currency || "NGN";
+    }
+  }
+
+  const payload = {
+    event: "charge.completed",
+    data: {
+      id: Math.floor(100000 + Math.random() * 900000),
+      tx_ref: txRef,
+      status: "successful",
+      amount,
+      currency,
+      flw_ref: `FLW-TEST-${now}`,
+      customer: { email: "test@afrifundedcapital.com", name: "Test Customer" },
+      payment_type: "card",
+    },
+  };
+
+  // Invoke the exact webhook handler Flutterwave would call (in-process).
+  const webRes = await app.request("/webhook/flutterwave", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "verif-hash": secretHash },
+    body: JSON.stringify(payload),
+  });
+  const webhookResponse = await webRes.json();
+
+  return c.json({
+    success: true,
+    message: usedPayment
+      ? `Test webhook fired against pending payment #${paymentId}`
+      : "Test webhook fired (signature + reachability check)",
+    webhookStatus: webhookResponse.status || webRes.status,
+    webhookResponse,
+    usedPayment,
+    paymentId,
+    txRef,
+    secretHashConfigured: !!secretHash,
+    payload,
+  });
+});
+
 // Admin: Refund payment
 app.post("/admin/:id/refund", requireAuth, requireAdmin, async (c) => {
   const id = parseInt(c.req.param("id"));

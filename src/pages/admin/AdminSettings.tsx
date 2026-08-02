@@ -82,6 +82,11 @@ export default function AdminSettings() {
   const [bulkSeedResult, setBulkSeedResult] = useState<any>(null);
   const [bulkSeeding, setBulkSeeding] = useState(false);
 
+  // Test webhook state
+  const [testWebhookState, setTestWebhookState] = useState<"idle" | "testing" | "done" | "error">("idle");
+  const [testWebhookResult, setTestWebhookResult] = useState<any>(null);
+  const [testWebhookPaymentId, setTestWebhookPaymentId] = useState("");
+
   // Load existing config from settings
   useEffect(() => {
     if (!settings) return;
@@ -359,6 +364,33 @@ export default function AdminSettings() {
       toast.error(e?.message || "Failed to run bulk seed");
     }
     setBulkSeeding(false);
+  };
+
+  const fireTestWebhook = async () => {
+    setTestWebhookState("testing");
+    setTestWebhookResult(null);
+    try {
+      const res = await fetch("/api/payments/admin/test-webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          paymentId: testWebhookPaymentId ? parseInt(testWebhookPaymentId) : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Test webhook failed");
+      setTestWebhookResult(data);
+      setTestWebhookState("done");
+      if (data.webhookStatus === "ok") {
+        toast.success("Webhook processed successfully!");
+      } else {
+        toast.info(`Webhook responded: ${data.webhookStatus}`);
+      }
+    } catch (e: any) {
+      setTestWebhookState("error");
+      toast.error(e?.message || "Failed to fire test webhook");
+    }
   };
 
   const copyToClipboard = (text: string) => {
@@ -1120,6 +1152,84 @@ export default function AdminSettings() {
                 </p>
               </div>
             </div>
+          </div>
+
+          {/* Test Webhook */}
+          <div className="card-subtle p-6 space-y-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Zap className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-medium">Test Webhook</h3>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Fire a sample <code className="bg-muted px-1 rounded">charge.completed</code> payload at your own
+              webhook endpoint to verify the URL and secret hash are configured correctly.
+            </p>
+
+            <div className="flex items-end gap-2">
+              <div className="flex-1 space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Payment ID (optional)</Label>
+                <Input
+                  type="number"
+                  placeholder="Complete a specific pending payment"
+                  value={testWebhookPaymentId}
+                  onChange={(e) => setTestWebhookPaymentId(e.target.value)}
+                  className="text-xs"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Leave empty for a signature + reachability check. Enter a pending payment ID to run the full
+                  processing pipeline on it (marks it completed, creates its challenge).
+                </p>
+              </div>
+              <Button
+                size="sm"
+                className="text-xs shrink-0"
+                onClick={fireTestWebhook}
+                disabled={testWebhookState === "testing"}
+              >
+                {testWebhookState === "testing" ? (
+                  <><Loader2 className="h-3 w-3 animate-spin mr-1" /> Firing...</>
+                ) : (
+                  <><Zap className="h-3 w-3 mr-1" /> Send Test Webhook</>
+                )}
+              </Button>
+            </div>
+
+            {testWebhookResult && (
+              <div className="rounded-lg border p-3 space-y-2 bg-muted/30">
+                <div className="flex items-center gap-2 text-xs">
+                  {testWebhookResult.webhookStatus === "ok" ? (
+                    <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
+                  ) : (
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                  )}
+                  <span className="font-medium">
+                    Webhook responded: <code className="bg-muted px-1 rounded">{testWebhookResult.webhookStatus}</code>
+                  </span>
+                </div>
+                <div className="text-[10px] text-muted-foreground space-y-1 font-mono">
+                  <div>tx_ref: {testWebhookResult.txRef}</div>
+                  <div>
+                    secret hash: {testWebhookResult.secretHashConfigured
+                      ? "configured ✓"
+                      : "NOT configured — set it in the Flutterwave tab"}
+                  </div>
+                  {testWebhookResult.usedPayment && (
+                    <div>processed payment #{testWebhookResult.paymentId}</div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {testWebhookState === "done" && testWebhookResult && !testWebhookResult.secretHashConfigured && (
+              <div className="rounded-lg border border-yellow-500/20 p-3 flex items-start gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 text-yellow-500 mt-0.5 shrink-0" />
+                <p className="text-[10px] text-muted-foreground">
+                  No secret hash is configured, so the webhook accepted the payload without signature validation.
+                  Add your verif-hash in the Flutterwave tab and make sure it matches your Flutterwave dashboard.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Webhook setup instructions */}

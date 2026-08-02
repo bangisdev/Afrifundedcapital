@@ -276,6 +276,71 @@ describe("POST /api/payments/admin/cleanup-stale", () => {
   });
 });
 
+// ═══════════════════════════════════════════════════════════════
+//  ADMIN: TEST WEBHOOK
+// ═══════════════════════════════════════════════════════════════
+
+describe("POST /api/payments/admin/test-webhook", () => {
+  it("fires a sample webhook and reports the endpoint response", async () => {
+    const { status, body } = await authPost(app, "/api/payments/admin/test-webhook", adminCookie, {});
+
+    expect(status).toBe(200);
+    const result = body as Record<string, any>;
+    expect(result.success).toBe(true);
+    // Fake tx_ref → no matching payment → the webhook safely reports "ignored"
+    expect(result.webhookStatus).toBe("ignored");
+    expect(result.txRef).toMatch(/^AFC-TEST-/);
+    // The config saved earlier in this suite has a secretHash
+    expect(result.secretHashConfigured).toBe(true);
+    expect(result.payload?.event).toBe("charge.completed");
+    expect(result.payload?.data?.status).toBe("successful");
+  });
+
+  it("can complete a specific pending payment end-to-end", async () => {
+    const db = getTestDb();
+    const { payments, users } = await import("../schema");
+    const { eq } = await import("drizzle-orm");
+
+    const trader = db.select().from(users).where(eq(users.email, TEST_USER.email)).get();
+    expect(trader).toBeTruthy();
+
+    const pay = db.insert(payments).values({
+      userId: trader!.id,
+      amount: 50000,
+      currency: "NGN",
+      provider: "flutterwave",
+      status: "pending",
+      reference: "TESTWEBHOOK-TARGET-1",
+      description: "Test webhook target",
+      createdAt: Date.now(),
+    }).returning().get();
+
+    const { status, body } = await authPost(app, "/api/payments/admin/test-webhook", adminCookie, {
+      paymentId: pay.id,
+    });
+
+    expect(status).toBe(200);
+    const result = body as Record<string, any>;
+    expect(result.usedPayment).toBe(true);
+    expect(result.paymentId).toBe(pay.id);
+    expect(result.webhookStatus).toBe("ok");
+
+    // The webhook processed the payment through the real pipeline
+    const after = db.select().from(payments).where(eq(payments.id, pay.id)).get();
+    expect(after!.status).toBe("completed");
+  });
+
+  it("returns 403 for non-admin users", async () => {
+    const { status } = await authPost(app, "/api/payments/admin/test-webhook", userCookie, {});
+    expect(status).toBe(403);
+  });
+
+  it("returns 401 without auth", async () => {
+    const res = await app.request("/api/payments/admin/test-webhook", { method: "POST" });
+    expect(res.status).toBe(401);
+  });
+});
+
 describe("POST /api/payments/verify", () => {
   it("returns 404 for non-existent payment", async () => {
     const { status, body } = await authPost(app, "/api/payments/verify", userCookie, {
