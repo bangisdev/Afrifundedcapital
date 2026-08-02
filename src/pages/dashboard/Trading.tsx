@@ -11,6 +11,7 @@ import {
 import {
   Loader2, TrendingUp, TrendingDown, Minus, Server, Key, SlidersHorizontal,
   DollarSign, Activity, BarChart3, AlertCircle, Sparkles, RefreshCw,
+  ArrowUp, ArrowDown, ArrowUpDown,
 } from "lucide-react";
 import {
   LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
@@ -59,9 +60,13 @@ export default function Trading() {
   const { data: metricsHistory, isLoading: mLoading } = useApiQuery<any[]>(["metrics", "history"], "/api/challenges/my/0/metrics");
   const [mt5Page, setMt5Page] = useState(1);
   const [mt5PageSize, setMt5PageSize] = useState(10);
+  const [mt5SortBy, setMt5SortBy] = useState("createdAt");
+  const [mt5SortOrder, setMt5SortOrder] = useState<"asc" | "desc">("desc");
   const mt5Params = new URLSearchParams();
   mt5Params.set("page", String(mt5Page));
   mt5Params.set("pageSize", String(mt5PageSize));
+  mt5Params.set("sortBy", mt5SortBy);
+  mt5Params.set("sortOrder", mt5SortOrder);
   const mt5Query = `/api/trading/mt5?${mt5Params.toString()}`;
   const { data: mt5Data, isLoading: mt5Loading } = useApiQuery<any>(["mt5", "my", mt5Query], mt5Query);
   const mt5Accounts = mt5Data?.accounts || [];
@@ -76,10 +81,29 @@ export default function Trading() {
   const [seedResult, setSeedResult] = useState<string | null>(null);
   const autoSeedingRef = useRef(false);
 
-  // Reset to first page whenever page size changes
+  // Reset to first page whenever page size or sort changes
   useEffect(() => {
     setMt5Page(1);
-  }, [mt5PageSize]);
+  }, [mt5PageSize, mt5SortBy, mt5SortOrder]);
+
+  // Sortable columns matching the server whitelist for /api/trading/mt5
+  const MT5_SORT_COLUMNS: Array<{ key: string; label: string }> = [
+    { key: "login", label: "Login" },
+    { key: "balance", label: "Balance" },
+    { key: "equity", label: "Equity" },
+    { key: "leverage", label: "Leverage" },
+    { key: "server", label: "Server" },
+    { key: "createdAt", label: "Created" },
+  ];
+
+  const handleMt5Sort = (key: string) => {
+    if (mt5SortBy === key) {
+      setMt5SortOrder((o) => (o === "asc" ? "desc" : "asc"));
+    } else {
+      setMt5SortBy(key);
+      setMt5SortOrder("desc");
+    }
+  };
 
   // Clamp page if the current page exceeds total pages
   useEffect(() => {
@@ -192,7 +216,34 @@ export default function Trading() {
 
       {(mt5Accounts || []).length > 0 && (
         <div className="space-y-4">
-          <h2 className="text-sm font-medium">MT5 Accounts</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium">MT5 Accounts</h2>
+            <div className="flex items-center gap-0.5 flex-wrap" aria-label="Sort MT5 accounts">
+              <span className="text-[10px] text-muted-foreground mr-1 hidden sm:inline">Sort:</span>
+              {MT5_SORT_COLUMNS.map((col) => {
+                const active = mt5SortBy === col.key;
+                return (
+                  <button
+                    key={col.key}
+                    type="button"
+                    onClick={() => handleMt5Sort(col.key)}
+                    aria-label={`Sort by ${col.label}`}
+                    aria-pressed={active}
+                    className={`inline-flex items-center gap-1 text-[11px] font-medium transition-colors rounded px-1.5 py-0.5 ${
+                      active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {col.label}
+                    {active ? (
+                      mt5SortOrder === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-50" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <div className="grid md:grid-cols-2 gap-4">
             {(mt5Accounts || []).map((acc: any) => (
               <Card key={acc.id} className="gap-0">

@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
+import { useApiQuery } from "@/hooks/use-api";
 
 // ─── Mock: sonner ──────────────────────────────────────────
 vi.mock("sonner", () => ({
@@ -345,6 +346,64 @@ describe("Trading Page", () => {
       expect(screen.getByText("111111")).toBeTruthy();
       expect(screen.getByText("222222")).toBeTruthy();
       expect(screen.getByText("333333")).toBeTruthy();
+    });
+
+    // ─── Sortable headers ────────────────────────────────
+    it("renders sortable column headers with the default column active", () => {
+      setQueryData({ "mt5/my": [makeMt5Account()] });
+      render(<Trading />);
+
+      // All sortable headers render
+      for (const label of ["Login", "Balance", "Equity", "Leverage", "Server", "Created"]) {
+        expect(screen.getByRole("button", { name: `Sort by ${label}` })).toBeTruthy();
+      }
+      // Default sort is createdAt desc → Created is active (aria-pressed)
+      expect(screen.getByRole("button", { name: "Sort by Created" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("calls the API with sortBy/sortOrder when a header is clicked", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "mt5/my": [makeMt5Account()] });
+      render(<Trading />);
+
+      await user.click(screen.getByRole("button", { name: "Sort by Balance" }));
+
+      // Find the mt5 query call that included the sort params
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const mt5Call = calls.find((c) => String(c[1]).includes("/api/trading/mt5?") && String(c[1]).includes("sortBy=balance"));
+      expect(mt5Call).toBeTruthy();
+      expect(String(mt5Call![1])).toContain("sortOrder=desc");
+      expect(screen.getByRole("button", { name: "Sort by Balance" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("toggles to ascending when the active column is clicked again", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "mt5/my": [makeMt5Account()] });
+      render(<Trading />);
+
+      await user.click(screen.getByRole("button", { name: "Sort by Balance" }));
+      await user.click(screen.getByRole("button", { name: "Sort by Balance" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const ascCall = calls.find((c) => String(c[1]).includes("/api/trading/mt5?") && String(c[1]).includes("sortBy=balance&sortOrder=asc"));
+      expect(ascCall).toBeTruthy();
+    });
+
+    it("switching columns resets to descending order", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "mt5/my": [makeMt5Account()] });
+      render(<Trading />);
+
+      // Sort by Balance asc first
+      await user.click(screen.getByRole("button", { name: "Sort by Balance" }));
+      await user.click(screen.getByRole("button", { name: "Sort by Balance" }));
+      // Switch to Equity → should default to desc
+      await user.click(screen.getByRole("button", { name: "Sort by Equity" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const equityCall = calls.find((c) => String(c[1]).includes("/api/trading/mt5?") && String(c[1]).includes("sortBy=equity&sortOrder=desc"));
+      expect(equityCall).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Sort by Equity" }).getAttribute("aria-pressed")).toBe("true");
     });
   });
 
