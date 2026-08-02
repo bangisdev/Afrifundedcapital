@@ -10,6 +10,9 @@ import {
   Download,
   ChevronLeft,
   ChevronRight,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from "lucide-react";
 
 interface CertificatesResponse {
@@ -28,9 +31,51 @@ export default function Certificates() {
   const [pageSize, setPageSize] = useState(10);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
 
+  // Sorting (whitelisted columns on the server: id, type, certificateNumber, issuedAt)
+  const [sortBy, setSortBy] = useState("issuedAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const SORT_COLUMNS: Array<{ key: string; label: string }> = [
+    { key: "type", label: "Type" },
+    { key: "certificateNumber", label: "Number" },
+    { key: "issuedAt", label: "Issued" },
+  ];
+  const handleSort = (key: string) => {
+    if (sortBy === key) {
+      setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(key);
+      setSortOrder("desc");
+    }
+    setPage(1);
+  };
+  const sortHeader = (sortKey: string, label: string) => {
+    const active = sortBy === sortKey;
+    return (
+      <button
+        key={sortKey}
+        type="button"
+        onClick={() => handleSort(sortKey)}
+        aria-label={`Sort by ${label}`}
+        aria-pressed={active}
+        className={`inline-flex items-center gap-1 font-medium transition-colors rounded px-1 py-0.5 -mx-1 ${
+          active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        {label}
+        {active ? (
+          sortOrder === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-50" />
+        )}
+      </button>
+    );
+  };
+
   const params = new URLSearchParams();
   params.set("page", String(page));
   params.set("pageSize", String(pageSize));
+  params.set("sortBy", sortBy);
+  params.set("sortOrder", sortOrder);
   const listQuery = `/api/certificates/my?${params.toString()}`;
 
   const { data, isLoading } = useApiQuery<CertificatesResponse>(["certificates", "my", listQuery], listQuery);
@@ -43,6 +88,11 @@ export default function Certificates() {
   useEffect(() => {
     if (page > totalPages) setPage(1);
   }, [totalPages, page]);
+
+  // Reset to first page whenever the sort changes
+  useEffect(() => {
+    setPage(1);
+  }, [sortBy, sortOrder]);
 
   const handleDownload = async (certId: number, certNumber: string) => {
     setDownloadingId(certId);
@@ -103,6 +153,10 @@ export default function Certificates() {
         </div>
       ) : (
         <>
+          <div className="card-subtle px-4 py-2 flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] font-medium text-muted-foreground mr-1">Sort:</span>
+            {SORT_COLUMNS.map((c) => sortHeader(c.key, c.label))}
+          </div>
           <div className="space-y-3">
             {certificates.map((cert: any) => (
               <div

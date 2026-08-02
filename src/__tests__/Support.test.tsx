@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
+import { useApiQuery } from "@/hooks/use-api";
 
 // ─── Mock: sonner ──────────────────────────────────────────
 vi.mock("sonner", () => ({
@@ -512,6 +513,46 @@ describe("Support Page", () => {
   });
 
   // ─── Full integration ──────────────────────────────────
+  // ─── Sortable Headers ──────────────────────────────────
+  describe("Sortable Headers", () => {
+    it("renders sortable headers with Created active by default", () => {
+      setQueryData({ "support/my": [makeTicket()] });
+      render(<Support />);
+
+      for (const label of ["Subject", "Category", "Priority", "Status", "Created"]) {
+        expect(screen.getByRole("button", { name: `Sort by ${label}` })).toBeTruthy();
+      }
+      expect(screen.getByRole("button", { name: "Sort by Created" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("calls the API with sortBy/sortOrder when a header is clicked", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "support/my": [makeTicket()] });
+      render(<Support />);
+
+      await user.click(screen.getByRole("button", { name: "Sort by Subject" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const myCall = calls.find((c) => String(c[1]).includes("/api/support/my?") && String(c[1]).includes("sortBy=subject"));
+      expect(myCall).toBeTruthy();
+      expect(String(myCall![1])).toContain("sortOrder=desc");
+      expect(screen.getByRole("button", { name: "Sort by Subject" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("toggles to ascending when the active column is clicked again", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "support/my": [makeTicket()] });
+      render(<Support />);
+
+      await user.click(screen.getByRole("button", { name: "Sort by Subject" }));
+      await user.click(screen.getByRole("button", { name: "Sort by Subject" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const ascCall = calls.find((c) => String(c[1]).includes("/api/support/my?") && String(c[1]).includes("sortBy=subject&sortOrder=asc"));
+      expect(ascCall).toBeTruthy();
+    });
+  });
+
   describe("Full Integration", () => {
     it("renders all sections with complete data", () => {
       setQueryData({

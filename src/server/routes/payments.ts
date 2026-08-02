@@ -535,6 +535,21 @@ app.get("/my", requireAuth, (c) => {
   const page = Math.max(1, qPage);
   const pageSize = Math.min(50, Math.max(1, qPageSize));
 
+  // Sorting (whitelisted columns, asc/desc)
+  const SORTABLE: Record<string, SQLWrapper> = {
+    id: payments.id,
+    reference: payments.reference,
+    amount: payments.amount,
+    provider: payments.provider,
+    status: payments.status,
+    createdAt: payments.createdAt,
+    completedAt: payments.completedAt,
+  };
+  const qSortBy = String(c.req.query("sortBy") || "createdAt");
+  const qSortOrder = String(c.req.query("sortOrder") || "desc");
+  const sortCol = SORTABLE[qSortBy] || payments.createdAt;
+  const sortOrder = qSortOrder.toLowerCase() === "asc" ? asc(sortCol) : desc(sortCol);
+
   const whereClause: SQL = eq(payments.userId, userId);
 
   // Total matching count
@@ -546,7 +561,7 @@ app.get("/my", requireAuth, (c) => {
     .select()
     .from(payments)
     .where(whereClause)
-    .orderBy(desc(payments.createdAt))
+    .orderBy(sortOrder)
     .limit(pageSize)
     .offset((page - 1) * pageSize)
     .all();

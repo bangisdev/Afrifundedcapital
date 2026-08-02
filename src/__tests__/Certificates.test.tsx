@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
+import { useApiQuery } from "@/hooks/use-api";
 
 // ─── Mock: sonner ──────────────────────────────────────────
 vi.mock("sonner", () => ({
@@ -381,6 +382,46 @@ describe("Certificates Page", () => {
   });
 
   // ─── Full integration ──────────────────────────────────
+  // ─── Sortable Headers ──────────────────────────────────
+  describe("Sortable Headers", () => {
+    it("renders sortable headers with Issued active by default", () => {
+      setQueryData({ "certificates/my": [makeCertificate()] });
+      render(<Certificates />);
+
+      for (const label of ["Type", "Number", "Issued"]) {
+        expect(screen.getByRole("button", { name: `Sort by ${label}` })).toBeTruthy();
+      }
+      expect(screen.getByRole("button", { name: "Sort by Issued" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("calls the API with sortBy/sortOrder when a header is clicked", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "certificates/my": [makeCertificate()] });
+      render(<Certificates />);
+
+      await user.click(screen.getByRole("button", { name: "Sort by Type" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const myCall = calls.find((c) => String(c[1]).includes("/api/certificates/my?") && String(c[1]).includes("sortBy=type"));
+      expect(myCall).toBeTruthy();
+      expect(String(myCall![1])).toContain("sortOrder=desc");
+      expect(screen.getByRole("button", { name: "Sort by Type" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("toggles to ascending when the active column is clicked again", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "certificates/my": [makeCertificate()] });
+      render(<Certificates />);
+
+      await user.click(screen.getByRole("button", { name: "Sort by Type" }));
+      await user.click(screen.getByRole("button", { name: "Sort by Type" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const ascCall = calls.find((c) => String(c[1]).includes("/api/certificates/my?") && String(c[1]).includes("sortBy=type&sortOrder=asc"));
+      expect(ascCall).toBeTruthy();
+    });
+  });
+
   describe("Full Integration", () => {
     it("renders complete page with all sections", () => {
       setQueryData({

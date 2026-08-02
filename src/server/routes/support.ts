@@ -16,6 +16,21 @@ app.get("/my", requireAuth, (c) => {
   const page = Math.max(1, parseInt(c.req.query("page") || "1") || 1);
   const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query("pageSize") || "10") || 10));
 
+  // Sorting (whitelisted columns, asc/desc)
+  const SORTABLE: Record<string, SQLWrapper> = {
+    id: supportTickets.id,
+    subject: supportTickets.subject,
+    category: supportTickets.category,
+    priority: supportTickets.priority,
+    status: supportTickets.status,
+    createdAt: supportTickets.createdAt,
+    updatedAt: supportTickets.updatedAt,
+  };
+  const qSortBy = String(c.req.query("sortBy") || "createdAt");
+  const qSortOrder = String(c.req.query("sortOrder") || "desc");
+  const sortCol = SORTABLE[qSortBy] || supportTickets.createdAt;
+  const sortOrder = qSortOrder.toLowerCase() === "asc" ? asc(sortCol) : desc(sortCol);
+
   // Total count for this user
   const totalRow = db
     .select({ count: count() })
@@ -29,7 +44,7 @@ app.get("/my", requireAuth, (c) => {
     .select()
     .from(supportTickets)
     .where(eq(supportTickets.userId, userId))
-    .orderBy(desc(supportTickets.createdAt))
+    .orderBy(sortOrder)
     .limit(pageSize)
     .offset((page - 1) * pageSize)
     .all();

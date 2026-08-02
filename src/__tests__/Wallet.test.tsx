@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
+import { useApiQuery } from "@/hooks/use-api";
 
 // ─── Mock: sonner ──────────────────────────────────────────
 vi.mock("sonner", () => ({
@@ -998,6 +999,81 @@ describe("Wallet Page", () => {
   });
 
   // ─── Full integration ──────────────────────────────────
+  // ─── Sortable Headers ──────────────────────────────────
+  describe("Sortable Headers", () => {
+    it("renders transaction sort headers with Date active by default", () => {
+      setQueryData({ "wallet/txns": [makeTransaction()] });
+      render(<Wallet />);
+
+      for (const label of ["Type", "Amount", "Date"]) {
+        expect(screen.getByRole("button", { name: `Sort by ${label}` })).toBeTruthy();
+      }
+      expect(screen.getByRole("button", { name: "Sort by Date" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("calls the API with sortBy/sortOrder when a transaction header is clicked", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "wallet/txns": [makeTransaction()] });
+      render(<Wallet />);
+
+      await user.click(screen.getByRole("button", { name: "Sort by Type" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const txCall = calls.find((c) => String(c[1]).includes("/api/wallets/transactions?") && String(c[1]).includes("sortBy=type"));
+      expect(txCall).toBeTruthy();
+      expect(String(txCall![1])).toContain("sortOrder=desc");
+      expect(screen.getByRole("button", { name: "Sort by Type" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("toggles a transaction sort to ascending on second click", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "wallet/txns": [makeTransaction()] });
+      render(<Wallet />);
+
+      await user.click(screen.getByRole("button", { name: "Sort by Type" }));
+      await user.click(screen.getByRole("button", { name: "Sort by Type" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const ascCall = calls.find((c) => String(c[1]).includes("/api/wallets/transactions?") && String(c[1]).includes("sortBy=type&sortOrder=asc"));
+      expect(ascCall).toBeTruthy();
+    });
+
+    it("renders payment history sort headers with Date active and calls the API on click", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "wallet/txns": [], "payments/my": [makePayment()] });
+      render(<Wallet />);
+
+      // Switch to Payment History tab
+      await user.click(screen.getByText("Payment History"));
+
+      for (const label of ["Reference", "Amount", "Status", "Date"]) {
+        expect(screen.getByRole("button", { name: `Sort by ${label}` })).toBeTruthy();
+      }
+      expect(screen.getByRole("button", { name: "Sort by Date" }).getAttribute("aria-pressed")).toBe("true");
+
+      await user.click(screen.getByRole("button", { name: "Sort by Status" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const payCall = calls.find((c) => String(c[1]).includes("/api/payments/my?") && String(c[1]).includes("sortBy=status"));
+      expect(payCall).toBeTruthy();
+      expect(String(payCall![1])).toContain("sortOrder=desc");
+    });
+
+    it("toggles a payment sort to ascending on second click", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "wallet/txns": [], "payments/my": [makePayment()] });
+      render(<Wallet />);
+
+      await user.click(screen.getByText("Payment History"));
+      await user.click(screen.getByRole("button", { name: "Sort by Status" }));
+      await user.click(screen.getByRole("button", { name: "Sort by Status" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const ascCall = calls.find((c) => String(c[1]).includes("/api/payments/my?") && String(c[1]).includes("sortBy=status&sortOrder=asc"));
+      expect(ascCall).toBeTruthy();
+    });
+  });
+
   describe("Full Integration", () => {
     it("renders all sections together with complete data", () => {
       setQueryData({

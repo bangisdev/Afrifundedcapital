@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import {
   Loader2, ArrowUpRight, ArrowDownLeft, RefreshCw, Search, Filter,
   FileText, ChevronDown, CheckCircle, XCircle, Clock, WalletIcon, TrendingUp, Copy,
+  ArrowUp, ArrowDown, ArrowUpDown,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -45,6 +46,10 @@ export default function Wallet() {
   const [pageSize, setPageSize] = useState(10);
   const [pPage, setPPage] = useState(1);
   const [pPageSize, setPPageSize] = useState(10);
+  const [sortBy, setSortBy] = useState("createdAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [pSortBy, setPSortBy] = useState("createdAt");
+  const [pSortOrder, setPSortOrder] = useState<"asc" | "desc">("desc");
   const [selectedPayment, setSelectedPayment] = useState<any>(null);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
 
@@ -54,16 +59,18 @@ export default function Wallet() {
     return () => clearTimeout(t);
   }, [txSearch]);
 
-  // Reset to first page whenever filters or page size change
+  // Reset to first page whenever filters, sort, or page size change
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, txFilter, pageSize]);
+  }, [debouncedSearch, txFilter, pageSize, sortBy, sortOrder]);
 
   const params = new URLSearchParams();
   params.set("page", String(page));
   params.set("pageSize", String(pageSize));
   if (debouncedSearch) params.set("search", debouncedSearch);
   if (txFilter !== "all") params.set("type", txFilter);
+  params.set("sortBy", sortBy);
+  params.set("sortOrder", sortOrder);
   const txQuery = `/api/wallets/transactions?${params.toString()}`;
 
   const { data: txnsData, isLoading: tLoading } = useApiQuery<TransactionsResponse>(["wallet", "txns", txQuery], txQuery);
@@ -81,6 +88,8 @@ export default function Wallet() {
   const pParams = new URLSearchParams();
   pParams.set("page", String(pPage));
   pParams.set("pageSize", String(pPageSize));
+  pParams.set("sortBy", pSortBy);
+  pParams.set("sortOrder", pSortOrder);
   const pQuery = `/api/payments/my?${pParams.toString()}`;
 
   const { data: paymentsData, isLoading: pLoading } = useApiQuery<PaymentsResponse>(["payments", "my", pQuery], pQuery);
@@ -90,10 +99,10 @@ export default function Wallet() {
   const pTotalPages = paymentsData?.totalPages || 1;
   const completedPayments = paymentsData?.stats?.byStatus?.completed || 0;
 
-  // Reset payments page when page size changes
+  // Reset payments page when page size or sort changes
   useEffect(() => {
     setPPage(1);
-  }, [pPageSize]);
+  }, [pPageSize, pSortBy, pSortOrder]);
 
   // Clamp payments page if the current page exceeds total pages
   useEffect(() => {
@@ -128,6 +137,83 @@ export default function Wallet() {
   const to = Math.min(page * pageSize, total);
   const pFrom = pTotal === 0 ? 0 : (pPage - 1) * pPageSize + 1;
   const pTo = Math.min(pPage * pPageSize, pTotal);
+
+  // Sorting (whitelisted columns on the server: id, type, amount, reference, createdAt)
+  const TX_SORT_COLUMNS: Array<{ key: string; label: string }> = [
+    { key: "type", label: "Type" },
+    { key: "amount", label: "Amount" },
+    { key: "createdAt", label: "Date" },
+  ];
+  const handleTxSort = (key: string) => {
+    if (sortBy === key) {
+      setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(key);
+      setSortOrder("desc");
+    }
+    setPage(1);
+  };
+  const txSortHeader = (sortKey: string, label: string) => {
+    const active = sortBy === sortKey;
+    return (
+      <button
+        key={sortKey}
+        type="button"
+        onClick={() => handleTxSort(sortKey)}
+        aria-label={`Sort by ${label}`}
+        aria-pressed={active}
+        className={`inline-flex items-center gap-1 font-medium transition-colors rounded px-1 py-0.5 -mx-1 ${
+          active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        {label}
+        {active ? (
+          sortOrder === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-50" />
+        )}
+      </button>
+    );
+  };
+
+  // Payment sorting (whitelisted on the server: id, reference, amount, provider, status, createdAt, completedAt)
+  const PAY_SORT_COLUMNS: Array<{ key: string; label: string }> = [
+    { key: "reference", label: "Reference" },
+    { key: "amount", label: "Amount" },
+    { key: "status", label: "Status" },
+    { key: "createdAt", label: "Date" },
+  ];
+  const handlePaySort = (key: string) => {
+    if (pSortBy === key) {
+      setPSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+    } else {
+      setPSortBy(key);
+      setPSortOrder("desc");
+    }
+    setPPage(1);
+  };
+  const paySortHeader = (sortKey: string, label: string) => {
+    const active = pSortBy === sortKey;
+    return (
+      <button
+        key={sortKey}
+        type="button"
+        onClick={() => handlePaySort(sortKey)}
+        aria-label={`Sort by ${label}`}
+        aria-pressed={active}
+        className={`inline-flex items-center gap-1 font-medium transition-colors rounded px-1 py-0.5 -mx-1 ${
+          active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        {label}
+        {active ? (
+          pSortOrder === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-50" />
+        )}
+      </button>
+    );
+  };
 
   return (
     <div className="space-y-8">
@@ -173,6 +259,13 @@ export default function Wallet() {
               <Filter className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
             </div>
           </div>
+
+          {transactions.length > 0 && (
+            <div className="card-subtle px-4 py-2 flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] font-medium text-muted-foreground mr-1">Sort:</span>
+              {TX_SORT_COLUMNS.map((c) => txSortHeader(c.key, c.label))}
+            </div>
+          )}
 
           {tLoading && transactions.length === 0 ? (
             <div className="flex items-center justify-center h-32"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
@@ -227,6 +320,10 @@ export default function Wallet() {
             <div className="card-subtle p-8 text-center"><FileText className="h-8 w-8 mx-auto mb-3 text-muted-foreground" /><p className="text-xs text-muted-foreground">No payments yet</p></div>
           ) : (
             <>
+              <div className="card-subtle px-4 py-2 flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] font-medium text-muted-foreground mr-1">Sort:</span>
+                {PAY_SORT_COLUMNS.map((c) => paySortHeader(c.key, c.label))}
+              </div>
               <div className="space-y-1">
                 {payments.map((p: any) => (
                   <button key={p.id} onClick={() => { setSelectedPayment(p); setShowPaymentDialog(true); }} className="w-full card-subtle p-3.5 flex items-center justify-between text-left hover:bg-secondary/20 transition-colors">

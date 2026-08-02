@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
 import { wallets, walletTransactions } from "../schema";
-import { eq, desc, count, and, or, like, sql, type SQL } from "drizzle-orm";
+import { eq, desc, asc, count, and, or, like, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth } from "../middleware";
 
 const app = new Hono();
@@ -28,6 +28,19 @@ app.get("/transactions", requireAuth, (c) => {
   const qPageSize = Number(c.req.query("pageSize") || 10);
   const page = Math.max(1, qPage);
   const pageSize = Math.min(50, Math.max(1, qPageSize));
+
+  // Sorting (whitelisted columns, asc/desc)
+  const SORTABLE: Record<string, SQLWrapper> = {
+    id: walletTransactions.id,
+    type: walletTransactions.type,
+    amount: walletTransactions.amount,
+    reference: walletTransactions.reference,
+    createdAt: walletTransactions.createdAt,
+  };
+  const qSortBy = String(c.req.query("sortBy") || "createdAt");
+  const qSortOrder = String(c.req.query("sortOrder") || "desc");
+  const sortCol = SORTABLE[qSortBy] || walletTransactions.createdAt;
+  const sortOrder = qSortOrder.toLowerCase() === "asc" ? asc(sortCol) : desc(sortCol);
 
   // Filters
   const search = (c.req.query("search") || "").trim();
@@ -59,7 +72,7 @@ app.get("/transactions", requireAuth, (c) => {
     .select()
     .from(walletTransactions)
     .where(whereClause)
-    .orderBy(desc(walletTransactions.createdAt))
+    .orderBy(sortOrder)
     .limit(pageSize)
     .offset((page - 1) * pageSize)
     .all();
