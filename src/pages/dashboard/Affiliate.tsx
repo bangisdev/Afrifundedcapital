@@ -9,11 +9,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Loader2, Copy, Users, TrendingUp, DollarSign, Link2, ExternalLink, ArrowUpRight, Clock, CheckCircle, XCircle, Banknote } from "lucide-react";
 import { toast } from "sonner";
 
+interface PayoutsResponse {
+  payouts: any[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  stats: { total: number; byStatus: Record<string, number> };
+}
+
 export default function Affiliate() {
   const { user } = useAuth();
   const { data: affiliate, isLoading } = useApiQuery<any>(["affiliate", "my"], "/api/affiliates/my");
-  const { data: payoutStats } = useApiQuery<any>(["affiliate", "payouts", "stats"], "/api/affiliates/payouts/stats");
-  const { data: payoutHistory } = useApiQuery<any[]>(["affiliate", "payouts"], "/api/affiliates/payouts");
+  const { data: payoutStats } = useApiQuery<any>(["affiliate", "payout-stats"], "/api/affiliates/payouts/stats");
   const generateCode = useApiMutation<any, any>("post", "/api/users/referral-code");
   const requestPayout = useApiMutation<any, any>("post", "/api/affiliates/payout-request");
 
@@ -21,6 +29,8 @@ export default function Affiliate() {
   const [payoutAmount, setPayoutAmount] = useState("");
   const [payoutMethod, setPayoutMethod] = useState("bank_transfer");
   const [payoutDetails, setPayoutDetails] = useState("");
+  const [pPage, setPPage] = useState(1);
+  const [pPageSize, setPPageSize] = useState(10);
 
   // Auto-generate code on mount if user has no affiliate record
   useEffect(() => {
@@ -32,6 +42,31 @@ export default function Affiliate() {
       });
     }
   }, [isLoading, user, affiliate, generateCode]);
+
+  // Payout history (server-driven pagination)
+  const pParams = new URLSearchParams();
+  pParams.set("page", String(pPage));
+  pParams.set("pageSize", String(pPageSize));
+  const pQuery = `/api/affiliates/payouts?${pParams.toString()}`;
+
+  const { data: payoutsData, isLoading: pLoading } = useApiQuery<PayoutsResponse>(["affiliate", "payouts", pQuery], pQuery);
+
+  const payouts = payoutsData?.payouts || [];
+  const pTotal = payoutsData?.total || 0;
+  const pTotalPages = payoutsData?.totalPages || 1;
+
+  // Reset to first page whenever page size changes
+  useEffect(() => {
+    setPPage(1);
+  }, [pPageSize]);
+
+  // Clamp page if the current page exceeds total pages
+  useEffect(() => {
+    if (pPage > pTotalPages && pTotalPages > 0) setPPage(1);
+  }, [pTotalPages, pPage]);
+
+  const pFrom = pTotal === 0 ? 0 : (pPage - 1) * pPageSize + 1;
+  const pTo = Math.min(pPage * pPageSize, pTotal);
 
   if (isLoading || generateCode.isPending) {
     return (
@@ -185,10 +220,12 @@ export default function Affiliate() {
         )}
 
         {/* Payout History */}
-        {payoutHistory && payoutHistory.length > 0 && (
+        {pLoading && payouts.length === 0 ? (
+          <div className="flex items-center justify-center py-8"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+        ) : pTotal > 0 ? (
           <div className="space-y-2">
             <h3 className="text-xs font-medium text-muted-foreground">Recent Requests</h3>
-            {payoutHistory.map((p: any) => (
+            {payouts.map((p: any) => (
               <div key={p.id} className="card-subtle p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center">
@@ -220,8 +257,26 @@ export default function Affiliate() {
                 </Badge>
               </div>
             ))}
+
+            {/* Pagination footer */}
+            <div className="flex items-center justify-between pt-1">
+              <div className="text-[10px] text-muted-foreground">Showing {pFrom}–{pTo} of {pTotal} payouts</div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={pPageSize}
+                  onChange={(e) => setPPageSize(Number(e.target.value))}
+                  className="h-7 px-2 rounded-md border border-input bg-background text-[11px] cursor-pointer outline-none"
+                  aria-label="Rows per page"
+                >
+                  {[10, 25, 50].map((n) => <option key={n} value={n}>{n} / page</option>)}
+                </select>
+                <Button variant="outline" size="sm" className="h-7 px-2.5 text-[11px]" disabled={pPage <= 1} onClick={() => setPPage((p) => p - 1)}>Prev</Button>
+                <span className="px-2 text-[11px] font-medium tabular-nums">{pPage} / {pTotalPages}</span>
+                <Button variant="outline" size="sm" className="h-7 px-2.5 text-[11px]" disabled={pPage >= pTotalPages} onClick={() => setPPage((p) => p + 1)}>Next</Button>
+              </div>
+            </div>
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* How It Works */}

@@ -53,11 +53,38 @@ const mockGenerateCode = vi.fn(async () => ({ referralCode: "NEWCODE123" }));
 
 vi.mock("@/hooks/use-api", () => ({
   useApiQuery: vi.fn((key: string[], path: string, _opts?: any) => {
-    const dataKey = `${key.join("/")}`;
+    // The page passes query-suffixed keys (["affiliate", "payouts", "/api/affiliates/payouts?..."]),
+    // so look up by the stable prefix (first two segments).
+    const dataKey = key.slice(0, 2).join("/");
     if (queryDataMap[dataKey] === undefined) {
       return { data: undefined, isLoading: true };
     }
-    return { data: queryDataMap[dataKey], isLoading: false };
+    const base = queryDataMap[dataKey];
+    // Simulate the server-driven payouts list: paginate + stats envelope.
+    if (dataKey === "affiliate/payouts" && Array.isArray(base)) {
+      const query = path.includes("?") ? path.split("?")[1] : "";
+      const params = new URLSearchParams(query);
+      const page = Number(params.get("page") || 1);
+      const pageSize = Number(params.get("pageSize") || 10);
+      const total = base.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      const byStatus = base.reduce<Record<string, number>>((acc, p: any) => {
+        acc[p.status] = (acc[p.status] || 0) + 1;
+        return acc;
+      }, {});
+      return {
+        data: {
+          payouts: base.slice((page - 1) * pageSize, page * pageSize),
+          total,
+          page,
+          pageSize,
+          totalPages,
+          stats: { total, byStatus },
+        },
+        isLoading: false,
+      };
+    }
+    return { data: base, isLoading: false };
   }),
   useApiMutation: vi.fn((_method: string, _path: string, _onSuccess?: any) => ({
     mutateAsync: mockGenerateCode,
@@ -79,6 +106,18 @@ function makeAffiliate(overrides: any = {}) {
     totalReferrals: 15,
     totalCommissions: 75000,
     pendingCommissions: 25000,
+    ...overrides,
+  };
+}
+
+function makePayout(overrides: any = {}) {
+  return {
+    id: 1,
+    amount: 10000,
+    status: "paid",
+    paymentMethod: "bank_transfer",
+    paymentDetails: "GTBank 0123456789",
+    requestedAt: Date.now() - 86400000,
     ...overrides,
   };
 }
@@ -123,7 +162,7 @@ describe("Affiliate Page", () => {
     });
 
     it("hides spinner once data is loaded", () => {
-      setQueryData({ "affiliate/my": makeAffiliate() });
+      setQueryData({ "affiliate/my": makeAffiliate(), "affiliate/payouts": [] });
       const { container } = render(<Affiliate />);
       expect(container.querySelector(".animate-spin")).toBeNull();
     });
@@ -413,7 +452,7 @@ describe("Affiliate Page", () => {
       const { container } = render(<Affiliate />);
       expect(container.querySelector(".animate-spin")).toBeTruthy();
 
-      setQueryData({ "affiliate/my": makeAffiliate({ referralCode: "CODE1" }) });
+      setQueryData({ "affiliate/my": makeAffiliate({ referralCode: "CODE1" }), "affiliate/payouts": [] });
       const { container: c2 } = render(<Affiliate />);
       expect(c2.querySelector(".animate-spin")).toBeNull();
       expect(screen.getByText("CODE1")).toBeTruthy();
@@ -440,6 +479,46 @@ describe("Affiliate Page", () => {
       expect(screen.getByText("₦999,999,999")).toBeTruthy();
       // ₦888,888,888 appears in both the Pending Payout stat and the Available box
       expect(screen.getAllByText("₦888,888,888").length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // ─── Payout history pagination ─────────────────────────
+  describe("Payout History Pagination", () => {
+    const manyPayouts = () =>
+      Array.from({ length: 15 }, (_, i) =>
+        makePayout({
+          id: i + 1,
+          amount: 5000 * (i + 1),
+          status: i % 3 === 0 ? "pending" : "paid",
+          requestedAt: Date.now() - i * 1000,
+        }),
+      );
+
+    it("paginates payout history with many records", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "affiliate/my": makeAffiliate(), "affiliate/payouts": manyPayouts() });
+      render(<Affiliate />);
+
+      // Page 1 shows the first 10
+      expect(screen.getByText("Recent Requests")).toBeTruthy();
+      expect(screen.getByText(/Showing 1–10 of 15 payouts/)).toBeTruthy();
+
+      // Next page shows the remaining 5
+      await user.click(screen.getByText("Next"));
+      expect(screen.getByText(/Showing 11–15 of 15 payouts/)).toBeTruthy();
+
+      // Prev returns to page 1
+      await user.click(screen.getByText("Prev"));
+      expect(screen.getByText(/Showing 1–10 of 15 payouts/)).toBeTruthy();
+    });
+
+    it("changes rows per page for payout history", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "affiliate/my": makeAffiliate(), "affiliate/payouts": manyPayouts() });
+      render(<Affiliate />);
+
+      await user.selectOptions(screen.getByLabelText("Rows per page"), "25");
+      expect(screen.getByText(/Showing 1–15 of 15 payouts/)).toBeTruthy();
     });
   });
 });

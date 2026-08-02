@@ -144,11 +144,43 @@ app.get("/payouts/stats", requireAuth, (c) => {
 app.get("/payouts", requireAuth, (c) => {
   const userId = c.get("userId");
   const db = getDb();
-  const items = db.select().from(commissionPayouts)
-    .where(eq(commissionPayouts.userId, userId))
+
+  const qPage = Number(c.req.query("page") || 1);
+  const qPageSize = Number(c.req.query("pageSize") || 10);
+  const page = Math.max(1, qPage);
+  const pageSize = Math.min(50, Math.max(1, qPageSize));
+
+  const whereClause: SQL = eq(commissionPayouts.userId, userId);
+
+  // Total matching count
+  const totalRow = db.select({ count: count() }).from(commissionPayouts).where(whereClause).get();
+  const total = totalRow?.count || 0;
+
+  // Page of payouts
+  const items = db
+    .select()
+    .from(commissionPayouts)
+    .where(whereClause)
     .orderBy(desc(commissionPayouts.requestedAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize)
     .all();
-  return c.json(items);
+
+  // User-wide stats (unfiltered)
+  const all = db.select({ status: commissionPayouts.status }).from(commissionPayouts).where(whereClause).all();
+  const byStatus = all.reduce<Record<string, number>>((acc, p) => {
+    acc[p.status] = (acc[p.status] || 0) + 1;
+    return acc;
+  }, {});
+
+  return c.json({
+    payouts: items,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    stats: { total: all.length, byStatus },
+  });
 });
 
 // ─── Request affiliate payout ────────────────────────────

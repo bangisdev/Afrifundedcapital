@@ -12,7 +12,7 @@ import {
   authPost,
   getTestDb,
 } from "./setup";
-import { users, affiliates, commissions } from "../schema";
+import { users, affiliates, commissions, commissionPayouts } from "../schema";
 import { eq } from "drizzle-orm";
 
 let app: Hono;
@@ -108,6 +108,68 @@ describe("GET /api/affiliates/my", () => {
   it("returns 401 without auth", async () => {
     const res = await app.request("/api/affiliates/my");
     expect(res.status).toBe(401);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  MY AFFILIATE PAYOUTS
+// ═══════════════════════════════════════════════════════════════
+
+describe("GET /api/affiliates/payouts", () => {
+  it("returns an empty envelope for a user without payouts", async () => {
+    const { status, body } = await authGet(app, "/api/affiliates/payouts", userCookie);
+    expect(status).toBe(200);
+    const env = body as Record<string, any>;
+    expect(Array.isArray(env.payouts)).toBe(true);
+    expect(env.payouts.length).toBe(0);
+    expect(env.total).toBe(0);
+    expect(env.page).toBe(1);
+    expect(env.pageSize).toBe(10);
+    expect(env.totalPages).toBe(1);
+    expect(env.stats.total).toBe(0);
+  });
+
+  it("returns 401 without auth", async () => {
+    const res = await app.request("/api/affiliates/payouts");
+    expect(res.status).toBe(401);
+  });
+
+  it("paginates payouts server-side", async () => {
+    // Seed 12 payouts for the admin's affiliate record
+    const db = getTestDb();
+    const aff = db.select().from(affiliates).where(eq(affiliates.referralCode, "AFFILIATEADMIN01")).get();
+    expect(aff).toBeTruthy();
+    const now = Date.now();
+    for (let i = 1; i <= 12; i++) {
+      db.insert(commissionPayouts)
+        .values({
+          userId: aff!.userId,
+          affiliateId: aff!.id,
+          amount: 5000 * i,
+          status: i % 3 === 0 ? "pending" : "paid",
+          paymentMethod: "bank_transfer",
+          paymentDetails: "GTBank 0123456789",
+          requestedAt: now - i * 1000,
+        })
+        .run();
+    }
+
+    const page1 = (await authGet(app, "/api/affiliates/payouts?page=1&pageSize=10", adminCookie))
+      .body as Record<string, any>;
+    expect(page1.payouts.length).toBe(10);
+    expect(page1.total).toBe(12);
+    expect(page1.page).toBe(1);
+    expect(page1.pageSize).toBe(10);
+    expect(page1.totalPages).toBe(2);
+    // Stats are unfiltered by pagination
+    expect(page1.stats.total).toBe(12);
+    expect(page1.stats.byStatus.paid).toBe(8);
+    expect(page1.stats.byStatus.pending).toBe(4);
+
+    const page2 = (await authGet(app, "/api/affiliates/payouts?page=2&pageSize=10", adminCookie))
+      .body as Record<string, any>;
+    expect(page2.payouts.length).toBe(2);
+    expect(page2.page).toBe(2);
   });
 });
 
