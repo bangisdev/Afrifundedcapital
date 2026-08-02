@@ -9,6 +9,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Loader2, User, Shield, Upload, CheckCircle, XCircle, Clock,
   FileText, Trash2, Eye, X, AlertTriangle, RefreshCw, Image as ImageIcon,
+  ArrowUp, ArrowDown, ArrowUpDown,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -42,12 +43,57 @@ function getStatusConfig(status: string) {
   }
 }
 
+const KYC_SORT_COLUMNS: Array<{ key: string; label: string }> = [
+  { key: "documentType", label: "Type" },
+  { key: "status", label: "Status" },
+  { key: "uploadedAt", label: "Uploaded" },
+];
+
 export default function Profile() {
   const { user } = useAuth();
-  // Server-driven pagination — request a generous page size so all doc types are visible
-  const kycQuery = "/api/kyc/my?page=1&pageSize=50";
+  // Server-driven pagination + sorting — request a generous page size so all doc types are visible
+  const [kycSortBy, setKycSortBy] = useState("uploadedAt");
+  const [kycSortOrder, setKycSortOrder] = useState<"asc" | "desc">("desc");
+  const kycParams = new URLSearchParams();
+  kycParams.set("page", "1");
+  kycParams.set("pageSize", "50");
+  kycParams.set("sortBy", kycSortBy);
+  kycParams.set("sortOrder", kycSortOrder);
+  const kycQuery = `/api/kyc/my?${kycParams.toString()}`;
   const { data: kycDocsData, refetch: refetchKyc } = useApiQuery<any>(["kyc", "my", kycQuery], kycQuery);
   const kycDocs = kycDocsData?.documents || [];
+
+  const handleKycSort = (key: string) => {
+    if (kycSortBy === key) {
+      setKycSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+    } else {
+      setKycSortBy(key);
+      setKycSortOrder("desc");
+    }
+  };
+
+  const kycSortHeaders = (sortKey: string, label: string) => {
+    const active = kycSortBy === sortKey;
+    return (
+      <button
+        key={sortKey}
+        type="button"
+        onClick={() => handleKycSort(sortKey)}
+        aria-label={`Sort by ${label}`}
+        aria-pressed={active}
+        className={`inline-flex items-center gap-1 text-[11px] font-medium transition-colors rounded px-1.5 py-0.5 ${
+          active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        {label}
+        {active ? (
+          kycSortOrder === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-50" />
+        )}
+      </button>
+    );
+  };
   const updateProfile = useApiMutation<any, any>("put", "/api/users/profile");
   const uploadKyc = useApiMutation<any, any>("post", "/api/kyc/upload");
   const [saving, setSaving] = useState(false);
@@ -73,7 +119,12 @@ export default function Profile() {
   };
 
   const getLatestDoc = (type: string) => {
-    return kycDocs?.find((d: any) => d.documentType === type);
+    // Pick the newest submission for each type regardless of server sort order
+    const ofType = (kycDocs || []).filter((d: any) => d.documentType === type);
+    return ofType.reduce((newest: any, d: any) => {
+      if (!newest) return d;
+      return (d.uploadedAt || 0) > (newest.uploadedAt || 0) ? d : newest;
+    }, null);
   };
 
   const processFile = useCallback(async (file: File, docType: string) => {
@@ -236,6 +287,30 @@ export default function Profile() {
               <p>• Accepted formats: JPEG, PNG, WebP, PDF (max {MAX_SIZE_MB}MB)</p>
             </div>
           </div>
+
+          {/* Submitted Documents — sortable list */}
+          {kycDocs.length > 0 && (
+            <div className="card-subtle p-4 space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="text-xs text-muted-foreground font-medium">Submitted Documents ({kycDocs.length})</div>
+                <div className="flex items-center gap-0.5" aria-label="Sort KYC documents">
+                  <span className="text-[10px] text-muted-foreground mr-1 hidden sm:inline">Sort:</span>
+                  {KYC_SORT_COLUMNS.map((col) => kycSortHeaders(col.key, col.label))}
+                </div>
+              </div>
+              <div className="border-t border-border">
+                {kycDocs.map((doc: any) => (
+                  <div key={doc.id} className="flex items-center justify-between gap-3 py-2 border-b border-border/60 last:border-b-0 text-xs">
+                    <div className="font-medium capitalize">{doc.documentType?.replace(/_/g, " ")}</div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-muted-foreground capitalize">{doc.status}</span>
+                      <span className="text-muted-foreground tabular-nums">{formatTime(doc.uploadedAt)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Document Upload Cards */}
           <div className="space-y-3">

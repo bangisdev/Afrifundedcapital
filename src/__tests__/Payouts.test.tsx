@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
+import { useApiQuery } from "@/hooks/use-api";
 
 // ─── Mock: sonner ──────────────────────────────────────────
 vi.mock("sonner", () => ({
@@ -679,6 +680,48 @@ describe("Payouts Page", () => {
       expect(screen.getByText((t) => t.includes("25,000") && t.includes("Account"))).toBeTruthy();
       expect(screen.getByText((t) => t.includes("50,000") && t.includes("Account"))).toBeTruthy();
       expect(screen.getByText((t) => t.includes("100,000") && t.includes("Account"))).toBeTruthy();
+    });
+  });
+
+  // ─── Sortable funded accounts list ─────────────────────
+  describe("Sortable Funded Accounts", () => {
+    it("renders the funded accounts list with sortable headers", () => {
+      setQueryData({ "funded/my": [makeFundedAccount()] });
+      render(<Payouts />);
+
+      expect(screen.getByText(/Funded Accounts/)).toBeTruthy();
+      for (const label of ["Size", "Status", "Activated", "Paid Out"]) {
+        expect(screen.getByRole("button", { name: `Sort by ${label}` })).toBeTruthy();
+      }
+      // Default sort is activatedAt desc → Activated is active
+      expect(screen.getByRole("button", { name: "Sort by Activated" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("calls the API with sortBy/sortOrder when a header is clicked", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "funded/my": [makeFundedAccount()] });
+      render(<Payouts />);
+
+      await user.click(screen.getByRole("button", { name: "Sort by Size" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const fundedCall = calls.find((c) => String(c[1]).includes("/api/payouts/my/funded?") && String(c[1]).includes("sortBy=accountSize"));
+      expect(fundedCall).toBeTruthy();
+      expect(String(fundedCall![1])).toContain("sortOrder=desc");
+      expect(screen.getByRole("button", { name: "Sort by Size" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("toggles to ascending when the active column is clicked again", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "funded/my": [makeFundedAccount()] });
+      render(<Payouts />);
+
+      await user.click(screen.getByRole("button", { name: "Sort by Size" }));
+      await user.click(screen.getByRole("button", { name: "Sort by Size" }));
+
+      const calls = vi.mocked(useApiQuery).mock.calls;
+      const ascCall = calls.find((c) => String(c[1]).includes("/api/payouts/my/funded?") && String(c[1]).includes("sortBy=accountSize&sortOrder=asc"));
+      expect(ascCall).toBeTruthy();
     });
   });
 
