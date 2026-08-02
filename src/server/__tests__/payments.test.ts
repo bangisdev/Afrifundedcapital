@@ -176,6 +176,106 @@ describe("POST /api/payments/initiate", () => {
 //  VERIFY PAYMENT
 // ═══════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════
+//  ADMIN: CLEAN UP STALE PAYMENTS
+// ═══════════════════════════════════════════════════════════════
+
+describe("POST /api/payments/admin/cleanup-stale", () => {
+  it("marks stale pending payments as failed and voids their redemptions", async () => {
+    const db = getTestDb();
+    const { payments, couponRedemptions, coupons, users } = await import("../schema");
+    const { eq } = await import("drizzle-orm");
+
+    const trader = db.select().from(users).where(eq(users.email, TEST_USER.email)).get();
+    expect(trader).toBeTruthy();
+
+    // A coupon with an existing usage count
+    const coupon = db.insert(coupons).values({
+      code: "STALECLEAN",
+      discountType: "fixed",
+      discountValue: 5000,
+      isActive: true,
+      currentUses: 2,
+      createdBy: trader!.id,
+      createdAt: Date.now(),
+    }).returning().get();
+
+    // Stale pending payment (abandoned > 30 min ago) + redemption
+    const stalePayment = db.insert(payments).values({
+      userId: trader!.id,
+      amount: 50000,
+      currency: "NGN",
+      provider: "flutterwave",
+      status: "pending",
+      reference: "STALE-REF-1",
+      description: "Abandoned checkout",
+      createdAt: Date.now() - 60 * 60 * 1000, // 1 hour ago
+    }).returning().get();
+
+    db.insert(couponRedemptions).values({
+      couponId: coupon.id,
+      userId: trader!.id,
+      paymentId: stalePayment.id,
+      discountAmount: 5000,
+      originalAmount: 50000,
+      redeemedAt: Date.now() - 60 * 60 * 1000,
+    }).run();
+
+    // Fresh pending payment (recent) + redemption — must NOT be touched
+    const freshPayment = db.insert(payments).values({
+      userId: trader!.id,
+      amount: 50000,
+      currency: "NGN",
+      provider: "flutterwave",
+      status: "pending",
+      reference: "FRESH-REF-1",
+      description: "Recent checkout",
+      createdAt: Date.now(),
+    }).returning().get();
+
+    db.insert(couponRedemptions).values({
+      couponId: coupon.id,
+      userId: trader!.id,
+      paymentId: freshPayment.id,
+      discountAmount: 5000,
+      originalAmount: 50000,
+      redeemedAt: Date.now(),
+    }).run();
+
+    const { status, body } = await authPost(app, "/api/payments/admin/cleanup-stale", adminCookie, {});
+    expect(status).toBe(200);
+    const result = body as Record<string, any>;
+    expect(result.stale).toBeGreaterThanOrEqual(1);
+    expect(result.voided).toBeGreaterThanOrEqual(1);
+
+    // Stale payment failed + redemption voided
+    const staleAfter = db.select().from(payments).where(eq(payments.reference, "STALE-REF-1")).get();
+    expect(staleAfter!.status).toBe("failed");
+    const staleRedemption = db.select().from(couponRedemptions).where(eq(couponRedemptions.paymentId, stalePayment.id)).get();
+    expect(staleRedemption).toBeUndefined();
+
+    // Fresh payment untouched + redemption intact
+    const freshAfter = db.select().from(payments).where(eq(payments.reference, "FRESH-REF-1")).get();
+    expect(freshAfter!.status).toBe("pending");
+    const freshRedemption = db.select().from(couponRedemptions).where(eq(couponRedemptions.paymentId, freshPayment.id)).get();
+    expect(freshRedemption).toBeTruthy();
+
+    // currentUses decremented for the voided redemption
+    const couponAfter = db.select().from(coupons).where(eq(coupons.id, coupon.id)).get();
+    expect(couponAfter!.currentUses).toBe(1);
+  });
+
+  it("returns 403 for non-admin", async () => {
+    const { status } = await authPost(app, "/api/payments/admin/cleanup-stale", userCookie, {});
+    expect(status).toBe(403);
+  });
+
+  it("returns 401 without auth", async () => {
+    const res = await app.request("/api/payments/admin/cleanup-stale", { method: "POST" });
+    expect(res.status).toBe(401);
+  });
+});
+
 describe("POST /api/payments/verify", () => {
   it("returns 404 for non-existent payment", async () => {
     const { status, body } = await authPost(app, "/api/payments/verify", userCookie, {

@@ -5,6 +5,7 @@ import { eq, desc, asc, count, and, or, like, sql, type SQL, type SQLWrapper } f
 import { requireAuth, requireAdmin } from "../middleware";
 import { notify } from "../lib/notifications";
 import { paymentConfirmationEmail } from "../lib/email";
+import { voidRedemptionForPayment, voidStaleRedemptions } from "../lib/payment-sweep";
 
 const app = new Hono();
 
@@ -87,6 +88,12 @@ app.post("/initiate", requireAuth, async (c) => {
   const body = await c.req.json();
   const db = getDb();
   const now = Date.now();
+
+  // Self-heal: void redemptions from abandoned checkouts so they don't block
+  // coupon usage (non-critical — failures are ignored).
+  try {
+    voidStaleRedemptions(db);
+  } catch {}
 
   // Validate and apply coupon if provided
   let finalAmount = body.amount;
@@ -353,14 +360,7 @@ app.post("/verify", requireAuth, async (c) => {
   // Void any pre-created coupon redemption so failed payments don't consume usage
   // or show up in the user's My Coupons list.
   try {
-    const redemption = db.select().from(couponRedemptions).where(eq(couponRedemptions.paymentId, payment.id)).get();
-    if (redemption) {
-      db.delete(couponRedemptions).where(eq(couponRedemptions.id, redemption.id)).run();
-      const coupon = db.select().from(coupons).where(eq(coupons.id, redemption.couponId)).get();
-      if (coupon && (coupon.currentUses || 0) > 0) {
-        db.update(coupons).set({ currentUses: (coupon.currentUses || 0) - 1 }).where(eq(coupons.id, coupon.id)).run();
-      }
-    }
+    voidRedemptionForPayment(db, payment.id);
   } catch {}
 
   return c.json({ status: "failed", message: "Payment verification failed" });
@@ -730,6 +730,16 @@ app.get("/admin/revenue-growth", requireAuth, requireAdmin, (c) => {
   const lastMonth = db.select({ total: sql<number>`coalesce(sum(amount), 0)` }).from(payments)
     .where(and(eq(payments.status, "completed"), sql`created_at > ${sixtyDaysAgo} AND created_at <= ${thirtyDaysAgo}`)).get();
   return c.json({ thisMonth: thisMonth?.total || 0, lastMonth: lastMonth?.total || 0 });
+});
+
+// ─── Admin: Clean up abandoned (stale pending) payments ──
+app.post("/admin/cleanup-stale", requireAuth, requireAdmin, (c) => {
+  const db = getDb();
+  const result = voidStaleRedemptions(db);
+  return c.json({
+    ...result,
+    message: `Marked ${result.stale} stale payment(s) as failed and voided ${result.voided} coupon redemption(s)`,
+  });
 });
 
 // Admin: Refund payment

@@ -3,6 +3,7 @@ import { getDb } from "../db";
 import { coupons, couponRedemptions, payments } from "../schema";
 import { eq, desc, asc, and, count, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
+import { voidStaleRedemptions } from "../lib/payment-sweep";
 
 const app = new Hono();
 
@@ -155,6 +156,12 @@ app.post("/redeem", requireAuth, async (c) => {
 app.get("/my", requireAuth, (c) => {
   const userId = c.get("userId");
   const db = getDb();
+
+  // Self-heal: void redemptions from abandoned checkouts so My Coupons only
+  // lists real purchases (non-critical — failures are ignored).
+  try {
+    voidStaleRedemptions(db);
+  } catch {}
 
   const qPage = Number(c.req.query("page") || 1);
   const qPageSize = Number(c.req.query("pageSize") || 10);

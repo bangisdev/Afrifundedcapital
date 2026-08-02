@@ -211,6 +211,27 @@ describe("AdminPayments Page", () => {
     });
   });
 
+  // ─── Clean Up Abandoned ────────────────────────────────
+  describe("Clean Up Abandoned", () => {
+    it("renders the cleanup button", () => {
+      setQueryData({});
+      render(<AdminPayments />);
+      expect(screen.getByRole("button", { name: /Clean Up Abandoned/i })).toBeTruthy();
+    });
+
+    it("calls the cleanup API and shows a toast on success", async () => {
+      const user = userEvent.setup();
+      setQueryData({});
+      render(<AdminPayments />);
+
+      await user.click(screen.getByRole("button", { name: /Clean Up Abandoned/i }));
+
+      await waitFor(() => {
+        expect(toast.success).toHaveBeenCalledWith("Cleanup complete");
+      });
+    });
+  });
+
   describe("Full Integration", () => {
     it("renders complete page with all sections", () => {
       setQueryData({}); render(<AdminPayments />);

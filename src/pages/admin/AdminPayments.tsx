@@ -12,6 +12,7 @@ import {
   TrendingUp,
   ArrowDownRight,
   ArrowUpRight,
+  Trash2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -73,6 +74,7 @@ export default function AdminPayments() {
   const { data: stats } = useApiQuery<any>(["admin", "paymentStats"], "/api/payments/admin/stats");
   const { data: revenueGrowth } = useApiQuery<any>(["admin", "revenueGrowth"], "/api/payments/admin/revenue-growth");
   const refundPayment = useApiMutation<any, any>("post", "/api/payments/admin/${id}/refund");
+  const cleanupStale = useApiMutation<any, any>("post", "/api/payments/admin/cleanup-stale");
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -189,9 +191,33 @@ export default function AdminPayments() {
           <h1 className="text-lg font-medium tracking-tight">Payments</h1>
           <p className="text-xs text-muted-foreground mt-1">Manage transactions, refunds, and revenue</p>
         </div>
-        <Button variant="outline" size="sm" className="text-xs" onClick={() => refetch()}>
-          <RefreshCw className="h-3 w-3 mr-1" /> Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs"
+            disabled={cleanupStale.isPending}
+            onClick={async () => {
+              try {
+                const res = await cleanupStale.mutateAsync({});
+                toast.success(res?.message || "Cleanup complete");
+                refetch();
+              } catch (e: any) {
+                toast.error(e.message || "Cleanup failed");
+              }
+            }}
+          >
+            {cleanupStale.isPending ? (
+              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+            ) : (
+              <Trash2 className="h-3 w-3 mr-1" />
+            )}
+            Clean Up Abandoned
+          </Button>
+          <Button variant="outline" size="sm" className="text-xs" onClick={() => refetch()}>
+            <RefreshCw className="h-3 w-3 mr-1" /> Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
