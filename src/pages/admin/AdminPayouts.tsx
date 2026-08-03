@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Loader2, CheckCircle, XCircle, CheckCheck, Trash2, DollarSign, Calendar, X, Users, Search, Download, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, CheckCheck, Trash2, DollarSign, Calendar, X, Users, Search, Download, ArrowUp, ArrowDown, ArrowUpDown, History } from "lucide-react";
 import { toast } from "sonner";
+import { Link } from "react-router";
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 
 const REJECTION_PRESETS = [
@@ -607,6 +608,14 @@ export default function AdminPayouts() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Link
+                to={`/admin/audit-logs?entity=payout&entityId=${p.id}`}
+                className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
+                title={`View the audit trail for payout #${p.id}`}
+                aria-label={`View audit trail for payout ${p.id}`}
+              >
+                <History className="h-3.5 w-3.5" />
+              </Link>
               <Badge
                 variant={p.status === "paid" || p.status === "approved" ? "default" : p.status === "rejected" ? "destructive" : "secondary"}
                 className="text-[10px]"

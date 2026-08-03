@@ -68,6 +68,11 @@ vi.mock("@/components/ui/alert-dialog", () => ({
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
+// ─── Mock: react-router (audit trail deep links) ────────
+vi.mock("react-router", () => ({
+  Link: ({ to, children, ...rest }: any) => <a href={to} {...rest}>{children}</a>,
+}));
+
 import AdminPayments from "@/pages/admin/AdminPayments";
 import { toast } from "sonner";
 
@@ -190,6 +195,18 @@ describe("AdminPayments Page", () => {
       const calls = vi.mocked(useApiQuery).mock.calls;
       const ascCall = calls.find((c) => String(c[1]).includes("/api/payments/admin/all?") && String(c[1]).includes("sortBy=amount&sortOrder=asc"));
       expect(ascCall).toBeTruthy();
+    });
+  });
+
+  describe("Audit Trail Links", () => {
+    it("links each payment to its audit entries", async () => {
+      setQueryData({ "admin/payments": [
+        { id: 7, reference: "FLW-007", amount: 50000, status: "completed", provider: "flutterwave", userId: 1, createdAt: Date.now() },
+      ]});
+      render(<AdminPayments />);
+
+      const link = await screen.findByLabelText("View audit trail for payment 7");
+      expect(link.getAttribute("href")).toBe("/admin/audit-logs?entity=payment&entityId=7");
     });
   });
 

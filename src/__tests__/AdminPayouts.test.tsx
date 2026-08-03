@@ -23,6 +23,11 @@ vi.mock("@/hooks/use-api", () => ({
   useApiMutation: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
 }));
 
+// ─── Mock: react-router (audit trail deep links) ────────
+vi.mock("react-router", () => ({
+  Link: ({ to, children, ...rest }: any) => <a href={to} {...rest}>{children}</a>,
+}));
+
 import AdminPayouts from "@/pages/admin/AdminPayouts";
 
 function clearAll() { Object.keys(queryDataMap).forEach((k) => delete queryDataMap[k]); }
@@ -69,6 +74,18 @@ describe("AdminPayouts Page", () => {
     it("shows empty state", () => {
       setQueryData({ "admin/payouts": [] }); render(<AdminPayouts />);
       expect(screen.getByText("No payout requests")).toBeTruthy();
+    });
+  });
+
+  describe("Audit Trail Links", () => {
+    it("links each payout to its audit entries", async () => {
+      setQueryData({ "admin/payouts": [
+        { id: 42, amount: 75000, status: "approved", userId: 1, paymentMethod: "bank", requestedAt: Date.now() },
+      ]});
+      render(<AdminPayouts />);
+
+      const link = await screen.findByLabelText("View audit trail for payout 42");
+      expect(link.getAttribute("href")).toBe("/admin/audit-logs?entity=payout&entityId=42");
     });
   });
 

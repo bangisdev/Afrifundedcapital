@@ -19,12 +19,10 @@ import {
   Search,
   X,
   RotateCcw,
-  Play,
-  ArrowUp,
-  ArrowDown,
-  ArrowUpDown,
+  Play,  ArrowUp, ArrowDown, ArrowUpDown, History,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Link } from "react-router";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -396,6 +394,14 @@ export default function AdminPayments() {
                           </td>
                           <td className="p-3 hidden xl:table-cell text-muted-foreground">{formatTime(p.createdAt)}</td>
                           <td className="p-3 text-right">
+                            <Link
+                              to={`/admin/audit-logs?entity=payment&entityId=${p.id}`}
+                              className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors align-middle"
+                              title={`View the audit trail for payment ${p.reference}`}
+                              aria-label={`View audit trail for payment ${p.id}`}
+                            >
+                              <History className="h-3.5 w-3.5" />
+                            </Link>
                             {p.status === "completed" && (
                               <Button
                                 variant="ghost"
