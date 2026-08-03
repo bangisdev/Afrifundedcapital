@@ -3,7 +3,7 @@ import { getDb, getSqlite } from "../db";
 import { settings, challengeTemplates, accountSizes, users, affiliates, wallets, fundedAccounts, mt5Accounts, tradingMetrics, userChallenges, profitPayouts, kycDocuments, payments } from "../schema";
 import { eq, count } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
-import { writeAuditLog, redactSetting } from "../lib/audit";
+import { writeAuditLog, redactSetting, attachSettingsLastChanged } from "../lib/audit";
 import { notifyAdminsOfSecurityEvent } from "../lib/notifications";
 import { scrypt, randomBytes } from "crypto";
 import { promisify } from "util";
@@ -126,10 +126,13 @@ app.post("/admin", async (c) => {
 });
 
 // List settings
+// Each entry is enriched with who last changed it (from the audit trail) so the
+// Admin → Settings page can show "Last changed by X · time ago" per config.
 app.get("/settings", requireAuth, (c) => {
   const db = getDb();
   const items = db.select().from(settings).all();
-  return c.json(items.map((s) => ({ ...s, value: JSON.parse(s.value) })));
+  const parsed = items.map((s) => ({ ...s, value: JSON.parse(s.value) }));
+  return c.json(attachSettingsLastChanged(db, parsed));
 });
 
 // Update setting

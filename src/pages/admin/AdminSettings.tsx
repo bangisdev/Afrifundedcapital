@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Loader2, Save, CreditCard, Shield, Webhook, Eye, EyeOff,
-  CheckCircle, AlertTriangle, Copy, Database, Zap, Globe, Mail, Users, Settings2
+  CheckCircle, AlertTriangle, Copy, Database, Zap, Globe, Mail, Users, Settings2, History
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -19,6 +19,50 @@ interface ProviderConfig {
   webhookUrl?: string;
   isEnabled: boolean;
   mode?: "test" | "live";
+}
+
+/** Compact relative time — "just now", "12m ago", "3h ago", "5d ago". */
+function formatRelativeTime(ts: number): string {
+  const diff = Date.now() - ts;
+  if (diff < 60_000) return "just now";
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(ts).toLocaleDateString();
+}
+
+/**
+ * Pull the last-changed metadata (attached server-side from the audit trail)
+ * for a given setting key. Returns null when the key is unknown or untouched.
+ */
+function getSettingMeta(settings: any[] | undefined, key: string): any | null {
+  const s = settings?.find((x: any) => x.key === key);
+  if (!s || !s.lastChangedAt) return null;
+  return s;
+}
+
+/** "Last changed by X · 3h ago" — hidden when the config was never changed. */
+function LastChanged({ meta }: { meta: any | null }) {
+  if (!meta) return null;
+  const actor = meta.lastChangedBy
+    ? meta.lastChangedBy
+    : meta.lastChangedUserDeleted
+      ? `Deleted user #${meta.lastChangedUserId ?? "?"}`
+      : "Unknown admin";
+  return (
+    <div
+      className="flex items-center gap-1.5 text-[10px] text-muted-foreground shrink-0"
+      title={meta.lastChangedByEmail ? `${meta.lastChangedByEmail} · ${meta.lastChangedAction || "changed"}` : meta.lastChangedAction || "changed"}
+    >
+      <History className="h-3 w-3 shrink-0" />
+      <span>Last changed by <span className="font-medium text-foreground/80">{actor}</span></span>
+      <span>·</span>
+      <span>{formatRelativeTime(meta.lastChangedAt)}</span>
+    </div>
+  );
 }
 
 export default function AdminSettings() {
@@ -411,6 +455,7 @@ export default function AdminSettings() {
     );
   }
 
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -612,11 +657,14 @@ export default function AdminSettings() {
 
           {/* API Keys */}
           <div className="card-subtle p-6 space-y-5">
-            <div className="flex items-center gap-2 mb-1">
-              <Shield className="h-4 w-4 text-muted-foreground" />
-              <h3 className="text-sm font-medium">
-                {liveMode ? "Production" : "Test"} API Keys
-              </h3>
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <div className="flex items-center gap-2">
+                <Shield className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-medium">
+                  {liveMode ? "Production" : "Test"} API Keys
+                </h3>
+              </div>
+              <LastChanged meta={getSettingMeta(settings, "flutterwave_config")} />
             </div>
 
             <div className="space-y-2">
@@ -825,9 +873,12 @@ export default function AdminSettings() {
           </div>
 
           <div className="card-subtle p-6 space-y-5">
-            <div className="flex items-center gap-2 mb-1">
-              <Shield className="h-4 w-4 text-muted-foreground" />
-              <h3 className="text-sm font-medium">API Keys</h3>
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <div className="flex items-center gap-2">
+                <Shield className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-medium">API Keys</h3>
+              </div>
+              <LastChanged meta={getSettingMeta(settings, "paystack_config")} />
             </div>
 
             <div className="space-y-2">
@@ -909,9 +960,12 @@ export default function AdminSettings() {
 
           {/* API Key */}
           <div className="card-subtle p-6 space-y-5">
-            <div className="flex items-center gap-2 mb-1">
-              <Shield className="h-4 w-4 text-muted-foreground" />
-              <h3 className="text-sm font-medium">API Configuration</h3>
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <div className="flex items-center gap-2">
+                <Shield className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-medium">API Configuration</h3>
+              </div>
+              <LastChanged meta={getSettingMeta(settings, "resend_config")} />
             </div>
 
             <div className="space-y-2">
@@ -1033,9 +1087,12 @@ export default function AdminSettings() {
         {/* ─── Affiliate ──────────────────────────── */}
         <TabsContent value="affiliate" className="space-y-6">
           <div className="card-subtle p-6 space-y-5">
-            <div className="flex items-center gap-2 mb-1">
-              <Settings2 className="h-4 w-4 text-muted-foreground" />
-              <h3 className="text-sm font-medium">Payout Auto-Approval</h3>
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <div className="flex items-center gap-2">
+                <Settings2 className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-medium">Payout Auto-Approval</h3>
+              </div>
+              <LastChanged meta={getSettingMeta(settings, "affiliate_auto_approve_threshold")} />
             </div>
 
             <p className="text-xs text-muted-foreground">

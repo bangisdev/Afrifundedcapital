@@ -92,6 +92,23 @@ describe("PUT /api/seed/settings/:key", () => {
     expect(audit?.details).toContain("FLWPUBK_TEST-new");
   });
 
+  it("returns last-changed metadata on the settings list (who changed it)", async () => {
+    // resend_config hasn't been saved yet in this suite — creates it
+    await authPut(app, "/api/seed/settings/resend_config", adminCookie, {
+      value: { apiKey: "re_test_123", fromEmail: "afc@test.com", isEnabled: true },
+      group: "email",
+    });
+
+    const { body } = await authGet(app, "/api/seed/settings", adminCookie);
+    const list = body as Array<Record<string, unknown>>;
+    const resend = list.find((s) => s.key === "resend_config");
+    expect(resend).toBeTruthy();
+    expect(resend?.lastChangedBy).toBe("Seed Admin");
+    expect(resend?.lastChangedByEmail).toBe("seed-admin@test.com");
+    expect(resend?.lastChangedAt).toBeTypeOf("number");
+    expect(resend?.lastChangedAction).toBe("settings.created");
+  });
+
   it("exposes the settings change through the audit-logs endpoint with the actor", async () => {
     const { body } = await authGet(
       app,

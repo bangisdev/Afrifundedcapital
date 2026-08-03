@@ -4,7 +4,7 @@ import { users, sessions, auditLogs, settings, wallets, affiliates } from "../sc
 import { eq, desc, asc, like, count, sql, and, or, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification, notifyAdminsOfSecurityEvent } from "../lib/notifications";
-import { writeAuditLog, redactSetting } from "../lib/audit";
+import { writeAuditLog, redactSetting, attachSettingsLastChanged } from "../lib/audit";
 
 const app = new Hono();
 
@@ -495,10 +495,12 @@ app.put("/settings/:key", requireAuth, requireAdmin, async (c) => {
 });
 
 // Admin: List settings
+// Enriched with who last changed each config (from the audit trail).
 app.get("/settings", requireAuth, requireAdmin, (c) => {
   const db = getDb();
   const allSettings = db.select().from(settings).all();
-  return c.json(allSettings.map((s) => ({ ...s, value: JSON.parse(s.value) })));
+  const parsed = allSettings.map((s) => ({ ...s, value: JSON.parse(s.value) }));
+  return c.json(attachSettingsLastChanged(db, parsed));
 });
 
 // Admin: Get single user details
