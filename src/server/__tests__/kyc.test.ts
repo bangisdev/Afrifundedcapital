@@ -15,7 +15,7 @@ import {
   getTestSqlite,
 } from "./setup";
 import { auditLogs } from "../schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 
 let app: Hono;
 let userCookie: string;
@@ -121,6 +121,28 @@ describe("POST /api/kyc/upload", () => {
 
     expect(status).toBe(200);
     expect((body as Record<string, unknown>).documentType).toBe("proof_of_address");
+  });
+
+  it("writes a kyc.uploaded audit entry for the submission", async () => {
+    const { status, body } = await authPost(app, "/api/kyc/upload", userCookie, {
+      documentType: "national_id",
+      fileData: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      fileName: "nid.png",
+      fileSize: 68,
+      mimeType: "image/png",
+    });
+    expect(status).toBe(200);
+    const docId = (body as Record<string, unknown>).id as number;
+
+    const db = getTestDb();
+    const audit = db.select().from(auditLogs)
+      .where(and(eq(auditLogs.action, "kyc.uploaded"), eq(auditLogs.entityId, String(docId))))
+      .get();
+    expect(audit).toBeTruthy();
+    expect(audit?.entity).toBe("kyc_document");
+    expect(audit?.details).toContain("national_id");
+    // The submitting user is the actor on their own upload
+    expect(audit?.userId).toBeTruthy();
   });
 });
 
@@ -330,5 +352,70 @@ describe("DELETE /api/kyc/my/:id", () => {
   it("returns 404 for non-existent document", async () => {
     const { status } = await authDelete(app, "/api/kyc/my/99999", userCookie);
     expect(status).toBe(404);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  USER: DOCUMENT HISTORY (audit timeline)
+// ═══════════════════════════════════════════════════════════════
+
+describe("GET /api/kyc/my/:id/history", () => {
+  it("returns the full document timeline (uploaded + review events)", async () => {
+    const { body: docs } = await authGet(app, "/api/kyc/my", userCookie);
+    const docList = (docs as Record<string, any>).documents as Array<Record<string, any>>;
+    const passportDoc = docList.find((d) => d.documentType === "passport");
+    expect(passportDoc).toBeTruthy();
+
+    // The passport doc was approved earlier in the suite
+    const { status, body } = await authGet(app, `/api/kyc/my/${passportDoc!.id}/history`, userCookie);
+    expect(status).toBe(200);
+    const events = (body as Record<string, any>).events as Array<Record<string, any>>;
+    expect(events.length).toBeGreaterThanOrEqual(2);
+    expect(events.some((e) => e.action === "kyc.uploaded")).toBe(true);
+    expect(events.some((e) => e.action === "kyc.approved")).toBe(true);
+    // Chronological order — the submission is the first event
+    expect(events[0].action).toBe("kyc.uploaded");
+    // The review event carries the approving admin as actor
+    const approved = events.find((e) => e.action === "kyc.approved");
+    expect(approved?.actorName).toBe("KYC Admin");
+    expect(approved?.details?.documentType).toBe("passport");
+  });
+
+  it("returns the rejection reason in the timeline", async () => {
+    const { body: docs } = await authGet(app, "/api/kyc/my", userCookie);
+    const docList = (docs as Record<string, any>).documents as Array<Record<string, any>>;
+    const proofDoc = docList.find((d) => d.documentType === "proof_of_address");
+    expect(proofDoc).toBeTruthy();
+
+    const { status, body } = await authGet(app, `/api/kyc/my/${proofDoc!.id}/history`, userCookie);
+    expect(status).toBe(200);
+    const events = (body as Record<string, any>).events as Array<Record<string, any>>;
+    const rejected = events.find((e) => e.action === "kyc.rejected");
+    expect(rejected).toBeTruthy();
+    expect(rejected?.details?.reason).toContain("blurry");
+    expect(rejected?.actorName).toBe("KYC Admin");
+  });
+
+  it("returns 404 for another user's document", async () => {
+    await signUp(app, { name: "Other KYC", email: "other-kyc@test.com", password: "Secure@123" });
+    const other = await signIn(app, { email: "other-kyc@test.com", password: "Secure@123" });
+
+    const { body: docs } = await authGet(app, "/api/kyc/my", userCookie);
+    const docList = (docs as Record<string, any>).documents as Array<Record<string, any>>;
+    const anyDoc = docList[0];
+    expect(anyDoc).toBeTruthy();
+
+    const { status } = await authGet(app, `/api/kyc/my/${anyDoc!.id}/history`, other.cookie);
+    expect(status).toBe(404);
+  });
+
+  it("returns 401 without authentication", async () => {
+    const { body: docs } = await authGet(app, "/api/kyc/my", userCookie);
+    const docList = (docs as Record<string, any>).documents as Array<Record<string, any>>;
+    const anyDoc = docList[0];
+    expect(anyDoc).toBeTruthy();
+
+    const res = await app.request(`/api/kyc/my/${anyDoc!.id}/history`);
+    expect(res.status).toBe(401);
   });
 });

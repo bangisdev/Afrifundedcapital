@@ -782,4 +782,74 @@ describe("Profile Page", () => {
       expect(screen.getByText("Save Changes")).toBeTruthy();
     });
   });
+
+  // ─── Document History (audit timeline) ────────────────
+  describe("Document History", () => {
+    it("renders a View history button for submitted documents", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "kyc/my": [makeKycDoc({ documentType: "passport", status: "approved" })],
+      });
+      render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+
+      const buttons = await screen.findAllByRole("button", { name: /View history/i });
+      expect(buttons.length).toBeGreaterThan(0);
+    });
+
+    it("opens the history dialog and shows the document timeline", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "kyc/my": [makeKycDoc({ id: 7, documentType: "passport", status: "approved" })],
+      });
+      queryDataMap["kyc/history"] = {
+        events: [
+          { action: "kyc.uploaded", timestamp: Date.now() - 86400000, actorName: "John Doe", details: { documentType: "passport" } },
+          { action: "kyc.approved", timestamp: Date.now() - 3600000, actorName: "KYC Admin", details: { documentType: "passport" } },
+        ],
+        doc: { id: 7, documentType: "passport", status: "approved" },
+      };
+      render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      await user.click((await screen.findAllByRole("button", { name: /View history/i }))[0]);
+
+      expect(await screen.findByText("Document History")).toBeTruthy();
+      expect(screen.getByText("Document submitted for review")).toBeTruthy();
+      expect(screen.getByText("Document approved")).toBeTruthy();
+      expect(screen.getAllByText(/by KYC Admin/).length).toBeGreaterThan(0);
+    });
+
+    it("shows the rejection reason in the history timeline", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "kyc/my": [makeKycDoc({ id: 8, documentType: "proof_of_address", status: "rejected" })],
+      });
+      queryDataMap["kyc/history"] = {
+        events: [
+          { action: "kyc.uploaded", timestamp: Date.now() - 86400000, actorName: "John Doe", details: null },
+          { action: "kyc.rejected", timestamp: Date.now() - 3600000, actorName: "KYC Admin", details: { reason: "Image is blurry, please re-upload" } },
+        ],
+        doc: { id: 8, documentType: "proof_of_address", status: "rejected" },
+      };
+      render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      await user.click((await screen.findAllByRole("button", { name: /View history/i }))[0]);
+
+      expect(await screen.findByText("Document rejected")).toBeTruthy();
+      expect(screen.getByText(/Image is blurry/)).toBeTruthy();
+    });
+
+    it("shows an empty state when the document has no events", async () => {
+      const user = userEvent.setup();
+      setQueryData({
+        "kyc/my": [makeKycDoc({ id: 9, documentType: "selfie", status: "pending" })],
+      });
+      queryDataMap["kyc/history"] = { events: [], doc: { id: 9, documentType: "selfie", status: "pending" } };
+      render(<Profile />);
+      await user.click(screen.getByTestId("tab-trigger-kyc"));
+      await user.click((await screen.findAllByRole("button", { name: /View history/i }))[0]);
+
+      expect(await screen.findByText("No history available for this document yet.")).toBeTruthy();
+    });
+  });
 });

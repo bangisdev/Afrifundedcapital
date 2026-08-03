@@ -9,7 +9,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Loader2, User, Shield, Upload, CheckCircle, XCircle, Clock,
   FileText, Trash2, Eye, X, AlertTriangle, RefreshCw, Image as ImageIcon,
-  ArrowUp, ArrowDown, ArrowUpDown,
+  ArrowUp, ArrowDown, ArrowUpDown, History,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -48,6 +48,96 @@ const KYC_SORT_COLUMNS: Array<{ key: string; label: string }> = [
   { key: "status", label: "Status" },
   { key: "uploadedAt", label: "Uploaded" },
 ];
+
+/**
+ * User-scoped document audit trail — a timeline of the document's lifecycle
+ * (submitted → approved/rejected) pulled from the audit log via
+ * GET /api/kyc/my/:id/history. Mounted on demand so the query only fires
+ * when the user opens the dialog.
+ */
+function DocHistoryDialog({ doc, onClose }: { doc: any; onClose: () => void }) {
+  const { data, isLoading } = useApiQuery<any>(
+    ["kyc", "history", String(doc.id)],
+    `/api/kyc/my/${doc.id}/history`,
+  );
+  const events: any[] = data?.events || [];
+
+  const actionMeta = (action: string) => {
+    switch (action) {
+      case "kyc.uploaded":
+        return { label: "Document submitted for review", icon: Upload, color: "text-muted-foreground", dot: "bg-secondary" };
+      case "kyc.approved":
+        return { label: "Document approved", icon: CheckCircle, color: "text-emerald-600", dot: "bg-emerald-500" };
+      case "kyc.rejected":
+        return { label: "Document rejected", icon: XCircle, color: "text-red-500", dot: "bg-red-500" };
+      default:
+        return { label: action.replace(/_/g, " "), icon: History, color: "text-muted-foreground", dot: "bg-secondary" };
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div
+        className="bg-background border rounded-lg shadow-lg max-w-lg w-full mx-4 max-h-[85vh] overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between p-4 border-b">
+          <div>
+            <h2 className="text-sm font-medium">Document History</h2>
+            <p className="text-[10px] text-muted-foreground mt-0.5 capitalize">
+              {doc.documentType?.replace(/_/g, " ")}
+            </p>
+          </div>
+          <button onClick={onClose} aria-label="Close history" className="text-muted-foreground hover:text-foreground">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="p-4 overflow-auto max-h-[70vh]">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : events.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <History className="h-10 w-10 mx-auto mb-2 opacity-40" />
+              <p className="text-xs">No history available for this document yet.</p>
+            </div>
+          ) : (
+            <div className="space-y-0">
+              {events.map((ev: any, i: number) => {
+                const meta = actionMeta(ev.action);
+                const Icon = meta.icon;
+                const reason = ev.action === "kyc.rejected"
+                  ? ev.details?.reason || ev.details?.message
+                  : null;
+                return (
+                  <div key={i} className="relative flex gap-3 pb-4 last:pb-0">
+                    {i < events.length - 1 && (
+                      <div className="absolute left-[9px] top-5 bottom-0 w-px bg-border" />
+                    )}
+                    <div className={`h-5 w-5 rounded-full flex items-center justify-center shrink-0 ${meta.dot}`}>
+                      <Icon className={`h-3 w-3 ${meta.color}`} />
+                    </div>
+                    <div className="min-w-0 pt-0.5">
+                      <div className={`text-xs font-medium ${meta.color}`}>{meta.label}</div>
+                      {reason && (
+                        <div className="text-[11px] text-red-500/90 mt-0.5">“{reason}”</div>
+                      )}
+                      <div className="text-[10px] text-muted-foreground mt-0.5">
+                        {formatTime(ev.timestamp)}
+                        {ev.actorName && <span> · by {ev.actorName}</span>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Profile() {
   const { user } = useAuth();
@@ -107,6 +197,7 @@ export default function Profile() {
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [uploadingType, setUploadingType] = useState<string | null>(null);
   const [previewDoc, setPreviewDoc] = useState<any>(null);
+  const [historyDoc, setHistoryDoc] = useState<any>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const handleSaveProfile = async () => {
@@ -305,6 +396,15 @@ export default function Profile() {
                     <div className="flex items-center gap-3">
                       <span className="text-muted-foreground capitalize">{doc.status}</span>
                       <span className="text-muted-foreground tabular-nums">{formatTime(doc.uploadedAt)}</span>
+                      <button
+                        type="button"
+                        onClick={() => setHistoryDoc(doc)}
+                        className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
+                        aria-label={`View history for ${doc.documentType}`}
+                      >
+                        <History className="h-3 w-3" />
+                        View history
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -366,6 +466,17 @@ export default function Profile() {
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
+                      {latestDoc && (
+                        <button
+                          type="button"
+                          onClick={() => setHistoryDoc(latestDoc)}
+                          className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-1 text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
+                          aria-label={`View history for ${doc.label}`}
+                        >
+                          <History className="h-3 w-3" />
+                          View history
+                        </button>
+                      )}
                       {status === "pending" && (
                         <span className="text-[10px] text-muted-foreground">Under review</span>
                       )}
@@ -407,6 +518,9 @@ export default function Profile() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Document History Dialog */}
+      {historyDoc && <DocHistoryDialog doc={historyDoc} onClose={() => setHistoryDoc(null)} />}
 
       {/* Document Preview Modal */}
       {previewDoc && (

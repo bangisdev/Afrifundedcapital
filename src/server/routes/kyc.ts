@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
-import { kycDocuments, users } from "../schema";
+import { kycDocuments, users, auditLogs } from "../schema";
 import { eq, desc, asc, and, or, like, count, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { notify } from "../lib/notifications";
@@ -165,11 +165,90 @@ app.post("/upload", requireAuth, async (c) => {
     }).where(eq(users.id, userId)).run();
   }
 
+  // Record the submission in the audit trail so users can view a full document
+  // timeline (upload → review) from the profile page.
+  try {
+    writeAuditLog(db, {
+      userId,
+      action: "kyc.uploaded",
+      entity: "kyc_document",
+      entityId: result.id,
+      details: { documentType, fileName: fileName || null },
+      ipAddress: c.req.header("x-forwarded-for"),
+    });
+  } catch (e) {
+    console.warn("[Audit] Failed to log KYC upload:", e);
+  }
+
   return c.json({
     id: result.id,
     documentType: result.documentType,
     status: result.status,
     uploadedAt: result.uploadedAt,
+  });
+});
+
+// Get the audit timeline for one of the user's own KYC documents. Users can't
+// see the admin audit log, so this exposes only the entries for their document:
+// submission, approval/rejection (with the admin who reviewed it).
+app.get("/my/:id/history", requireAuth, (c) => {
+  const userId = c.get("userId");
+  const id = parseInt(c.req.param("id"));
+  const db = getDb();
+
+  const doc = db.select().from(kycDocuments)
+    .where(and(eq(kycDocuments.id, id), eq(kycDocuments.userId, userId)))
+    .get();
+  if (!doc) return c.json({ error: "Document not found" }, 404);
+
+  const rows = db
+    .select({ log: auditLogs, userName: users.name, userEmail: users.email })
+    .from(auditLogs)
+    .leftJoin(users, eq(users.id, auditLogs.userId))
+    .where(and(eq(auditLogs.entity, "kyc_document"), eq(auditLogs.entityId, String(id))))
+    .orderBy(asc(auditLogs.timestamp))
+    .all();
+
+  const parseDetails = (raw: string | null): Record<string, unknown> | null => {
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  };
+
+  const events = rows.map(({ log, userName, userEmail }) => ({
+    action: log.action,
+    timestamp: log.timestamp,
+    actorName: userName || null,
+    actorEmail: userEmail || null,
+    details: parseDetails(log.details),
+  }));
+
+  // Documents uploaded before submission auditing existed have no baseline
+  // entry — synthesize one from the record so every doc has a full timeline.
+  if (!events.some((e) => e.action === "kyc.uploaded")) {
+    const owner = db.select().from(users).where(eq(users.id, doc.userId)).get();
+    events.unshift({
+      action: "kyc.uploaded",
+      timestamp: doc.uploadedAt,
+      actorName: owner?.name || null,
+      actorEmail: owner?.email || null,
+      details: { documentType: doc.documentType },
+    });
+  }
+
+  return c.json({
+    events,
+    doc: {
+      id: doc.id,
+      documentType: doc.documentType,
+      status: doc.status,
+      uploadedAt: doc.uploadedAt,
+      reviewedAt: doc.reviewedAt,
+      rejectionReason: doc.rejectionReason,
+    },
   });
 });
 
