@@ -543,5 +543,26 @@ describe("AdminSettings Page", () => {
       expect(screen.getByText("Deleted user #42")).toBeTruthy();
       expect(screen.getByText(/Last changed by/)).toBeTruthy();
     });
+
+    it("renders a View history button on each config card linking to the filtered audit log", async () => {
+      const user = userEvent.setup();
+      // Empty settings — the button is discoverable even before a config is ever changed
+      setQueryData({});
+      render(<AdminSettings />);
+
+      const hrefOf = () => screen.getByText("View history").closest("a")!.getAttribute("href");
+
+      // Flutterwave (default tab)
+      expect(hrefOf()).toBe("/admin/audit-logs?entity=setting&entityId=flutterwave_config");
+
+      await user.click(screen.getByTestId("tab-trigger-paystack"));
+      expect(hrefOf()).toBe("/admin/audit-logs?entity=setting&entityId=paystack_config");
+
+      await user.click(screen.getByTestId("tab-trigger-resend"));
+      expect(hrefOf()).toBe("/admin/audit-logs?entity=setting&entityId=resend_config");
+
+      await user.click(screen.getByTestId("tab-trigger-affiliate"));
+      expect(hrefOf()).toBe("/admin/audit-logs?entity=setting&entityId=affiliate_auto_approve_threshold");
+    });
   });
 });

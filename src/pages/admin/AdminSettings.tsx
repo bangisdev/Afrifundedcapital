@@ -73,6 +73,24 @@ function LastChanged({ meta, settingKey }: { meta: any | null; settingKey?: stri
   );
 }
 
+/**
+ * "View history" pill next to the attribution line — always visible so admins
+ * can discover the audit trail for a config even before its first change.
+ * Same deep link as LastChanged: Admin → Audit Logs scoped to this setting key.
+ */
+function ViewHistoryLink({ settingKey }: { settingKey: string }) {
+  return (
+    <Link
+      to={`/admin/audit-logs?entity=setting&entityId=${encodeURIComponent(settingKey)}`}
+      className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors shrink-0"
+      title={`View all audit entries for ${settingKey}`}
+    >
+      <History className="h-3 w-3" />
+      View history
+    </Link>
+  );
+}
+
 export default function AdminSettings() {
   const { data: settings, isLoading, refetch } = useApiQuery<any[]>(
     ["admin", "settings"],
@@ -672,7 +690,10 @@ export default function AdminSettings() {
                   {liveMode ? "Production" : "Test"} API Keys
                 </h3>
               </div>
-              <LastChanged meta={getSettingMeta(settings, "flutterwave_config")} settingKey="flutterwave_config" />
+              <div className="flex items-center gap-2">
+                <LastChanged meta={getSettingMeta(settings, "flutterwave_config")} settingKey="flutterwave_config" />
+                <ViewHistoryLink settingKey="flutterwave_config" />
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -886,7 +907,10 @@ export default function AdminSettings() {
                 <Shield className="h-4 w-4 text-muted-foreground" />
                 <h3 className="text-sm font-medium">API Keys</h3>
               </div>
-              <LastChanged meta={getSettingMeta(settings, "paystack_config")} settingKey="paystack_config" />
+              <div className="flex items-center gap-2">
+                <LastChanged meta={getSettingMeta(settings, "paystack_config")} settingKey="paystack_config" />
+                <ViewHistoryLink settingKey="paystack_config" />
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -973,7 +997,10 @@ export default function AdminSettings() {
                 <Shield className="h-4 w-4 text-muted-foreground" />
                 <h3 className="text-sm font-medium">API Configuration</h3>
               </div>
-              <LastChanged meta={getSettingMeta(settings, "resend_config")} settingKey="resend_config" />
+              <div className="flex items-center gap-2">
+                <LastChanged meta={getSettingMeta(settings, "resend_config")} settingKey="resend_config" />
+                <ViewHistoryLink settingKey="resend_config" />
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -1100,7 +1127,10 @@ export default function AdminSettings() {
                 <Settings2 className="h-4 w-4 text-muted-foreground" />
                 <h3 className="text-sm font-medium">Payout Auto-Approval</h3>
               </div>
-              <LastChanged meta={getSettingMeta(settings, "affiliate_auto_approve_threshold")} settingKey="affiliate_auto_approve_threshold" />
+              <div className="flex items-center gap-2">
+                <LastChanged meta={getSettingMeta(settings, "affiliate_auto_approve_threshold")} settingKey="affiliate_auto_approve_threshold" />
+                <ViewHistoryLink settingKey="affiliate_auto_approve_threshold" />
+              </div>
             </div>
 
             <p className="text-xs text-muted-foreground">
