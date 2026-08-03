@@ -11,7 +11,9 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  History,
 } from "lucide-react";
+import { Link } from "react-router";
 import { useState, useEffect } from "react";
 
 interface CertificatesResponse {
@@ -136,6 +138,14 @@ export default function AdminCertificates() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <Link
+                  to={`/admin/audit-logs?entity=certificate&entityId=${c.id}`}
+                  className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
+                  title={`View the audit trail for certificate ${c.certificateNumber || `#${c.id}`}`}
+                  aria-label={`View audit trail for certificate ${c.id}`}
+                >
+                  <History className="h-3.5 w-3.5" />
+                </Link>
                 {c.verificationCode && <span className="text-[10px] font-mono text-muted-foreground">#{c.verificationCode}</span>}
                 <Badge variant="outline" className="text-[10px] capitalize">{c.type?.replace(/_/g, " ")}</Badge>
               </div>

@@ -3,8 +3,9 @@ import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Plus, Trash2, Tag, Users, DollarSign, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Loader2, Plus, Trash2, Tag, Users, DollarSign, ArrowUp, ArrowDown, ArrowUpDown, History } from "lucide-react";
 import { toast } from "sonner";
+import { Link } from "react-router";
 
 export default function AdminCoupons() {
   // Sorting (whitelisted columns on the server: id, code, discountType, discountValue, currentUses, isActive, expiresAt, createdAt)
@@ -233,14 +234,24 @@ export default function AdminCoupons() {
                   )}
                 </div>
 
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-destructive ml-4 shrink-0"
-                  onClick={() => handleDelete(c.id)}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
+                <div className="flex items-center gap-1 ml-4 shrink-0">
+                  <Link
+                    to={`/admin/audit-logs?entity=coupon&entityId=${c.id}`}
+                    className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
+                    title={`View the audit trail for coupon ${c.code}`}
+                    aria-label={`View audit trail for coupon ${c.id}`}
+                  >
+                    <History className="h-3.5 w-3.5" />
+                  </Link>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-destructive"
+                    onClick={() => handleDelete(c.id)}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
               </div>
             </div>
           );

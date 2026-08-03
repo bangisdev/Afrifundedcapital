@@ -19,8 +19,10 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  History,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Link } from "react-router";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -322,6 +324,15 @@ export default function AdminChallenges() {
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
+                        <Link
+                          to={`/admin/audit-logs?entity=challenge_template&entityId=${t.id}`}
+                          className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
+                          title={`View the audit trail for template ${t.name}`}
+                          aria-label={`View audit trail for template ${t.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <History className="h-3.5 w-3.5" />
+                        </Link>
                         <Button
                           variant="ghost"
                           size="icon-sm"
@@ -382,6 +393,14 @@ export default function AdminChallenges() {
                                   <span className="font-medium">{formatNgn(s.price)}</span>
                                 </div>
                                 <div className="flex items-center gap-1">
+                                  <Link
+                                    to={`/admin/audit-logs?entity=account_size&entityId=${s.id}`}
+                                    className="inline-flex items-center justify-center h-6 w-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
+                                    title={`View the audit trail for size ${s.label}`}
+                                    aria-label={`View audit trail for size ${s.id}`}
+                                  >
+                                    <History className="h-3 w-3" />
+                                  </Link>
                                   <Button
                                     variant="ghost"
                                     size="icon-sm"

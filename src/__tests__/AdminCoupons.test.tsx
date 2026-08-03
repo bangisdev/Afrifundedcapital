@@ -26,6 +26,11 @@ vi.mock("@/hooks/use-api", () => ({
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
+// ─── Mock: react-router (audit trail deep links) ──────────
+vi.mock("react-router", () => ({
+  Link: ({ to, children, ...rest }: any) => <a href={to} {...rest}>{children}</a>,
+}));
+
 import AdminCoupons from "@/pages/admin/AdminCoupons";
 
 function clearAll() { Object.keys(queryDataMap).forEach((k) => delete queryDataMap[k]); }
@@ -78,6 +83,24 @@ describe("AdminCoupons Page", () => {
         { id: 1, code: "USED", discountType: "percentage", discountValue: 10, maxUses: 10, redemptionCount: 10, totalDiscountGiven: 2000 },
       ]}); render(<AdminCoupons />);
       expect(screen.getByText("Exhausted")).toBeTruthy();
+    });
+  });
+
+  describe("Audit Trail Deep Links", () => {
+    it("links each coupon row to its scoped audit trail", () => {
+      setQueryData({ "admin/coupons": [
+        { id: 9, code: "SAVE20", discountType: "percentage", discountValue: 20, maxUses: 100, redemptionCount: 15, totalDiscountGiven: 5000 },
+      ]}); render(<AdminCoupons />);
+      const link = screen.getByRole("link", { name: "View audit trail for coupon 9" });
+      expect(link.getAttribute("href")).toBe("/admin/audit-logs?entity=coupon&entityId=9");
+    });
+
+    it("renders a deep link per coupon", () => {
+      setQueryData({ "admin/coupons": [
+        { id: 1, code: "A", discountType: "percentage", discountValue: 5, maxUses: null, redemptionCount: 0, totalDiscountGiven: 0 },
+        { id: 2, code: "B", discountType: "fixed", discountValue: 10, maxUses: null, redemptionCount: 0, totalDiscountGiven: 0 },
+      ]}); render(<AdminCoupons />);
+      expect(screen.getAllByLabelText(/View audit trail for coupon/).length).toBe(2);
     });
   });
 

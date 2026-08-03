@@ -122,6 +122,11 @@ vi.mock("@/components/ui/alert-dialog", () => ({
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
+// ─── Mock: react-router (audit trail deep links) ──────────
+vi.mock("react-router", () => ({
+  Link: ({ to, children, ...rest }: any) => <a href={to} {...rest}>{children}</a>,
+}));
+
 // ─── Import component after mocks ─────────────────────────
 import AdminUsers from "@/pages/admin/AdminUsers";
 import { toast } from "sonner";
@@ -547,6 +552,26 @@ describe("AdminUsers Page", () => {
       expect(screen.getAllByTitle("View details").length).toBeGreaterThanOrEqual(1);
       expect(screen.getAllByTitle(/Lock account|Unlock account/).length).toBeGreaterThanOrEqual(1);
       expect(screen.getAllByTitle("Delete user").length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // ─── Audit trail deep links ─────────────────────────────
+  describe("Audit Trail Deep Links", () => {
+    it("links each user row to its scoped audit trail", () => {
+      setQueryData({
+        "admin/users": [makeUser({ id: 42, name: "Alice" })],
+      });
+      render(<AdminUsers />);
+      const link = screen.getByRole("link", { name: "View audit trail for user 42" });
+      expect(link.getAttribute("href")).toBe("/admin/audit-logs?entity=user&entityId=42");
+    });
+
+    it("renders a deep link per user", () => {
+      setQueryData({
+        "admin/users": [makeUser({ id: 1 }), makeUser({ id: 2 }), makeUser({ id: 3 })],
+      });
+      render(<AdminUsers />);
+      expect(screen.getAllByLabelText(/View audit trail for user/).length).toBe(3);
     });
   });
 

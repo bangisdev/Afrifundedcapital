@@ -21,8 +21,10 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  History,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Link } from "react-router";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -422,6 +424,14 @@ export default function AdminUsers() {
                             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                           ) : (
                             <>
+                              <Link
+                                to={`/admin/audit-logs?entity=user&entityId=${u.id}`}
+                                className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
+                                title={`View the audit trail for user ${u.name || u.email || `#${u.id}`}`}
+                                aria-label={`View audit trail for user ${u.id}`}
+                              >
+                                <History className="h-3.5 w-3.5" />
+                              </Link>
                               <Button variant="ghost" size="icon-sm" className="h-7 w-7" title="View details"
                                 onClick={() => { setSelectedUser(u); setShowUserDetail(true); }}>
                                 <Eye className="h-3.5 w-3.5" />

@@ -69,6 +69,11 @@ vi.mock("@/components/ui/alert-dialog", () => ({
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
+// ─── Mock: react-router (audit trail deep links) ──────────
+vi.mock("react-router", () => ({
+  Link: ({ to, children, ...rest }: any) => <a href={to} {...rest}>{children}</a>,
+}));
+
 // ─── Import component after mocks ─────────────────────────
 import AdminChallenges from "@/pages/admin/AdminChallenges";
 import { toast } from "sonner";
@@ -419,6 +424,42 @@ describe("AdminChallenges Page", () => {
       expect(details?.textContent).toContain("1:100");
       expect(details?.textContent).toContain("5");
       expect(details?.textContent).toContain("30d");
+    });
+  });
+
+  // ─── Audit Trail Deep Links ────────────────────────────
+  describe("Audit Trail Deep Links", () => {
+    it("links each template row to its scoped audit trail", () => {
+      setQueryData({
+        "admin/templates": [makeTemplate({ id: 7, name: "Two-Step Pro" })],
+      });
+      render(<AdminChallenges />);
+      const link = screen.getByRole("link", { name: "View audit trail for template 7" });
+      expect(link.getAttribute("href")).toBe("/admin/audit-logs?entity=challenge_template&entityId=7");
+    });
+
+    it("renders a deep link per template", () => {
+      setQueryData({
+        "admin/templates": [
+          makeTemplate({ id: 1, name: "Two-Step Pro" }),
+          makeTemplate({ id: 2, name: "One-Step Express", type: "one_step" }),
+        ],
+      });
+      render(<AdminChallenges />);
+      expect(screen.getAllByLabelText(/View audit trail for template/).length).toBe(2);
+    });
+
+    it("links each account size to its scoped audit trail", async () => {
+      const user = userEvent.setup();
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [makeSize({ id: 5, label: "$100,000", size: 100000 })],
+      });
+      setQueryData({ "admin/templates": [makeTemplate()] });
+      render(<AdminChallenges />);
+      await user.click(screen.getByText("Two-Step Pro"));
+      const link = screen.getByRole("link", { name: "View audit trail for size 5" });
+      expect(link.getAttribute("href")).toBe("/admin/audit-logs?entity=account_size&entityId=5");
     });
   });
 
