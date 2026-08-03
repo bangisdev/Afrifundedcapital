@@ -3,7 +3,7 @@ import { getDb } from "../db";
 import { users, sessions, auditLogs, settings, wallets, affiliates } from "../schema";
 import { eq, desc, asc, like, count, sql, and, or, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
-import { createNotification } from "../lib/notifications";
+import { createNotification, notifyAdminsOfSecurityEvent } from "../lib/notifications";
 import { writeAuditLog, redactSetting } from "../lib/audit";
 
 const app = new Hono();
@@ -476,6 +476,19 @@ app.put("/settings/:key", requireAuth, requireAdmin, async (c) => {
     });
   } catch (e) {
     console.warn("[Audit] Failed to log settings change:", e);
+  }
+
+  // Alert other admins — config edits are a security event.
+  try {
+    const actor = c.get("user") as { name?: string } | undefined;
+    notifyAdminsOfSecurityEvent(db, {
+      actorId: c.get("userId"),
+      actorName: actor?.name || `Admin #${c.get("userId")}`,
+      key,
+      action: existing ? "updated" : "created",
+    });
+  } catch (e) {
+    console.warn("[Notification] Failed to alert admins of settings change:", e);
   }
 
   return c.json({ success: true });

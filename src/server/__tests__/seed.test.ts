@@ -16,8 +16,8 @@ import {
   authPut,
   getTestDb,
 } from "./setup";
-import { users, auditLogs } from "../schema";
-import { eq, desc } from "drizzle-orm";
+import { users, auditLogs, notifications } from "../schema";
+import { eq, desc, and } from "drizzle-orm";
 
 let app: Hono;
 let adminCookie: string;
@@ -112,5 +112,38 @@ describe("PUT /api/seed/settings/:key", () => {
       value: { publicKey: "p" },
     });
     expect(status).toBe(403);
+  });
+
+  it("alerts other admins when payment keys change via the AdminSettings path", async () => {
+    // A second admin who should be alerted
+    await signUp(app, { name: "Seed Second Admin", email: "seed-second-admin@test.com", password: "Admin@123" });
+    const db = getTestDb();
+    const second = db.select().from(users).where(eq(users.email, "seed-second-admin@test.com")).get();
+    const actor = db.select().from(users).where(eq(users.email, "seed-admin@test.com")).get();
+    if (!second || !actor) return;
+    db.update(users)
+      .set({ role: "finance_admin", onboardingComplete: true, updatedAt: Date.now() })
+      .where(eq(users.id, second.id))
+      .run();
+
+    await authPut(app, "/api/seed/settings/flutterwave_config", adminCookie, {
+      value: { publicKey: "FLWPUBK_TEST-alert", secretKey: "FLWSECK_TEST-alert-2222", isEnabled: true },
+      group: "payments",
+    });
+
+    const notif = db.select().from(notifications)
+      .where(and(eq(notifications.userId, second.id), eq(notifications.type, "security")))
+      .orderBy(desc(notifications.createdAt))
+      .get();
+    expect(notif).toBeTruthy();
+    expect(notif?.title).toContain("Payment Config Changed");
+    expect(notif?.metadata).toContain("flutterwave_config");
+    expect(notif?.message).toContain("Seed Admin");
+
+    // Actor is excluded
+    const actorNotif = db.select().from(notifications)
+      .where(and(eq(notifications.userId, actor.id), eq(notifications.type, "security")))
+      .get();
+    expect(actorNotif).toBeFalsy();
   });
 });

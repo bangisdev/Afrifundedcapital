@@ -14,8 +14,8 @@ import {
   authDelete,
   getTestDb,
 } from "./setup";
-import { users, auditLogs } from "../schema";
-import { eq, desc } from "drizzle-orm";
+import { users, auditLogs, notifications } from "../schema";
+import { eq, desc, and } from "drizzle-orm";
 
 let app: Hono;
 let adminCookie: string;
@@ -262,5 +262,39 @@ describe("PUT /api/users/settings/:key", () => {
     expect(log).toBeTruthy();
     expect(log?.userEmail).toBe("audit-admin@test.com");
     expect(log?.userDeleted).toBe(false);
+  });
+
+  it("alerts other admins with a security notification (not the actor)", async () => {
+    // Create a second admin who should receive the alert
+    await signUp(app, { name: "Second Admin", email: "second-admin@test.com", password: "Admin@123" });
+    const db = getTestDb();
+    const second = db.select().from(users).where(eq(users.email, "second-admin@test.com")).get();
+    const actor = db.select().from(users).where(eq(users.email, "audit-admin@test.com")).get();
+    if (!second || !actor) return;
+    db.update(users)
+      .set({ role: "support_admin", onboardingComplete: true, updatedAt: Date.now() })
+      .where(eq(users.id, second.id))
+      .run();
+
+    await authPut(app, "/api/users/settings/flutterwave_config", adminCookie, {
+      value: { publicKey: "FLWPUBK_TEST-alert", secretKey: "FLWSECK_TEST-alert-1111", isEnabled: true },
+      group: "payments",
+    });
+
+    // The other admin receives a security notification flagged with the key
+    const secondNotif = db.select().from(notifications)
+      .where(and(eq(notifications.userId, second.id), eq(notifications.type, "security")))
+      .orderBy(desc(notifications.createdAt))
+      .get();
+    expect(secondNotif).toBeTruthy();
+    expect(secondNotif?.title).toContain("Payment Config Changed");
+    expect(secondNotif?.metadata).toContain("flutterwave_config");
+    expect(secondNotif?.link).toBe("/admin/settings");
+
+    // The actor is NOT notified about their own change
+    const actorNotif = db.select().from(notifications)
+      .where(and(eq(notifications.userId, actor.id), eq(notifications.type, "security")))
+      .get();
+    expect(actorNotif).toBeFalsy();
   });
 });

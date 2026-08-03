@@ -319,6 +319,33 @@ export function payoutRejectedEmail(userName: string, amount: number, currency: 
   };
 }
 
+// ─── Security Alerts ──────────────────────────────────
+
+export function securityAlertEmail(
+  adminName: string,
+  actorName: string,
+  settingLabel: string,
+): SendEmailParams & { subject: string; html: string } {
+  return {
+    to: "",
+    subject: "Security Alert: Payment Configuration Changed",
+    html: wrapLayout(`
+      <h2 style="font-size: 18px; font-weight: 600; margin: 0 0 12px;">Security alert</h2>
+      <p style="font-size: 14px; color: #444;">Hi ${adminName},</p>
+      <p style="font-size: 14px; color: #444;">
+        <strong>${actorName}</strong> changed the <strong>${settingLabel}</strong> on the
+        AfriFundedCapital admin dashboard.
+      </p>
+      <p style="font-size: 14px; color: #444;">
+        If this was you, no action is needed. If you did not make this change, review the
+        Admin Settings page immediately and contact the platform owner — this may indicate
+        unauthorized access to an admin account.
+      </p>
+      ${button(`${APP_URL}/admin/settings`, "Review Admin Settings")}
+    `),
+  };
+}
+
 export function payoutPaidEmail(userName: string, amount: number, currency: string): SendEmailParams & { subject: string; html: string } {
   return {
     to: "",

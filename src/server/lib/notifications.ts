@@ -1,7 +1,7 @@
 import { getDb } from "../db";
-import { notifications, users } from "../schema";
-import { eq } from "drizzle-orm";
-import { sendEmail, type SendEmailParams } from "./email";
+import { notifications, users, ROLES } from "../schema";
+import { eq, sql } from "drizzle-orm";
+import { sendEmail, securityAlertEmail, type SendEmailParams } from "./email";
 
 /**
  * Create a dashboard notification for a user.
@@ -105,5 +105,86 @@ export async function notify(
   if (opts.email) {
     // Don't await — fire and forget to avoid blocking the response
     sendEmailToUser(db, userId, opts.email).catch(() => {});
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  ADMIN SECURITY ALERTS (config edits)
+// ═══════════════════════════════════════════════════════
+
+// Human-readable labels for the most sensitive platform settings.
+const SETTING_LABELS: Record<string, string> = {
+  flutterwave_config: "Flutterwave payment keys",
+  paystack_config: "Paystack payment keys",
+  resend_config: "Resend email credentials",
+  affiliate_auto_approve_threshold: "affiliate payout threshold",
+};
+
+/** Resolve a human-readable label for a settings key. */
+export function settingLabel(key: string): string {
+  return SETTING_LABELS[key] || key;
+}
+
+// Settings keys that carry credentials — these also trigger a security email.
+const SENSITIVE_CONFIG = /flutterwave|paystack|resend|secret|api[_ -]?key|credential/i;
+
+/** Whether a settings key holds credentials (gateway keys, hashes, tokens). */
+export function isSensitiveSettingKey(key: string): boolean {
+  return SENSITIVE_CONFIG.test(key);
+}
+
+/**
+ * Alert every OTHER admin when a sensitive platform setting changes
+ * (payment gateway keys, webhook hashes, payout thresholds).
+ *
+ * - Creates a "security" dashboard notification for each admin except the actor.
+ * - Emails them too when the setting carries credentials (Flutterwave/Paystack/
+ *   Resend keys) — security alerts are sent directly, bypassing the regular
+ *   email-preference gate so they always reach every admin.
+ *
+ * Never throws — alerting must never break the settings save.
+ */
+export function notifyAdminsOfSecurityEvent(
+  db: any,
+  opts: {
+    actorId: number;
+    actorName: string;
+    key: string;
+    action?: "created" | "updated";
+  },
+): number {
+  try {
+    const admins = db
+      .select()
+      .from(users)
+      .where(
+        sql`${users.role} IS NOT NULL AND ${users.role} != ${ROLES.USER} AND ${users.id} != ${opts.actorId}`,
+      )
+      .all();
+
+    const actionText = opts.action === "created" ? "configured" : "changed";
+    const label = settingLabel(opts.key);
+    const title = isSensitiveSettingKey(opts.key) ? "Payment Config Changed" : "Admin Config Changed";
+    let notified = 0;
+
+    for (const admin of admins) {
+      createNotification(db, admin.id, {
+        type: "security",
+        title,
+        message: `${opts.actorName} ${actionText} the ${label}. Review immediately if this wasn't you.`,
+        link: "/admin/settings",
+        metadata: { key: opts.key, actorId: opts.actorId, actorName: opts.actorName },
+      });
+      notified++;
+
+      if (admin.email && isSensitiveSettingKey(opts.key)) {
+        // Fire and forget — never block the response on email delivery.
+        sendEmail(securityAlertEmail(admin.name || admin.email, opts.actorName, label)).catch(() => {});
+      }
+    }
+    return notified;
+  } catch (e) {
+    console.warn("[Notification] Failed to alert admins of security event:", e);
+    return 0;
   }
 }

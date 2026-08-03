@@ -12,8 +12,8 @@ import {
   authPost,
   getTestDb,
 } from "./setup";
-import { auditLogs } from "../schema";
-import { eq, desc } from "drizzle-orm";
+import { auditLogs, notifications, users } from "../schema";
+import { eq, desc, and } from "drizzle-orm";
 
 let app: Hono;
 let userCookie: string;
@@ -117,6 +117,34 @@ describe("POST /api/payments/admin/flutterwave-config", () => {
     );
 
     expect(status).toBe(403);
+  });
+
+  it("alerts other admins when payment keys are saved", async () => {
+    // A second admin who should be alerted about the key change
+    await signUp(app, { name: "Other Admin", email: "other-admin@test.com", password: "Admin@123" });
+    const db = getTestDb();
+    const other = db.select().from(users).where(eq(users.email, "other-admin@test.com")).get();
+    if (!other) return;
+    db.update(users)
+      .set({ role: "finance_admin", onboardingComplete: true, updatedAt: Date.now() })
+      .where(eq(users.id, other.id))
+      .run();
+
+    // Preserve secretHash — later tests in this suite rely on it being set
+    await authPost(app, "/api/payments/admin/flutterwave-config", adminCookie, {
+      publicKey: "FLWPUBK_TEST-alert",
+      secretKey: "FLWSECK_TEST-alert-3333",
+      secretHash: "test123",
+      isEnabled: true,
+    });
+
+    const notif = db.select().from(notifications)
+      .where(and(eq(notifications.userId, other.id), eq(notifications.type, "security")))
+      .orderBy(desc(notifications.createdAt))
+      .get();
+    expect(notif).toBeTruthy();
+    expect(notif?.title).toContain("Payment Config Changed");
+    expect(notif?.metadata).toContain("flutterwave_config");
   });
 });
 

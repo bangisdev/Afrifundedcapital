@@ -3,7 +3,7 @@ import { getDb } from "../db";
 import { payments, paymentLogs, flutterwaveTransactions, challengeTemplates, accountSizes, userChallenges, mt5Accounts, fundedAccounts, settings, coupons, couponRedemptions, users, referrals, affiliates, commissions } from "../schema";
 import { eq, desc, asc, count, and, or, like, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
-import { notify } from "../lib/notifications";
+import { notify, notifyAdminsOfSecurityEvent } from "../lib/notifications";
 import { paymentConfirmationEmail } from "../lib/email";
 import { voidRedemptionForPayment, voidStaleRedemptions, ensureRedemptionForPayment, restoreRedemptionIfValid } from "../lib/payment-sweep";
 import { writeAuditLog, redactSetting } from "../lib/audit";
@@ -77,6 +77,19 @@ app.post("/admin/flutterwave-config", requireAuth, requireAdmin, async (c) => {
     });
   } catch (e) {
     console.warn("[Audit] Failed to log Flutterwave config change:", e);
+  }
+
+  // Alert other admins — payment keys are the most sensitive config on the platform.
+  try {
+    const actor = c.get("user") as { name?: string } | undefined;
+    notifyAdminsOfSecurityEvent(db, {
+      actorId: c.get("userId"),
+      actorName: actor?.name || `Admin #${c.get("userId")}`,
+      key: "flutterwave_config",
+      action: existing ? "updated" : "created",
+    });
+  } catch (e) {
+    console.warn("[Notification] Failed to alert admins of Flutterwave config change:", e);
   }
   
   return c.json({ success: true, message: "Flutterwave config saved" });
