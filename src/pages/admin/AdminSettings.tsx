@@ -8,9 +8,10 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Loader2, Save, CreditCard, Shield, Webhook, Eye, EyeOff,
-  CheckCircle, AlertTriangle, Copy, Database, Zap, Globe, Mail, Users, Settings2, History
+  CheckCircle, AlertTriangle, Copy, Database, Zap, Globe, Mail, Users, Settings2, History, ArrowUpRight
 } from "lucide-react";
 import { toast } from "sonner";
+import { Link } from "react-router";
 
 interface ProviderConfig {
   publicKey: string;
@@ -44,24 +45,31 @@ function getSettingMeta(settings: any[] | undefined, key: string): any | null {
   return s;
 }
 
-/** "Last changed by X · 3h ago" — hidden when the config was never changed. */
-function LastChanged({ meta }: { meta: any | null }) {
+/**
+ * "Last changed by X · 3h ago" — hidden when the config was never changed.
+ * Clickable: jumps to Admin → Audit Logs pre-filtered to this setting key so
+ * reviewers can see the full change history of the config.
+ */
+function LastChanged({ meta, settingKey }: { meta: any | null; settingKey?: string }) {
   if (!meta) return null;
   const actor = meta.lastChangedBy
     ? meta.lastChangedBy
     : meta.lastChangedUserDeleted
       ? `Deleted user #${meta.lastChangedUserId ?? "?"}`
       : "Unknown admin";
+  const key = settingKey || meta.entityId || "";
   return (
-    <div
-      className="flex items-center gap-1.5 text-[10px] text-muted-foreground shrink-0"
-      title={meta.lastChangedByEmail ? `${meta.lastChangedByEmail} · ${meta.lastChangedAction || "changed"}` : meta.lastChangedAction || "changed"}
+    <Link
+      to={`/admin/audit-logs?entity=setting&entityId=${encodeURIComponent(key)}`}
+      className="group flex items-center gap-1.5 text-[10px] text-muted-foreground shrink-0 hover:text-foreground transition-colors"
+      title={`${meta.lastChangedByEmail ? `${meta.lastChangedByEmail} · ` : ""}${meta.lastChangedAction || "changed"} — click to view this config's history in Audit Logs`}
     >
       <History className="h-3 w-3 shrink-0" />
-      <span>Last changed by <span className="font-medium text-foreground/80">{actor}</span></span>
+      <span>Last changed by <span className="font-medium text-foreground/80 group-hover:underline">{actor}</span></span>
       <span>·</span>
       <span>{formatRelativeTime(meta.lastChangedAt)}</span>
-    </div>
+      <ArrowUpRight className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+    </Link>
   );
 }
 
@@ -664,7 +672,7 @@ export default function AdminSettings() {
                   {liveMode ? "Production" : "Test"} API Keys
                 </h3>
               </div>
-              <LastChanged meta={getSettingMeta(settings, "flutterwave_config")} />
+              <LastChanged meta={getSettingMeta(settings, "flutterwave_config")} settingKey="flutterwave_config" />
             </div>
 
             <div className="space-y-2">
@@ -878,7 +886,7 @@ export default function AdminSettings() {
                 <Shield className="h-4 w-4 text-muted-foreground" />
                 <h3 className="text-sm font-medium">API Keys</h3>
               </div>
-              <LastChanged meta={getSettingMeta(settings, "paystack_config")} />
+              <LastChanged meta={getSettingMeta(settings, "paystack_config")} settingKey="paystack_config" />
             </div>
 
             <div className="space-y-2">
@@ -965,7 +973,7 @@ export default function AdminSettings() {
                 <Shield className="h-4 w-4 text-muted-foreground" />
                 <h3 className="text-sm font-medium">API Configuration</h3>
               </div>
-              <LastChanged meta={getSettingMeta(settings, "resend_config")} />
+              <LastChanged meta={getSettingMeta(settings, "resend_config")} settingKey="resend_config" />
             </div>
 
             <div className="space-y-2">
@@ -1092,7 +1100,7 @@ export default function AdminSettings() {
                 <Settings2 className="h-4 w-4 text-muted-foreground" />
                 <h3 className="text-sm font-medium">Payout Auto-Approval</h3>
               </div>
-              <LastChanged meta={getSettingMeta(settings, "affiliate_auto_approve_threshold")} />
+              <LastChanged meta={getSettingMeta(settings, "affiliate_auto_approve_threshold")} settingKey="affiliate_auto_approve_threshold" />
             </div>
 
             <p className="text-xs text-muted-foreground">

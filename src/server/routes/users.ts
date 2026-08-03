@@ -369,6 +369,11 @@ app.get("/audit-logs", requireAuth, requireAdmin, (c) => {
   // Filters
   const search = (c.req.query("search") || "").trim();
   const action = c.req.query("action") || "";
+  // Precise entity scoping — e.g. ?entity=setting&entityId=flutterwave_config
+  // so deep links (like Admin Settings → Audit Logs) land on exactly the
+  // entries for one config key.
+  const entity = c.req.query("entity") || "";
+  const entityId = c.req.query("entityId") || "";
 
   const conditions: SQL[] = [];
   if (search) {
@@ -384,6 +389,8 @@ app.get("/audit-logs", requireAuth, requireAdmin, (c) => {
     );
   }
   if (action && action !== "all") conditions.push(eq(auditLogs.action, action));
+  if (entity) conditions.push(eq(auditLogs.entity, entity));
+  if (entityId) conditions.push(eq(auditLogs.entityId, entityId));
   const whereClause: SQL = conditions.length > 0 ? and(...conditions)! : sql`1 = 1`;
 
   // Total matching count

@@ -13,6 +13,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router";
 
 interface AuditLogsResponse {
   logs: any[];
@@ -85,6 +86,19 @@ export default function AdminAuditLogs() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
+  // Precise entity scoping from the URL — e.g. Admin Settings' "Last changed
+  // by" links here with ?entity=setting&entityId=flutterwave_config.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [entityFilter, setEntityFilter] = useState(searchParams.get("entity") || "");
+  const [entityIdFilter, setEntityIdFilter] = useState(searchParams.get("entityId") || "");
+
+  // Keep state in sync when the URL changes (same-route navigation from a
+  // deep link, e.g. clicking a different "Last changed by" line).
+  useEffect(() => {
+    setEntityFilter(searchParams.get("entity") || "");
+    setEntityIdFilter(searchParams.get("entityId") || "");
+  }, [searchParams]);
+
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
@@ -92,13 +106,21 @@ export default function AdminAuditLogs() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, actionFilter, pageSize]);
+  }, [debouncedSearch, actionFilter, pageSize, entityFilter, entityIdFilter]);
+
+  const clearEntityFilter = () => {
+    setEntityFilter("");
+    setEntityIdFilter("");
+    setSearchParams({}, { replace: true });
+  };
 
   const params = new URLSearchParams();
   params.set("page", String(page));
   params.set("pageSize", String(pageSize));
   if (debouncedSearch) params.set("search", debouncedSearch);
   if (actionFilter !== "all") params.set("action", actionFilter);
+  if (entityFilter) params.set("entity", entityFilter);
+  if (entityIdFilter) params.set("entityId", entityIdFilter);
   const listQuery = `/api/users/audit-logs?${params.toString()}`;
 
   const { data, isLoading } = useApiQuery<AuditLogsResponse>(["admin", "auditLogs", listQuery], listQuery);
@@ -171,6 +193,24 @@ export default function AdminAuditLogs() {
           </Button>
         )}
       </div>
+
+      {/* Entity scope chip (from deep links) */}
+      {(entityFilter || entityIdFilter) && (
+        <div className="flex items-center gap-2 text-[10px]">
+          <span className="text-muted-foreground font-medium">Scoped to:</span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary/50 px-2.5 py-1 font-mono">
+            {entityFilter || "any"}
+            {entityIdFilter && <> · #{entityIdFilter}</>}
+            <button
+              onClick={clearEntityFilter}
+              className="hover:text-foreground transition-colors"
+              aria-label="Clear entity filter"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        </div>
+      )}
 
       {/* List */}
       <div className="space-y-1">
