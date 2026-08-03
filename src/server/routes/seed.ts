@@ -3,6 +3,7 @@ import { getDb, getSqlite } from "../db";
 import { settings, challengeTemplates, accountSizes, users, affiliates, wallets, fundedAccounts, mt5Accounts, tradingMetrics, userChallenges, profitPayouts, kycDocuments, payments } from "../schema";
 import { eq, count } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
+import { writeAuditLog, redactSetting } from "../lib/audit";
 import { scrypt, randomBytes } from "crypto";
 import { promisify } from "util";
 
@@ -131,16 +132,47 @@ app.get("/settings", requireAuth, (c) => {
 });
 
 // Update setting
+// NOTE: this is the endpoint the Admin → Settings page actually uses to save
+// payment gateway keys (Flutterwave/Resend/Paystack) and payout thresholds,
+// so every change is audited — with secret values redacted from the trail.
 app.put("/settings/:key", requireAuth, requireAdmin, async (c) => {
   const key = c.req.param("key");
   const body = await c.req.json();
   const db = getDb();
   const existing = db.select().from(settings).where(eq(settings.key, key)).get();
+
+  let oldValue: unknown = null;
   if (existing) {
+    try {
+      oldValue = JSON.parse(existing.value);
+    } catch {
+      oldValue = existing.value;
+    }
     db.update(settings).set({ value: JSON.stringify(body.value) }).where(eq(settings.key, key)).run();
   } else {
     db.insert(settings).values({ key, value: JSON.stringify(body.value), group: body.group || "general" }).run();
   }
+
+  // Audit config edits — the most sensitive admin actions on the platform.
+  // Values are redacted so secrets never land in the trail in plaintext.
+  try {
+    writeAuditLog(db, {
+      userId: c.get("userId"),
+      action: existing ? "settings.updated" : "settings.created",
+      entity: "setting",
+      entityId: key,
+      details: {
+        key,
+        group: body.group || existing?.group || "general",
+        from: redactSetting(key, oldValue),
+        to: redactSetting(key, body.value),
+      },
+      ipAddress: c.req.header("x-forwarded-for") || undefined,
+    });
+  } catch (e) {
+    console.warn("[Audit] Failed to log settings change:", e);
+  }
+
   return c.json({ success: true });
 });
 

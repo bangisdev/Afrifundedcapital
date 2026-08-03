@@ -12,6 +12,8 @@ import {
   authPost,
   getTestDb,
 } from "./setup";
+import { auditLogs } from "../schema";
+import { eq, desc } from "drizzle-orm";
 
 let app: Hono;
 let userCookie: string;
@@ -89,6 +91,21 @@ describe("POST /api/payments/admin/flutterwave-config", () => {
 
     expect(status).toBe(200);
     expect((body as Record<string, unknown>).success).toBe(true);
+
+    // Saving payment gateway keys is the most sensitive admin action — it must
+    // be audited, with secretKey/secretHash redacted from the trail.
+    const db = getTestDb();
+    const audit = db.select().from(auditLogs)
+      .where(eq(auditLogs.entity, "setting"))
+      .orderBy(desc(auditLogs.timestamp))
+      .get();
+    expect(audit).toBeTruthy();
+    expect(audit?.entityId).toBe("flutterwave_config");
+    // The secret key must never land in the audit trail in plaintext
+    expect(audit?.details).not.toContain("FLWSECK_TEST-def456");
+    // Masked form + non-secret fields remain visible for review
+    expect(audit?.details).toContain("••••");
+    expect(audit?.details).toContain("FLWPUBK_TEST-abc123");
   });
 
   it("returns 403 for non-admin users", async () => {

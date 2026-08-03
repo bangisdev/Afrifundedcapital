@@ -4,7 +4,7 @@ import { users, sessions, auditLogs, settings, wallets, affiliates } from "../sc
 import { eq, desc, asc, like, count, sql, and, or, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification } from "../lib/notifications";
-import { writeAuditLog } from "../lib/audit";
+import { writeAuditLog, redactSetting } from "../lib/audit";
 
 const app = new Hono();
 
@@ -440,17 +440,44 @@ app.get("/brief", requireAuth, requireAdmin, (c) => {
 });
 
 // Admin: Update setting
+// Config edits (payment keys, payout thresholds) are the most sensitive admin
+// actions — every change is audited with secret values redacted from the trail.
 app.put("/settings/:key", requireAuth, requireAdmin, async (c) => {
   const key = c.req.param("key");
   const body = await c.req.json();
   const db = getDb();
 
   const existing = db.select().from(settings).where(eq(settings.key, key)).get();
+  let oldValue: unknown = null;
   if (existing) {
+    try {
+      oldValue = JSON.parse(existing.value);
+    } catch {
+      oldValue = existing.value;
+    }
     db.update(settings).set({ value: JSON.stringify(body.value) }).where(eq(settings.key, key)).run();
   } else {
     db.insert(settings).values({ key, value: JSON.stringify(body.value), group: body.group || "general" }).run();
   }
+
+  try {
+    writeAuditLog(db, {
+      userId: c.get("userId"),
+      action: existing ? "settings.updated" : "settings.created",
+      entity: "setting",
+      entityId: key,
+      details: {
+        key,
+        group: body.group || existing?.group || "general",
+        from: redactSetting(key, oldValue),
+        to: redactSetting(key, body.value),
+      },
+      ipAddress: c.req.header("x-forwarded-for") || undefined,
+    });
+  } catch (e) {
+    console.warn("[Audit] Failed to log settings change:", e);
+  }
+
   return c.json({ success: true });
 });
 

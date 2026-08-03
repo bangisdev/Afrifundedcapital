@@ -184,3 +184,83 @@ describe("DELETE /api/users/:id", () => {
     expect(status).toBe(400);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════
+//  AUDIT LOG: SETTINGS CHANGES (payment keys, payout thresholds)
+// ═══════════════════════════════════════════════════════════════
+
+describe("PUT /api/users/settings/:key", () => {
+  it("writes settings.created with the full non-secret value", async () => {
+    const { status } = await authPut(app, "/api/users/settings/affiliate_auto_approve_threshold", adminCookie, {
+      value: 50000,
+      group: "affiliates",
+    });
+    expect(status).toBe(200);
+
+    const db = getTestDb();
+    const audit = db.select().from(auditLogs)
+      .where(eq(auditLogs.action, "settings.created"))
+      .orderBy(desc(auditLogs.timestamp))
+      .get();
+    expect(audit).toBeTruthy();
+    expect(audit?.entity).toBe("setting");
+    expect(audit?.entityId).toBe("affiliate_auto_approve_threshold");
+    // Non-secret values are stored in full so reviewers see exactly what changed
+    expect(audit?.details).toContain("50000");
+    expect(audit?.details).not.toContain("••••");
+  });
+
+  it("writes settings.updated with before/after values", async () => {
+    const { status } = await authPut(app, "/api/users/settings/affiliate_auto_approve_threshold", adminCookie, {
+      value: 100000,
+    });
+    expect(status).toBe(200);
+
+    const db = getTestDb();
+    const audit = db.select().from(auditLogs)
+      .where(eq(auditLogs.action, "settings.updated"))
+      .orderBy(desc(auditLogs.timestamp))
+      .get();
+    expect(audit).toBeTruthy();
+    expect(audit?.entityId).toBe("affiliate_auto_approve_threshold");
+    expect(audit?.details).toContain("50000"); // from
+    expect(audit?.details).toContain("100000"); // to
+  });
+
+  it("redacts secrets so payment keys never land in the audit trail", async () => {
+    const secretKey = "FLWSECK_TEST-super-secret-value-9876";
+    const secretHash = "secret-hash-123";
+    const { status } = await authPut(app, "/api/users/settings/flutterwave_config", adminCookie, {
+      value: { publicKey: "FLWPUBK_TEST-pub123", secretKey, secretHash, isEnabled: true },
+      group: "payments",
+    });
+    expect(status).toBe(200);
+
+    const db = getTestDb();
+    const audit = db.select().from(auditLogs)
+      .where(eq(auditLogs.action, "settings.created"))
+      .orderBy(desc(auditLogs.timestamp))
+      .get();
+    expect(audit).toBeTruthy();
+    expect(audit?.entityId).toBe("flutterwave_config");
+    // The secrets must never be persisted in plaintext
+    expect(audit?.details).not.toContain(secretKey);
+    expect(audit?.details).not.toContain(secretHash);
+    // The masked form + non-secret fields remain visible for review
+    expect(audit?.details).toContain("••••");
+    expect(audit?.details).toContain("FLWPUBK_TEST-pub123");
+  });
+
+  it("shows the settings change in the audit-logs list with the actor joined", async () => {
+    const { body } = await authGet(
+      app,
+      "/api/users/audit-logs?action=settings.created&page=1&pageSize=50",
+      adminCookie,
+    );
+    const logs = (body as Record<string, unknown>).logs as Array<Record<string, unknown>>;
+    const log = logs.find((l) => l.entityId === "flutterwave_config");
+    expect(log).toBeTruthy();
+    expect(log?.userEmail).toBe("audit-admin@test.com");
+    expect(log?.userDeleted).toBe(false);
+  });
+});

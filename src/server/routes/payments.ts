@@ -6,7 +6,7 @@ import { requireAuth, requireAdmin } from "../middleware";
 import { notify } from "../lib/notifications";
 import { paymentConfirmationEmail } from "../lib/email";
 import { voidRedemptionForPayment, voidStaleRedemptions, ensureRedemptionForPayment, restoreRedemptionIfValid } from "../lib/payment-sweep";
-import { writeAuditLog } from "../lib/audit";
+import { writeAuditLog, redactSetting } from "../lib/audit";
 
 const app = new Hono();
 
@@ -32,6 +32,8 @@ app.get("/flutterwave-config", requireAuth, (c) => {
 });
 
 // ─── Admin: Save Flutterwave Config ────────────────────
+// Payment gateway keys are the most sensitive config on the platform — every
+// save is audited with secretKey/secretHash redacted from the trail.
 app.post("/admin/flutterwave-config", requireAuth, requireAdmin, async (c) => {
   const db = getDb();
   const body = await c.req.json();
@@ -43,7 +45,11 @@ app.post("/admin/flutterwave-config", requireAuth, requireAdmin, async (c) => {
   };
   
   const existing = db.select().from(settings).where(eq(settings.key, "flutterwave_config")).get();
+  let oldConfig: unknown = null;
   if (existing) {
+    try {
+      oldConfig = JSON.parse(existing.value);
+    } catch {}
     db.update(settings).set({ value: JSON.stringify(config) }).where(eq(settings.key, "flutterwave_config")).run();
   } else {
     db.insert(settings).values({
@@ -52,6 +58,25 @@ app.post("/admin/flutterwave-config", requireAuth, requireAdmin, async (c) => {
       group: "payments",
       description: "Flutterwave payment gateway configuration",
     }).run();
+  }
+
+  try {
+    writeAuditLog(db, {
+      userId: c.get("userId"),
+      action: existing ? "settings.updated" : "settings.created",
+      entity: "setting",
+      entityId: "flutterwave_config",
+      details: {
+        key: "flutterwave_config",
+        group: "payments",
+        // Never persist secret material — mask secretKey/secretHash.
+        from: redactSetting("flutterwave_config", oldConfig),
+        to: redactSetting("flutterwave_config", config),
+      },
+      ipAddress: c.req.header("x-forwarded-for") || undefined,
+    });
+  } catch (e) {
+    console.warn("[Audit] Failed to log Flutterwave config change:", e);
   }
   
   return c.json({ success: true, message: "Flutterwave config saved" });
