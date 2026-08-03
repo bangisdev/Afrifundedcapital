@@ -66,6 +66,11 @@ vi.mock("@/components/ui/alert-dialog", () => ({
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
+// ─── Mock: react-router (audit trail deep links) ────────
+vi.mock("react-router", () => ({
+  Link: ({ to, children, ...rest }: any) => <a href={to} {...rest}>{children}</a>,
+}));
+
 import AdminKyc from "@/pages/admin/AdminKyc";
 
 function clearAll() { Object.keys(queryDataMap).forEach((k) => delete queryDataMap[k]); }
@@ -125,6 +130,40 @@ describe("AdminKyc Page", () => {
       await user.selectOptions(screen.getByDisplayValue("All Status"), "approved");
       // "National ID" appears in both filter dropdown and doc label
       expect(screen.getAllByText("National ID").length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe("Audit Trail Links", () => {
+    it("links each list row to the document's audit entries", async () => {
+      setQueryData({ "admin/kyc": [
+        { id: 42, documentType: "passport", status: "pending", userId: 1, uploadedAt: Date.now() },
+      ], "admin/briefUsers": [{ id: 1, name: "John Doe" }] });
+      render(<AdminKyc />);
+
+      const link = await screen.findByLabelText("View audit trail for document 42");
+      expect(link.getAttribute("href")).toBe("/admin/audit-logs?entity=kyc_document&entityId=42");
+    });
+
+    it("shows a View audit trail link in the document detail view", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "admin/kyc": [
+        { id: 7, documentType: "national_id", status: "approved", userId: 1, uploadedAt: Date.now(), reviewedAt: Date.now() },
+      ], "admin/briefUsers": [{ id: 1, name: "John Doe" }] });
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          id: 7, documentType: "national_id", status: "approved", userId: 1,
+          userName: "John Doe", userEmail: "john@test.com",
+          uploadedAt: Date.now(), reviewedAt: Date.now(),
+        }),
+      });
+      render(<AdminKyc />);
+
+      // Open the detail view via the eye button
+      await user.click(screen.getByLabelText("View document details"));
+
+      const link = await screen.findByText("View audit trail");
+      expect(link.closest("a")!.getAttribute("href")).toBe("/admin/audit-logs?entity=kyc_document&entityId=7");
     });
   });
 

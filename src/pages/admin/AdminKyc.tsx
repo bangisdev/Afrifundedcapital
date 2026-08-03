@@ -6,9 +6,10 @@ import { Input } from "@/components/ui/input";
 import {
   Loader2, CheckCircle, XCircle, ArrowLeft, FileText, User, Clock,
   ChevronDown, ChevronLeft, ChevronRight, Eye, AlertTriangle, Image as ImageIcon, X, Download,
-  ArrowUp, ArrowDown, ArrowUpDown,
+  ArrowUp, ArrowDown, ArrowUpDown, History,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Link } from "react-router";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -278,6 +279,16 @@ export default function AdminKyc() {
               </div>
             )}
 
+            {/* Audit trail deep link — jumps to Admin → Audit Logs scoped to this document */}
+            <Link
+              to={`/admin/audit-logs?entity=kyc_document&entityId=${doc.id}`}
+              className="inline-flex items-center justify-center gap-1 rounded-full border border-border px-2 py-1 text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors w-full"
+              title={`View the full audit trail for document #${doc.id}`}
+            >
+              <History className="h-3 w-3" />
+              View audit trail
+            </Link>
+
             {/* Action Buttons */}
             {doc.status === "pending" && (
               <div className="border-t pt-3 space-y-2">
@@ -489,7 +500,17 @@ export default function AdminKyc() {
                         </Button>
                       </>
                     )}
+                    <Link
+                      to={`/admin/audit-logs?entity=kyc_document&entityId=${doc.id}`}
+                      className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
+                      title={`View the audit trail for ${DOC_TYPES[doc.documentType] || doc.documentType} #${doc.id}`}
+                      aria-label={`View audit trail for document ${doc.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <History className="h-3.5 w-3.5" />
+                    </Link>
                     <Button variant="ghost" size="icon-sm" className="h-7 w-7"
+                      aria-label="View document details"
                       onClick={(e) => { e.stopPropagation(); openDetail(doc); }}>
                       <Eye className="h-3.5 w-3.5" />
                     </Button>
