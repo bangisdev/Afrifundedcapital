@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useApiQuery, useApiMutation } from "@/hooks/use-api";
+import { useApiQuery } from "@/hooks/use-api";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

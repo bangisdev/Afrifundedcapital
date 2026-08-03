@@ -88,16 +88,12 @@ export default function AdminAuditLogs() {
 
   // Precise entity scoping from the URL — e.g. Admin Settings' "Last changed
   // by" links here with ?entity=setting&entityId=flutterwave_config.
+  // Derived straight from the URL (no state mirroring) so same-route navigation
+  // from a deep link stays in sync with zero extra effects, and clearing just
+  // strips the params.
   const [searchParams, setSearchParams] = useSearchParams();
-  const [entityFilter, setEntityFilter] = useState(searchParams.get("entity") || "");
-  const [entityIdFilter, setEntityIdFilter] = useState(searchParams.get("entityId") || "");
-
-  // Keep state in sync when the URL changes (same-route navigation from a
-  // deep link, e.g. clicking a different "Last changed by" line).
-  useEffect(() => {
-    setEntityFilter(searchParams.get("entity") || "");
-    setEntityIdFilter(searchParams.get("entityId") || "");
-  }, [searchParams]);
+  const entityFilter = searchParams.get("entity") || "";
+  const entityIdFilter = searchParams.get("entityId") || "";
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -109,8 +105,6 @@ export default function AdminAuditLogs() {
   }, [debouncedSearch, actionFilter, pageSize, entityFilter, entityIdFilter]);
 
   const clearEntityFilter = () => {
-    setEntityFilter("");
-    setEntityIdFilter("");
     setSearchParams({}, { replace: true });
   };
 

@@ -84,10 +84,14 @@ export default function AdminCoupons() {
 
   const handleDelete = async (id: number) => {
     try {
-      await fetch(`/api/coupons/admin/${id}`, {
+      const res = await fetch(`/api/coupons/admin/${id}`, {
         method: "DELETE",
         credentials: "include",
       });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error || "Failed to delete coupon");
+      }
       toast.success("Coupon deleted");
       refetch();
     } catch (e: any) { toast.error(e?.message || "Failed to delete"); }

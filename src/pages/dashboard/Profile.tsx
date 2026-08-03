@@ -4,11 +4,10 @@ import { useState, useRef, useCallback } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Loader2, User, Shield, Upload, CheckCircle, XCircle, Clock,
-  FileText, Trash2, Eye, X, AlertTriangle, RefreshCw, Image as ImageIcon,
+  FileText, X, AlertTriangle, RefreshCw,
   ArrowUp, ArrowDown, ArrowUpDown, History,
 } from "lucide-react";
 import { toast } from "sonner";

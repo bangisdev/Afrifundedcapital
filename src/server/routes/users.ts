@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
-import { users, sessions, auditLogs, settings, wallets, affiliates } from "../schema";
+import { users, sessions, auditLogs, settings, affiliates } from "../schema";
 import { eq, desc, asc, like, count, sql, and, or, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification, notifyAdminsOfSecurityEvent } from "../lib/notifications";
@@ -21,6 +21,9 @@ app.put("/profile", requireAuth, async (c) => {
   const db = getDb();
 
   const allowedFields = ["name", "phone", "address", "country", "tradingExperience", "timezone", "dateOfBirth", "image"];
+  // Dynamic update map: any is required here because drizzle's .set() accepts
+  // it, and the union of column types rejects a narrow index signature.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updates: Record<string, any> = {};
 
   for (const field of allowedFields) {
@@ -165,6 +168,7 @@ app.get("/list", requireAuth, requireAdmin, (c) => {
     .all();
 
   // Strip sensitive fields (keep accountLockedUntil for lock UI)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- omit pattern
   const safeUsers = pageUsers.map(({ twoFactorSecret, loginAttempts, ...u }) => u);
 
   // Platform-wide stats (unfiltered) so the stat cards stay accurate
@@ -288,6 +292,8 @@ app.put("/:id/profile", requireAuth, requireAdmin, async (c) => {
   const db = getDb();
 
   const allowedFields = ["name", "phone", "country", "tradingExperience", "timezone", "kycStatus"];
+  // Dynamic update map — see note above for why any is intentional here.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updates: Record<string, any> = {};
   for (const field of allowedFields) {
     if (body[field] !== undefined) updates[field] = body[field];
@@ -518,6 +524,7 @@ app.get("/:id", requireAuth, requireAdmin, (c) => {
   const db = getDb();
   const user = db.select().from(users).where(eq(users.id, id)).get();
   if (!user) return c.json({ error: "User not found" }, 404);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- omit pattern
   const { twoFactorSecret, accountLockedUntil, loginAttempts, ...safe } = user;
   return c.json(safe);
 });

@@ -5,6 +5,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 import { useApiQuery } from "@/hooks/use-api";
+import { toast } from "sonner";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/hooks/use-auth", () => ({
@@ -154,6 +155,60 @@ describe("AdminCoupons Page", () => {
       const calls = vi.mocked(useApiQuery).mock.calls;
       const ascCall = calls.find((c) => String(c[1]).includes("/api/coupons/admin/all?") && String(c[1]).includes("sortBy=currentUses&sortOrder=asc"));
       expect(ascCall).toBeTruthy();
+    });
+  });
+
+  describe("Delete Coupon", () => {
+    it("calls DELETE API and refetches on success", async () => {
+      const user = userEvent.setup();
+      setQueryData({ "admin/coupons": [
+        { id: 7, code: "SAVE20", discountType: "percentage", discountValue: 20, maxUses: 100, redemptionCount: 15, totalDiscountGiven: 5000 },
+      ]}); render(<AdminCoupons />);
+
+      // The delete button is the one containing the Trash icon (last button in the row)
+      const rowButtons = Array.from(document.querySelectorAll(".card-subtle button"));
+      const trashBtn = rowButtons[rowButtons.length - 1];
+      expect(trashBtn).toBeTruthy();
+      await user.click(trashBtn!);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "/api/coupons/admin/7",
+        expect.objectContaining({ method: "DELETE" }),
+      );
+      expect(toast.success).toHaveBeenCalledWith("Coupon deleted");
+    });
+
+    it("shows an error toast when the DELETE fails", async () => {
+      mockFetch.mockResolvedValueOnce({ ok: false, json: async () => ({ error: "Coupon in use" }) });
+      const user = userEvent.setup();
+      setQueryData({ "admin/coupons": [
+        { id: 7, code: "SAVE20", discountType: "percentage", discountValue: 20, maxUses: 100, redemptionCount: 15, totalDiscountGiven: 5000 },
+      ]}); render(<AdminCoupons />);
+
+      const rowButtons = Array.from(document.querySelectorAll(".card-subtle button"));
+      const trashBtn = rowButtons[rowButtons.length - 1];
+      await user.click(trashBtn!);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "/api/coupons/admin/7",
+        expect.objectContaining({ method: "DELETE" }),
+      );
+      expect(toast.error).toHaveBeenCalledWith("Coupon in use");
+      expect(toast.success).not.toHaveBeenCalled();
+    });
+
+    it("shows a fallback error toast on network failure", async () => {
+      mockFetch.mockRejectedValueOnce(new Error("Network down"));
+      const user = userEvent.setup();
+      setQueryData({ "admin/coupons": [
+        { id: 7, code: "SAVE20", discountType: "percentage", discountValue: 20, maxUses: 100, redemptionCount: 15, totalDiscountGiven: 5000 },
+      ]}); render(<AdminCoupons />);
+
+      const rowButtons = Array.from(document.querySelectorAll(".card-subtle button"));
+      const trashBtn = rowButtons[rowButtons.length - 1];
+      await user.click(trashBtn!);
+
+      expect(toast.error).toHaveBeenCalledWith("Network down");
     });
   });
 

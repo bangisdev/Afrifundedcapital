@@ -9,7 +9,6 @@ import {
   Plus,
   Edit2,
   Trash2,
-  ChevronDown,
   ChevronRight,
   X,
   Trophy,
@@ -93,14 +92,6 @@ export default function AdminChallenges() {
   );
   const [challengeSortBy, setChallengeSortBy] = useState("createdAt");
   const [challengeSortOrder, setChallengeSortOrder] = useState<"asc" | "desc">("desc");
-  // Sortable columns matching the server whitelist for /api/challenges/admin/all
-  const CHALLENGE_SORT_COLUMNS: Array<{ key: string; label: string }> = [
-    { key: "id", label: "ID" },
-    { key: "accountSize", label: "Account Size" },
-    { key: "amountPaid", label: "Amount Paid" },
-    { key: "status", label: "Status" },
-    { key: "createdAt", label: "Created" },
-  ];
   const challengeParams = new URLSearchParams();
   challengeParams.set("sortBy", challengeSortBy);
   challengeParams.set("sortOrder", challengeSortOrder);
@@ -199,7 +190,9 @@ export default function AdminChallenges() {
       const data = await res.json();
       // Guard against non-array responses so sizes.map never crashes
       setSizesCache((prev) => ({ ...prev, [templateId]: Array.isArray(data) ? data : [] }));
-    } catch {}
+    } catch {
+      // Failed or non-JSON response — leave the cache empty so sizes.map is safe
+    }
   };
 
   const toggleExpand = (id: number) => {

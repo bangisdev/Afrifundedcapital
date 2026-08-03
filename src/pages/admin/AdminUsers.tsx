@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useApiQuery, useApiMutation } from "@/hooks/use-api";
+import { useApiQuery } from "@/hooks/use-api";
 import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -131,14 +131,6 @@ export default function AdminUsers() {
   useEffect(() => {
     setPage(1);
   }, [debouncedSearch, roleFilter, kycFilter, pageSize, sortBy, sortOrder]);
-
-  // Sortable columns matching the server whitelist for /api/users/list
-  const SORT_COLUMNS: Array<{ key: string; label: string }> = [
-    { key: "name", label: "User" },
-    { key: "role", label: "Role" },
-    { key: "kycStatus", label: "KYC" },
-    { key: "createdAt", label: "Joined" },
-  ];
 
   const handleSort = (key: string) => {
     if (sortBy === key) {

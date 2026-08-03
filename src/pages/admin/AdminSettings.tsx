@@ -97,7 +97,6 @@ export default function AdminSettings() {
     "/api/seed/settings"
   );
   const updateSetting = useApiMutation<any, any>("put", "/api/seed/settings/flutterwave_config");
-  const seedData = useApiMutation<any, any>("post", "/api/seed/seed");
 
   // Mode state
   const [liveMode, setLiveMode] = useState(false);
@@ -148,8 +147,6 @@ export default function AdminSettings() {
   const [affiliateThreshold, setAffiliateThreshold] = useState(50000);
   const [savingAffiliate, setSavingAffiliate] = useState(false);
 
-  const [seeding, setSeeding] = useState(false);
-  const [bulkSeedResult, setBulkSeedResult] = useState<any>(null);
   const [bulkSeeding, setBulkSeeding] = useState(false);
 
   // Test webhook state
@@ -400,21 +397,8 @@ export default function AdminSettings() {
     setSavingAffiliate(false);
   };
 
-  const handleSeed = async () => {
-    setSeeding(true);
-    try {
-      await seedData.mutateAsync({});
-      toast.success("Seed data created successfully");
-      refetch();
-    } catch (e: any) {
-      toast.error(e.message);
-    }
-    setSeeding(false);
-  };
-
   const handleBulkSeed = async () => {
     setBulkSeeding(true);
-    setBulkSeedResult(null);
     try {
       const res = await fetch("/api/seed/bulk", {
         method: "POST",
@@ -423,7 +407,6 @@ export default function AdminSettings() {
         body: JSON.stringify({}),
       });
       const data = await res.json();
-      setBulkSeedResult(data);
       if (data.success) {
         toast.success("All demo data seeded successfully!");
       } else {

@@ -49,18 +49,28 @@ vi.mock("@/hooks/use-api", () => ({
 
 // ─── Mock: react-router (URL-scoped entity filter) ───────
 let mockUrlParams: Record<string, string> = {};
-// Keep a stable URLSearchParams instance per test — the component's sync
-// effect depends on searchParams identity, so recreating it every render would
-// re-apply the URL filter immediately after the user clears the chip.
-let mockSearchParamsInstance: URLSearchParams | null = null;
 const mockSetSearchParams = vi.fn();
 
-vi.mock("react-router", () => ({
-  useSearchParams: () => {
-    if (!mockSearchParamsInstance) mockSearchParamsInstance = new URLSearchParams(mockUrlParams);
-    return [mockSearchParamsInstance, mockSetSearchParams];
-  },
-}));
+// Stateful mock: the component now derives entity/entityId straight from the
+// URL, so setSearchParams must actually mutate the params and re-render for
+// the clear-chip flow to be observable in tests.
+vi.mock("react-router", async () => {
+  const React = await import("react");
+  return {
+    useSearchParams: () => {
+      const [params, setParams] = React.useState(() => new URLSearchParams(mockUrlParams));
+      const setSearchParams = React.useCallback(
+        (next: Record<string, string> | URLSearchParams, opts?: { replace?: boolean }) => {
+          mockSetSearchParams(next, opts);
+          mockUrlParams = Object.fromEntries(new URLSearchParams(next).entries());
+          setParams(new URLSearchParams(mockUrlParams));
+        },
+        [],
+      );
+      return [params, setSearchParams];
+    },
+  };
+});
 
 import AdminAuditLogs from "@/pages/admin/AdminAuditLogs";
 
@@ -68,7 +78,6 @@ describe("AdminAuditLogs", () => {
   beforeEach(() => {
     delete queryDataMap["admin/auditLogs"];
     mockUrlParams = {};
-    mockSearchParamsInstance = null;
     mockSetSearchParams.mockClear();
   });
 
