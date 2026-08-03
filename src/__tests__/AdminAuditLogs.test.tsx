@@ -2,7 +2,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import React from "react";
+import { useApiQuery } from "@/hooks/use-api";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/hooks/use-auth", () => ({
@@ -45,11 +47,29 @@ vi.mock("@/hooks/use-api", () => ({
   }),
 }));
 
+// ─── Mock: react-router (URL-scoped entity filter) ───────
+let mockUrlParams: Record<string, string> = {};
+// Keep a stable URLSearchParams instance per test — the component's sync
+// effect depends on searchParams identity, so recreating it every render would
+// re-apply the URL filter immediately after the user clears the chip.
+let mockSearchParamsInstance: URLSearchParams | null = null;
+const mockSetSearchParams = vi.fn();
+
+vi.mock("react-router", () => ({
+  useSearchParams: () => {
+    if (!mockSearchParamsInstance) mockSearchParamsInstance = new URLSearchParams(mockUrlParams);
+    return [mockSearchParamsInstance, mockSetSearchParams];
+  },
+}));
+
 import AdminAuditLogs from "@/pages/admin/AdminAuditLogs";
 
 describe("AdminAuditLogs", () => {
   beforeEach(() => {
     delete queryDataMap["admin/auditLogs"];
+    mockUrlParams = {};
+    mockSearchParamsInstance = null;
+    mockSetSearchParams.mockClear();
   });
 
   it("shows the acting admin's name and email on each entry", async () => {
@@ -137,5 +157,68 @@ describe("AdminAuditLogs", () => {
     render(<AdminAuditLogs />);
 
     expect(await screen.findByText(/"reference":"FLW-123"/)).toBeTruthy();
+  });
+
+  it("shows the scope chip when deep-linked with entity/entityId", async () => {
+    mockUrlParams = { entity: "setting", entityId: "flutterwave_config" };
+    queryDataMap["admin/auditLogs"] = {
+      logs: [
+        { id: 1, action: "settings.updated", entity: "setting", entityId: "flutterwave_config", userId: 3, userName: "Ada Obi", userEmail: "ada@afrifundedcapital.com", userDeleted: false, timestamp: Date.now(), details: null },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 10,
+      totalPages: 1,
+      stats: { total: 1, byAction: { "settings.updated": 1 } },
+    };
+
+    render(<AdminAuditLogs />);
+
+    expect(await screen.findByText("Scoped to:")).toBeTruthy();
+    expect(screen.getByText(/· #flutterwave_config/)).toBeTruthy();
+    expect(screen.getByLabelText("Clear entity filter")).toBeTruthy();
+  });
+
+  it("passes entity/entityId to the API when deep-linked", async () => {
+    mockUrlParams = { entity: "setting", entityId: "flutterwave_config" };
+    queryDataMap["admin/auditLogs"] = {
+      logs: [],
+      total: 0,
+      page: 1,
+      pageSize: 10,
+      totalPages: 1,
+      stats: { total: 0, byAction: {} },
+    };
+
+    render(<AdminAuditLogs />);
+
+    const calls = vi.mocked(useApiQuery).mock.calls;
+    const scopedCall = calls.find(
+      (c) => String(c[1]).includes("entity=setting") && String(c[1]).includes("entityId=flutterwave_config"),
+    );
+    expect(scopedCall).toBeTruthy();
+  });
+
+  it("clears the entity filter when the chip's X is clicked", async () => {
+    const user = userEvent.setup();
+    mockUrlParams = { entity: "setting", entityId: "flutterwave_config" };
+    queryDataMap["admin/auditLogs"] = {
+      logs: [
+        { id: 1, action: "settings.updated", entity: "setting", entityId: "flutterwave_config", userId: 3, userName: "Ada Obi", userEmail: "ada@afrifundedcapital.com", userDeleted: false, timestamp: Date.now(), details: null },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 10,
+      totalPages: 1,
+      stats: { total: 1, byAction: { "settings.updated": 1 } },
+    };
+
+    render(<AdminAuditLogs />);
+
+    await screen.findByText("Scoped to:");
+    await user.click(screen.getByLabelText("Clear entity filter"));
+
+    expect(mockSetSearchParams).toHaveBeenCalledWith({}, { replace: true });
+    expect(screen.queryByText("Scoped to:")).toBeNull();
   });
 });

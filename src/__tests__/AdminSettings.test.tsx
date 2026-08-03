@@ -96,6 +96,11 @@ vi.mock("@/components/ui/switch", () => ({
   ),
 }));
 
+// ─── Mock: react-router (LastChanged deep link) ───────────
+vi.mock("react-router", () => ({
+  Link: ({ to, children, ...rest }: any) => <a href={to} {...rest}>{children}</a>,
+}));
+
 // ─── Mock: fetch ──────────────────────────────────────────
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
@@ -481,6 +486,62 @@ describe("AdminSettings Page", () => {
       });
       render(<AdminSettings />);
       expect(screen.getByDisplayValue("FLWPUBK_TEST-abc")).toBeTruthy();
+    });
+  });
+
+  // ─── Last changed attribution ────────────────────────
+  describe("Last Changed Attribution", () => {
+    it("renders the 'Last changed by' line as a deep link to the filtered audit log", () => {
+      setQueryData({
+        "admin/settings": [
+          {
+            key: "flutterwave_config",
+            value: { publicKey: "FLWPUBK_TEST-abc", secretKey: "FLWSECK_TEST-xyz", isEnabled: true },
+            lastChangedAt: Date.now() - 60 * 60 * 1000,
+            lastChangedBy: "Ada Obi",
+            lastChangedByEmail: "ada@afrifundedcapital.com",
+            lastChangedAction: "settings.updated",
+            lastChangedUserId: 3,
+            lastChangedUserDeleted: false,
+          },
+        ],
+      });
+      render(<AdminSettings />);
+
+      const link = screen.getByText("Ada Obi").closest("a");
+      expect(link).toBeTruthy();
+      expect(link!.getAttribute("href")).toBe("/admin/audit-logs?entity=setting&entityId=flutterwave_config");
+      expect(screen.getByText(/Last changed by/)).toBeTruthy();
+      expect(screen.getByText("1h ago")).toBeTruthy();
+    });
+
+    it("hides the attribution for configs that were never changed", () => {
+      setQueryData({
+        "admin/settings": [
+          { key: "flutterwave_config", value: { publicKey: "", secretKey: "", isEnabled: true } },
+        ],
+      });
+      render(<AdminSettings />);
+      expect(screen.queryByText(/Last changed by/)).toBeNull();
+    });
+
+    it("falls back to a deleted-user label when the actor's account is gone", () => {
+      setQueryData({
+        "admin/settings": [
+          {
+            key: "flutterwave_config",
+            value: { publicKey: "", secretKey: "", isEnabled: true },
+            lastChangedAt: Date.now() - 60 * 1000,
+            lastChangedBy: null,
+            lastChangedUserDeleted: true,
+            lastChangedUserId: 42,
+            lastChangedAction: "settings.created",
+          },
+        ],
+      });
+      render(<AdminSettings />);
+      expect(screen.getByText("Deleted user #42")).toBeTruthy();
+      expect(screen.getByText(/Last changed by/)).toBeTruthy();
     });
   });
 });

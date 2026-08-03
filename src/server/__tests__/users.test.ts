@@ -297,4 +297,27 @@ describe("PUT /api/users/settings/:key", () => {
       .get();
     expect(actorNotif).toBeFalsy();
   });
+
+  it("filters precisely by entity/entityId (deep-link scoping)", async () => {
+    // Runs last in this describe so the flutterwave_config settings entries
+    // seeded by the tests above are already in the audit trail. This is the
+    // exact path the Admin Settings "Last changed by" deep link uses.
+    const { body } = await authGet(
+      app,
+      "/api/users/audit-logs?entity=setting&entityId=flutterwave_config&page=1&pageSize=50",
+      adminCookie,
+    );
+    const logs = (body as Record<string, unknown>).logs as Array<Record<string, unknown>>;
+    expect(logs.length).toBeGreaterThan(0);
+    expect(logs.every((l) => l.entity === "setting" && l.entityId === "flutterwave_config")).toBe(true);
+
+    // A key with no history returns zero matching entries
+    const { body: emptyBody } = await authGet(
+      app,
+      "/api/users/audit-logs?entity=setting&entityId=never_touched_key&page=1&pageSize=50",
+      adminCookie,
+    );
+    const emptyLogs = (emptyBody as Record<string, unknown>).logs as unknown[];
+    expect(emptyLogs.length).toBe(0);
+  });
 });
