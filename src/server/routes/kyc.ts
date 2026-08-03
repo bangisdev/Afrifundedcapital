@@ -180,6 +180,21 @@ app.post("/upload", requireAuth, async (c) => {
     console.warn("[Audit] Failed to log KYC upload:", e);
   }
 
+  // Notify the user — dashboard notification + confirmation email (respecting
+  // their email notification preferences). Fire-and-forget like approve/reject.
+  try {
+    const uploader = db.select().from(users).where(eq(users.id, userId)).get();
+    notify(db, userId, {
+      type: "kyc",
+      title: "Document Received",
+      message: `Your ${documentType.replace(/_/g, " ")} document has been received and is under review. You'll be notified once a decision is made.`,
+      link: "/dashboard/profile",
+      email: kycDocumentUploadedEmail(uploader?.name || "Trader", documentType),
+    });
+  } catch (e) {
+    console.warn("[KYC] Failed to notify document upload:", e);
+  }
+
   return c.json({
     id: result.id,
     documentType: result.documentType,

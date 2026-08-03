@@ -14,7 +14,7 @@ import {
   getTestDb,
   getTestSqlite,
 } from "./setup";
-import { auditLogs } from "../schema";
+import { auditLogs, notifications } from "../schema";
 import { eq, desc, and } from "drizzle-orm";
 
 let app: Hono;
@@ -143,6 +143,34 @@ describe("POST /api/kyc/upload", () => {
     expect(audit?.details).toContain("national_id");
     // The submitting user is the actor on their own upload
     expect(audit?.userId).toBeTruthy();
+  });
+
+  it("creates a dashboard notification for the submission", async () => {
+    const { status, body } = await authPost(app, "/api/kyc/upload", userCookie, {
+      documentType: "drivers_license",
+      fileData: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      fileName: "license.png",
+      fileSize: 68,
+      mimeType: "image/png",
+    });
+    expect(status).toBe(200);
+
+    const db = getTestDb();
+    const { users } = await import("../schema");
+    const testUser = db.select().from(users).where(eq(users.email, TEST_USER.email)).get();
+    expect(testUser).toBeTruthy();
+
+    const notif = db.select().from(notifications)
+      .where(and(
+        eq(notifications.userId, testUser!.id),
+        eq(notifications.type, "kyc"),
+        eq(notifications.title, "Document Received"),
+      ))
+      .orderBy(desc(notifications.createdAt))
+      .get();
+    expect(notif).toBeTruthy();
+    expect(notif?.message).toContain("drivers license");
+    expect(notif?.link).toBe("/dashboard/profile");
   });
 });
 
