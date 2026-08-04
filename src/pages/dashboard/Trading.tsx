@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -82,9 +83,9 @@ export default function Trading() {
   const autoSeedingRef = useRef(false);
 
   // Reset to first page whenever page size or sort changes
-  useEffect(() => {
+  useResetOnChange([mt5PageSize, mt5SortBy, mt5SortOrder], () => {
     setMt5Page(1);
-  }, [mt5PageSize, mt5SortBy, mt5SortOrder]);
+  });
 
   // Sortable columns matching the server whitelist for /api/trading/mt5
   const MT5_SORT_COLUMNS: Array<{ key: string; label: string }> = [
@@ -106,9 +107,7 @@ export default function Trading() {
   };
 
   // Clamp page if the current page exceeds total pages
-  useEffect(() => {
-    if (mt5Page > mt5TotalPages && mt5TotalPages > 0) setMt5Page(1);
-  }, [mt5TotalPages, mt5Page]);
+  useResetOnChange([mt5TotalPages, mt5Page], () => setMt5Page(1), mt5Page > mt5TotalPages && mt5TotalPages > 0);
 
   const isLoading = cLoading || mLoading || mt5Loading;
 

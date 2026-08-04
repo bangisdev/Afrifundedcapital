@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { useState } from "react";
+import { useNow } from "@/hooks/use-now";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Plus, Trash2, Tag, Users, DollarSign, ArrowUp, ArrowDown, ArrowUpDown, History } from "lucide-react";
@@ -11,6 +12,7 @@ export default function AdminCoupons() {
   // Sorting (whitelisted columns on the server: id, code, discountType, discountValue, currentUses, isActive, expiresAt, createdAt)
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const now = useNow();
   const SORT_COLUMNS: Array<{ key: string; label: string }> = [
     { key: "code", label: "Code" },
     { key: "discountValue", label: "Discount" },
@@ -216,9 +218,9 @@ export default function AdminCoupons() {
                     )}
                     {c.expiresAt && (
                       <span className={`text-[10px] ${
-                        c.expiresAt < Date.now() ? "text-destructive" : "text-muted-foreground"
+                        c.expiresAt < now ? "text-destructive" : "text-muted-foreground"
                       }`}>
-                        {c.expiresAt < Date.now() ? "Expired" : `Expires ${new Date(c.expiresAt).toLocaleDateString()}`}
+                        {c.expiresAt < now ? "Expired" : `Expires ${new Date(c.expiresAt).toLocaleDateString()}`}
                       </span>
                     )}
                   </div>

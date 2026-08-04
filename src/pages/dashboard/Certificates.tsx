@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useApiQuery } from "@/hooks/use-api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -85,14 +86,12 @@ export default function Certificates() {
   const totalPages = data?.totalPages || 1;
 
   // Clamp page if the current page exceeds total pages (e.g. after data changes)
-  useEffect(() => {
-    if (page > totalPages) setPage(1);
-  }, [totalPages, page]);
+  useResetOnChange([totalPages, page], () => setPage(1), page > totalPages);
 
   // Reset to first page whenever the sort changes
-  useEffect(() => {
+  useResetOnChange([sortBy, sortOrder], () => {
     setPage(1);
-  }, [sortBy, sortOrder]);
+  });
 
   const handleDownload = async (certId: number, certNumber: string) => {
     setDownloadingId(certId);

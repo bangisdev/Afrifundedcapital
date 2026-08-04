@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery } from "@/hooks/use-api";
 import { useState, useEffect, useMemo } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
+import { useNow } from "@/hooks/use-now";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -128,9 +130,11 @@ export default function AdminUsers() {
   }, [search]);
 
   // Reset to first page whenever filters, page size, or sort change
-  useEffect(() => {
+  useResetOnChange([debouncedSearch, roleFilter, kycFilter, pageSize, sortBy, sortOrder], () => {
     setPage(1);
-  }, [debouncedSearch, roleFilter, kycFilter, pageSize, sortBy, sortOrder]);
+  });
+
+  const now = useNow();
 
   const handleSort = (key: string) => {
     if (sortBy === key) {
@@ -348,7 +352,7 @@ export default function AdminUsers() {
                 </tr>
               ) : (
                 users.map((u) => {
-                  const isLocked = u.accountLockedUntil && u.accountLockedUntil > Date.now();
+                  const isLocked = u.accountLockedUntil && u.accountLockedUntil > now;
                   return (
                     <tr key={u.id} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
                       <td className="p-3">
@@ -541,8 +545,8 @@ export default function AdminUsers() {
                   <Shield className="h-3 w-3 mr-1" /> Toggle Admin
                 </Button>
                 <Button variant="outline" size="sm" className="text-xs"
-                  onClick={() => handleToggleLock(selectedUser.id, !(selectedUser.accountLockedUntil && selectedUser.accountLockedUntil > Date.now()))}>
-                  {selectedUser.accountLockedUntil && selectedUser.accountLockedUntil > Date.now() ? (
+                  onClick={() => handleToggleLock(selectedUser.id, !(selectedUser.accountLockedUntil && selectedUser.accountLockedUntil > now))}>
+                  {selectedUser.accountLockedUntil && selectedUser.accountLockedUntil > now ? (
                     <><Unlock className="h-3 w-3 mr-1" /> Unlock</>
                   ) : (
                     <><Lock className="h-3 w-3 mr-1" /> Lock</>

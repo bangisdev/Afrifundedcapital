@@ -9,6 +9,7 @@ import { Loader2, CheckCircle, XCircle, CheckCheck, Trash2, DollarSign, Calendar
 import { toast } from "sonner";
 import { Link } from "react-router";
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 
 const REJECTION_PRESETS = [
   "Incomplete documentation",
@@ -57,11 +58,13 @@ export default function AdminPayouts() {
   const [sortBy, setSortBy] = useState("requestedAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
+  // Clear search results immediately when the search box is emptied
+  useResetOnChange([userSearch], () => setUserSearchResults([]), userSearch.length < 1);
+
   // Debounced user search
   useEffect(() => {
     if (userSearchTimeout.current) clearTimeout(userSearchTimeout.current);
     if (userSearch.length < 1) {
-      setUserSearchResults([]);
       return;
     }
     userSearchTimeout.current = setTimeout(async () => {

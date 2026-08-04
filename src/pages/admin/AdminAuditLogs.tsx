@@ -13,6 +13,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useSearchParams } from "react-router";
 
 interface AuditLogsResponse {
@@ -100,9 +101,9 @@ export default function AdminAuditLogs() {
     return () => clearTimeout(t);
   }, [search]);
 
-  useEffect(() => {
+  useResetOnChange([debouncedSearch, actionFilter, pageSize, entityFilter, entityIdFilter], () => {
     setPage(1);
-  }, [debouncedSearch, actionFilter, pageSize, entityFilter, entityIdFilter]);
+  });
 
   const clearEntityFilter = () => {
     setSearchParams({}, { replace: true });

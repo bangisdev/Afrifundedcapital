@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { useState, useEffect } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -60,9 +61,9 @@ export default function Wallet() {
   }, [txSearch]);
 
   // Reset to first page whenever filters, sort, or page size change
-  useEffect(() => {
+  useResetOnChange([debouncedSearch, txFilter, pageSize, sortBy, sortOrder], () => {
     setPage(1);
-  }, [debouncedSearch, txFilter, pageSize, sortBy, sortOrder]);
+  });
 
   const params = new URLSearchParams();
   params.set("page", String(page));
@@ -80,9 +81,7 @@ export default function Wallet() {
   const totalPages = txnsData?.totalPages || 1;
 
   // Clamp page if the current page exceeds total pages (e.g. after filter changes)
-  useEffect(() => {
-    if (page > totalPages && totalPages > 0) setPage(1);
-  }, [totalPages, page]);
+  useResetOnChange([totalPages, page], () => setPage(1), page > totalPages && totalPages > 0);
 
   // Payments list (server-driven pagination)
   const pParams = new URLSearchParams();
@@ -100,14 +99,12 @@ export default function Wallet() {
   const completedPayments = paymentsData?.stats?.byStatus?.completed || 0;
 
   // Reset payments page when page size or sort changes
-  useEffect(() => {
+  useResetOnChange([pPageSize, pSortBy, pSortOrder], () => {
     setPPage(1);
-  }, [pPageSize, pSortBy, pSortOrder]);
+  });
 
   // Clamp payments page if the current page exceeds total pages
-  useEffect(() => {
-    if (pPage > pTotalPages && pTotalPages > 0) setPPage(1);
-  }, [pTotalPages, pPage]);
+  useResetOnChange([pTotalPages, pPage], () => setPPage(1), pPage > pTotalPages && pTotalPages > 0);
 
   if (wLoading) {
     return <div className="flex items-center justify-center h-64"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;

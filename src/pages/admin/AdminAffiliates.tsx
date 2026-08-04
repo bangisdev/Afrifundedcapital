@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { useState, useEffect } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -226,9 +227,9 @@ function AffiliatePayoutsTab() {
   }, [search]);
 
   // Reset to first page whenever filters, page size, or sort change
-  useEffect(() => {
+  useResetOnChange([debouncedSearch, statusFilter, pageSize, sortBy, sortOrder], () => {
     setPage(1);
-  }, [debouncedSearch, statusFilter, pageSize, sortBy, sortOrder]);
+  });
 
   const params = new URLSearchParams();
   params.set("page", String(page));
@@ -743,9 +744,9 @@ function AffiliatesListTab() {
   }, [search]);
 
   // Reset to first page whenever filters, page size, or sort change
-  useEffect(() => {
+  useResetOnChange([debouncedSearch, statusFilter, pageSize, sortBy, sortOrder], () => {
     setPage(1);
-  }, [debouncedSearch, statusFilter, pageSize, sortBy, sortOrder]);
+  });
 
   const params = new URLSearchParams();
   params.set("page", String(page));

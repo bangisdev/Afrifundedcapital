@@ -2,6 +2,7 @@
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { useNavigate } from "react-router";
 import { useState, useEffect } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
 import {
   Loader2, Bell, Search, CheckCheck, DollarSign, ShieldCheck,
@@ -120,9 +121,9 @@ export default function Notifications() {
   }, [search]);
 
   // Reset to first page whenever filters, sort, or page size change
-  useEffect(() => {
+  useResetOnChange([debouncedSearch, filterType, pageSize, sortBy, sortOrder], () => {
     setPage(1);
-  }, [debouncedSearch, filterType, pageSize, sortBy, sortOrder]);
+  });
 
   const params = new URLSearchParams();
   params.set("page", String(page));

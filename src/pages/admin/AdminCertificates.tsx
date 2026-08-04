@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router";
 import { useState, useEffect } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 
 interface CertificatesResponse {
   certificates: any[];
@@ -44,9 +45,9 @@ export default function AdminCertificates() {
     return () => clearTimeout(t);
   }, [search]);
 
-  useEffect(() => {
+  useResetOnChange([debouncedSearch, typeFilter, pageSize], () => {
     setPage(1);
-  }, [debouncedSearch, typeFilter, pageSize]);
+  });
 
   const params = new URLSearchParams();
   params.set("page", String(page));

@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery } from "@/hooks/use-api";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -77,9 +78,9 @@ export default function AdminKyc() {
   }, [search]);
 
   // Reset to first page whenever filters, page size, or sort change
-  useEffect(() => {
+  useResetOnChange([debouncedSearch, statusFilter, typeFilter, pageSize, sortBy, sortOrder], () => {
     setPage(1);
-  }, [debouncedSearch, statusFilter, typeFilter, pageSize, sortBy, sortOrder]);
+  });
 
   // Sortable columns matching the server whitelist for /api/kyc/admin/all
   const SORT_COLUMNS: Array<{ key: string; label: string }> = [
@@ -137,7 +138,7 @@ export default function AdminKyc() {
   const totalPages = data?.totalPages || 1;
   const stats = data?.stats || EMPTY_STATS;
 
-  const handleApprove = async (doc: any) => {
+  const handleApprove = useCallback(async (doc: any) => {
     try {
       await fetch(`/api/kyc/admin/${doc.id}/approve`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
@@ -149,7 +150,7 @@ export default function AdminKyc() {
     } catch (err: any) {
       toast.error(err?.message || "Failed to approve");
     }
-  };
+  }, [refetch, selectedDoc, fullDoc]);
 
   const handleReject = async () => {
     if (!rejectTarget) return;

@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useAuth } from "@/hooks/use-auth";
 import { useFlutterwavePayment } from "@/hooks/use-flutterwave";
 import { Button } from "@/components/ui/button";
@@ -105,9 +106,7 @@ export default function Challenges() {
   const myTotalPages = myData?.totalPages || 1;
 
   // Clamp page if the current page exceeds total pages (e.g. after data changes)
-  useEffect(() => {
-    if (page > myTotalPages) setPage(1);
-  }, [myTotalPages, page]);
+  useResetOnChange([myTotalPages, page], () => setPage(1), page > myTotalPages);
 
   // My Coupons (server-driven pagination + sorting)
   const [cPage, setCPage] = useState(1);
@@ -164,14 +163,12 @@ export default function Challenges() {
   const cTotalPages = couponsData?.totalPages || 1;
 
   // Reset coupons page whenever page size or sort changes
-  useEffect(() => {
+  useResetOnChange([cPageSize, cSortBy, cSortOrder], () => {
     setCPage(1);
-  }, [cPageSize, cSortBy, cSortOrder]);
+  });
 
   // Clamp coupons page if the current page exceeds total pages
-  useEffect(() => {
-    if (cPage > cTotalPages && cTotalPages > 0) setCPage(1);
-  }, [cTotalPages, cPage]);
+  useResetOnChange([cTotalPages, cPage], () => setCPage(1), cPage > cTotalPages && cTotalPages > 0);
 
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);

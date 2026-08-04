@@ -92,7 +92,14 @@ export function useAuth() {
 
   // Fetch session on mount
   useEffect(() => {
-    fetchSession();
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+      void fetchSession();
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [fetchSession]);
 
   const signIn = useCallback(

@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { toast } from "sonner";
 
 interface Mt5Response {
@@ -39,9 +40,9 @@ export default function AdminMT5() {
     return () => clearTimeout(t);
   }, [search]);
 
-  useEffect(() => {
+  useResetOnChange([debouncedSearch, statusFilter, pageSize], () => {
     setPage(1);
-  }, [debouncedSearch, statusFilter, pageSize]);
+  });
 
   const params = new URLSearchParams();
   params.set("page", String(page));

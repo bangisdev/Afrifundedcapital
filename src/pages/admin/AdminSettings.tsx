@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -154,8 +155,8 @@ export default function AdminSettings() {
   const [testWebhookResult, setTestWebhookResult] = useState<any>(null);
   const [testWebhookPaymentId, setTestWebhookPaymentId] = useState("");
 
-  // Load existing config from settings
-  useEffect(() => {
+  // Load existing config from settings (render-adjust: fires once settings arrive)
+  useResetOnChange([settings], () => {
     if (!settings) return;
 
     // Load Flutterwave config
@@ -239,7 +240,7 @@ export default function AdminSettings() {
     if (affThreshold?.value) {
       setAffiliateThreshold(typeof affThreshold.value === "number" ? affThreshold.value : 50000);
     }
-  }, [settings]);
+  }, Boolean(settings && settings.length > 0));
 
   // Get the currently active config based on mode
   const activeFlwConfig = liveMode ? flwLiveConfig : flwTestConfig;

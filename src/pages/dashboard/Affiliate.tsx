@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { useEffect, useState } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -122,24 +123,20 @@ export default function Affiliate() {
   const pTotalPages = payoutsData?.totalPages || 1;
 
   // Reset to first page whenever page size or sort changes
-  useEffect(() => {
+  useResetOnChange([pPageSize], () => {
     setPPage(1);
-  }, [pPageSize]);
+  });
 
   // Clamp page if the current page exceeds total pages
-  useEffect(() => {
-    if (pPage > pTotalPages && pTotalPages > 0) setPPage(1);
-  }, [pTotalPages, pPage]);
+  useResetOnChange([pTotalPages, pPage], () => setPPage(1), pPage > pTotalPages && pTotalPages > 0);
 
   // Reset referrals page whenever page size or sort changes
-  useEffect(() => {
+  useResetOnChange([rPageSize, rSortBy, rSortOrder], () => {
     setRPage(1);
-  }, [rPageSize, rSortBy, rSortOrder]);
+  });
 
   // Clamp referrals page if the current page exceeds total pages
-  useEffect(() => {
-    if (rPage > rTotalPages && rTotalPages > 0) setRPage(1);
-  }, [rTotalPages, rPage]);
+  useResetOnChange([rTotalPages, rPage], () => setRPage(1), rPage > rTotalPages && rTotalPages > 0);
 
   const pFrom = pTotal === 0 ? 0 : (pPage - 1) * pPageSize + 1;
   const pTo = Math.min(pPage * pPageSize, pTotal);

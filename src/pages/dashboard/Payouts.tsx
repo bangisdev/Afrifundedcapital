@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -93,9 +94,7 @@ export default function Payouts() {
   const listStats = data?.stats || { total: 0, totalPaid: 0, totalPending: 0, byStatus: {} };
 
   // Clamp page if the current page exceeds total pages (e.g. after data changes)
-  useEffect(() => {
-    if (page > totalPages) setPage(1);
-  }, [totalPages, page]);
+  useResetOnChange([totalPages, page], () => setPage(1), page > totalPages);
 
   if (pLoading) {
     return <div className="flex items-center justify-center h-64"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
