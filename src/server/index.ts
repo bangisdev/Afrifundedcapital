@@ -29,6 +29,7 @@ import certificatesRouter from "./routes/certificates";
 import payoutsRouter from "./routes/payouts";
 import seedRouter from "./routes/seed";
 import testEmailRouter from "./routes/test-email";
+import { startMT5Scheduler } from "./lib/mt5/scheduler";
 
 // Initialize database
 initDatabase();
@@ -753,6 +754,9 @@ export function honoPlugin(): Plugin {
   return {
     name: "hono-server",
     configureServer(devServer) {
+      // Background MT5 sync + retry-queue scheduler (no-op without a gateway).
+      startMT5Scheduler(getDb());
+
       devServer.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith("/api/")) {
           return next();
