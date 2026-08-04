@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery } from "@/hooks/use-api";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -99,14 +99,14 @@ export default function AdminReports() {
   const { data: paymentsData, isLoading: paymentsLoading } = useApiQuery<any>(["admin", "payments", "report"], "/api/payments/admin/all?page=1&pageSize=100");
   const { data: challenges, isLoading: challengesLoading } = useApiQuery<any[]>(["admin", "allChallenges"], "/api/challenges/admin/all");
 
-  const users = usersData?.users || [];
-  const payments = paymentsData?.items || [];
+  const users = useMemo(() => usersData?.users || [], [usersData]);
+  const payments = useMemo(() => paymentsData?.items || [], [paymentsData]);
 
   const [activeTab, setActiveTab] = useState<ReportType>("payments");
   const [dateRange, setDateRange] = useState<DateRange>({ from: "", to: "" });
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
-  const filterByDate = (items: any[], dateField: string = "createdAt") => {
+  const filterByDate = useCallback((items: any[], dateField: string = "createdAt") => {
     if (!items) return [];
     return items.filter((item) => {
       const ts = item[dateField];
@@ -120,23 +120,23 @@ export default function AdminReports() {
       }
       return true;
     });
-  };
+  }, [dateRange]);
 
   const filteredPayments = useMemo(() => {
     let items = filterByDate(payments || []);
     if (statusFilter !== "all") items = items.filter((p) => p.status === statusFilter);
     return items;
-  }, [payments, dateRange, statusFilter]);
+  }, [filterByDate, payments, statusFilter]);
 
   const filteredUsers = useMemo(() => {
     return filterByDate(users || []);
-  }, [users, dateRange]);
+  }, [filterByDate, users]);
 
   const filteredChallenges = useMemo(() => {
     let items = filterByDate(challenges || []);
     if (statusFilter !== "all") items = items.filter((c) => c.status === statusFilter);
     return items;
-  }, [challenges, dateRange, statusFilter]);
+  }, [filterByDate, challenges, statusFilter]);
 
   const isLoading = usersLoading || paymentsLoading || challengesLoading;
 

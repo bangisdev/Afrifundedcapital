@@ -52,7 +52,7 @@ function MetricCard({ label, value, trend, subtitle, destructive }: {
 export default function Trading() {
   const { user } = useAuth();
   const { data: challengesData, isLoading: cLoading } = useApiQuery<any>(["challenges", "my"], "/api/challenges/my");
-  const challenges = challengesData?.challenges || [];
+  const challenges = useMemo(() => challengesData?.challenges || [], [challengesData]);
   const { data: metrics } = useApiQuery<any>(["metrics", "dashboard"], "/api/challenges/metrics");
   const { data: metricsHistory, isLoading: mLoading } = useApiQuery<any[]>(["metrics", "history"], "/api/challenges/my/0/metrics");
   const [mt5Page, setMt5Page] = useState(1);
@@ -66,7 +66,7 @@ export default function Trading() {
   mt5Params.set("sortOrder", mt5SortOrder);
   const mt5Query = `/api/trading/mt5?${mt5Params.toString()}`;
   const { data: mt5Data, isLoading: mt5Loading } = useApiQuery<any>(["mt5", "my", mt5Query], mt5Query);
-  const mt5Accounts = mt5Data?.accounts || [];
+  const mt5Accounts = useMemo(() => mt5Data?.accounts || [], [mt5Data]);
   const mt5Total = mt5Data?.total || 0;
   const mt5TotalPages = mt5Data?.totalPages || 1;
   const seedMutation = useApiMutation<any, any>("post", "/api/trading/seed-demo");
@@ -75,6 +75,7 @@ export default function Trading() {
   const [autoSeeding, setAutoSeeding] = useState(false);
   const [seedResult, setSeedResult] = useState<string | null>(null);
   const autoSeedingRef = useRef(false);
+  const autoSyncedRef = useRef(false);
 
   // Reset to first page whenever page size or sort changes
   useResetOnChange([mt5PageSize, mt5SortBy, mt5SortOrder], () => {
@@ -121,7 +122,7 @@ export default function Trading() {
         })
         .finally(() => setAutoSeeding(false));
     }
-  }, [isLoading, user?.isDemoSeeded, challenges, mt5Accounts, metricsHistory]);
+  }, [isLoading, user?.isDemoSeeded, challenges, mt5Accounts, metricsHistory, seedMutation]);
 
   const handleSeedDemoData = async () => {
     if (autoSeeding || !challenges?.length) return;
@@ -141,10 +142,11 @@ export default function Trading() {
 
   // Auto-sync active challenges on load (once per session)
   useEffect(() => {
-    if (!isLoading && (challenges?.length || 0) > 0 && !syncing) {
+    if (!isLoading && (challenges?.length || 0) > 0 && !syncing && !autoSyncedRef.current) {
+      autoSyncedRef.current = true;
       syncMutation.mutateAsync({}).catch(() => {});
     }
-  }, [isLoading, challenges]);
+  }, [isLoading, challenges, syncing, syncMutation]);
 
   const handleSync = async () => {
     setSyncing(true);
