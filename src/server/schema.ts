@@ -801,6 +801,28 @@ export const activityLogs = sqliteTable(
   (table) => [index("idx_al_user").on(table.userId, table.timestamp)],
 );
 
+// MT5 Reconciliation Log
+export const mt5Reconciliation = sqliteTable(
+  "mt5_reconciliation",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    challengeId: integer("challenge_id").notNull(),
+    mt5AccountId: integer("mt5_account_id").notNull(),
+    login: text("login").notNull(),
+    status: text("status").notNull(), // matched | mismatch | unavailable
+    serverBalance: real("server_balance").notNull().default(0),
+    serverEquity: real("server_equity").notNull().default(0),
+    localBalance: real("local_balance").notNull().default(0),
+    localEquity: real("local_equity").notNull().default(0),
+    difference: real("difference").notNull().default(0),
+    tolerance: real("tolerance").notNull().default(0.01),
+    source: text("source").notNull(), // gateway | simulated
+    detail: text("detail"),
+    recordedAt: integer("recorded_at").notNull(),
+  },
+  (table) => [index("idx_mrec_challenge").on(table.challengeId), index("idx_mrec_mt5").on(table.mt5AccountId), index("idx_mrec_recorded").on(table.recordedAt)],
+);
+
 // MT5 Sync Queue
 export const mt5SyncQueue = sqliteTable(
   "mt5_sync_queue",

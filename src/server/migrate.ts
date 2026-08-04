@@ -769,6 +769,30 @@ export function runMigrations(sqlite: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_al_user ON activity_logs(user_id, timestamp);
 
     -- ═══════════════════════════════════════════
+    -- MT5 Reconciliation Log
+    -- ═══════════════════════════════════════════
+    CREATE TABLE IF NOT EXISTS mt5_reconciliation (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      challenge_id INTEGER NOT NULL,
+      mt5_account_id INTEGER NOT NULL,
+      login TEXT NOT NULL,
+      status TEXT NOT NULL,
+      server_balance REAL NOT NULL DEFAULT 0,
+      server_equity REAL NOT NULL DEFAULT 0,
+      local_balance REAL NOT NULL DEFAULT 0,
+      local_equity REAL NOT NULL DEFAULT 0,
+      difference REAL NOT NULL DEFAULT 0,
+      tolerance REAL NOT NULL DEFAULT 0.01,
+      source TEXT NOT NULL,
+      detail TEXT,
+      recorded_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_mrec_challenge ON mt5_reconciliation(challenge_id);
+    CREATE INDEX IF NOT EXISTS idx_mrec_mt5 ON mt5_reconciliation(mt5_account_id);
+    CREATE INDEX IF NOT EXISTS idx_mrec_recorded ON mt5_reconciliation(recorded_at);
+
+    -- ═══════════════════════════════════════════
     -- MT5 Sync Queue
     -- ═══════════════════════════════════════════
     CREATE TABLE IF NOT EXISTS mt5_sync_queue (
