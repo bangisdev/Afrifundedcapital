@@ -43,8 +43,8 @@ vi.mock("@/hooks/use-api", () => ({
 }));
 
 // ─── Mock: Tabs with React state for tab switching ─────────
-vi.mock("@/components/ui/tabs", () => {
-  const React = require("react");
+vi.mock("@/components/ui/tabs", async () => {
+  const React = await import("react");
   const TabCtx = React.createContext({ active: "flutterwave", setActive: (_: string) => {} });
 
   function Tabs({ defaultValue, children }: any) {
