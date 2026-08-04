@@ -84,7 +84,7 @@ export default function Payouts() {
   const requestPayout = useApiMutation<any, any>("post", "/api/payouts/request");
   const [showRequest, setShowRequest] = useState(false);
   const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState("bank_transfer");
+  const [method] = useState("bank_transfer");
   const [details, setDetails] = useState("");
   const [selectedAccount, setSelectedAccount] = useState<any>(null);
 

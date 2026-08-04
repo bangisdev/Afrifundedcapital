@@ -29,7 +29,7 @@ beforeAll(async () => {
   });
   userCookie = uc;
 
-  const { cookie: ac } = await signUp(app, {
+  await signUp(app, {
     name: "Affiliate Admin",
     email: "affiliate-admin@test.com",
     password: "Secure@123",

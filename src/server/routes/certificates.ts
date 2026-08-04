@@ -6,8 +6,6 @@ import {
   userChallenges,
   users,
   challengeTemplates,
-  accountSizes,
-  mt5Accounts,
 } from "../schema";
 import { eq, desc, asc, and, sql, like, or, count, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
@@ -106,7 +104,7 @@ app.post("/generate", requireAuth, async (c) => {
     db.run(
       sql`INSERT INTO audit_logs (user_id, action, entity, entity_id, details, timestamp) VALUES (${userId}, ${"certificate_generated"}, ${"certificate"}, ${String(result.id)}, ${JSON.stringify({ certType, certNumber })}, ${Date.now()})`
     );
-  } catch (e) {
+  } catch {
     // Audit log is non-critical
   }
 

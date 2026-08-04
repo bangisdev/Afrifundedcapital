@@ -24,7 +24,7 @@ vi.mock("@/hooks/use-auth", () => ({
 vi.mock("framer-motion", () => {
   const animated = (tag: string) =>
     React.forwardRef<any, any>((props, ref) => {
-      const { initial, animate, viewport, variants, transition, whileInView, whileHover, style, onMouseEnter, onMouseLeave, ...rest } = props;
+      const { ...rest } = props;
       return React.createElement(tag, { ref, ...rest }, props.children);
     });
   return {
@@ -82,13 +82,13 @@ vi.mock("@/components/LogoDropdown", () => ({
 
 // ─── Mock: shadcn components ──────────────────────────────
 vi.mock("@/components/ui/button", () => ({
-  Button: React.forwardRef<HTMLButtonElement, any>(({ children, onClick, variant, size, className, disabled, ...props }, ref) =>
+  Button: React.forwardRef<HTMLButtonElement, any>(({ children, onClick, className, disabled, ...props }, ref) =>
     React.createElement("button", { ref, onClick, className, disabled, ...props }, children)
   ),
 }));
 
 vi.mock("@/components/ui/badge", () => ({
-  Badge: ({ children, variant, className }: any) =>
+  Badge: ({ children, className }: any) =>
     React.createElement("span", { className, "data-testid": "badge" }, children),
 }));
 
@@ -97,9 +97,9 @@ vi.mock("@/components/ui/separator", () => ({
 }));
 
 vi.mock("@/components/ui/accordion", () => ({
-  Accordion: ({ children, type, collapsible }: any) =>
+  Accordion: ({ children }: any) =>
     React.createElement("div", { "data-testid": "accordion" }, children),
-  AccordionItem: ({ children, value, className }: any) =>
+  AccordionItem: ({ children, value }: any) =>
     React.createElement("div", { "data-testid": "accordion-item", "data-value": value }, children),
   AccordionTrigger: ({ children, className }: any) =>
     React.createElement("button", { className }, children),
@@ -108,8 +108,8 @@ vi.mock("@/components/ui/accordion", () => ({
 }));
 
 vi.mock("@/components/ui/carousel", () => ({
-  Carousel: ({ children, onMouseEnter, onMouseLeave, ...props }: any) =>
-    React.createElement("div", { "data-testid": "carousel", onMouseEnter, onMouseLeave }, children),
+  Carousel: ({ children, ...props }: any) =>
+    React.createElement("div", { "data-testid": "carousel", ...props }, children),
   CarouselContent: ({ children }: any) =>
     React.createElement("div", { "data-testid": "carousel-content" }, children),
   CarouselItem: ({ children }: any) =>

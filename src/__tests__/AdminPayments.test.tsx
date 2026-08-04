@@ -55,7 +55,7 @@ vi.mock("@/hooks/use-api", () => ({
 }));
 
 vi.mock("@/components/ui/alert-dialog", () => ({
-  AlertDialog: ({ open, onOpenChange, children }: any) => { if (!open) return null; return <div data-testid="alert-dialog">{children}</div>; },
+  AlertDialog: ({ open, _onOpenChange, children }: any) => { if (!open) return null; return <div data-testid="alert-dialog">{children}</div>; },
   AlertDialogContent: ({ children }: any) => <div>{children}</div>,
   AlertDialogHeader: ({ children }: any) => <div>{children}</div>,
   AlertDialogTitle: ({ children }: any) => <h2>{children}</h2>,

@@ -370,7 +370,6 @@ describe("AdminUsers Page", () => {
     });
 
     it("shows all role options", async () => {
-      const user = userEvent.setup();
       setQueryData({});
       render(<AdminUsers />);
       const select = screen.getByDisplayValue("All Roles");
@@ -404,7 +403,6 @@ describe("AdminUsers Page", () => {
     });
 
     it("shows all KYC status options", async () => {
-      const user = userEvent.setup();
       setQueryData({});
       render(<AdminUsers />);
       const select = screen.getByDisplayValue("All KYC Status");

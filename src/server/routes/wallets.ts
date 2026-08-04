@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
 import { wallets, walletTransactions } from "../schema";
-import { eq, desc, asc, count, and, or, like, sql, type SQL, type SQLWrapper } from "drizzle-orm";
+import { eq, desc, asc, count, and, or, like, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth } from "../middleware";
 
 const app = new Hono();

@@ -30,7 +30,7 @@ beforeAll(async () => {
   });
   userCookie = uc;
 
-  const { cookie: ac } = await signUp(app, {
+  await signUp(app, {
     name: "Notif Admin",
     email: "notif-admin@test.com",
     password: "Secure@123",

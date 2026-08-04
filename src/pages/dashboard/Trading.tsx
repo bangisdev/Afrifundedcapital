@@ -10,12 +10,12 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import {
-  Loader2, TrendingUp, TrendingDown, Minus, Server, Key, SlidersHorizontal,
-  DollarSign, Activity, BarChart3, AlertCircle, Sparkles, RefreshCw,
+  Loader2, TrendingUp, TrendingDown, Minus, Server,
+  Activity, BarChart3, Sparkles, RefreshCw,
   ArrowUp, ArrowDown, ArrowUpDown,
 } from "lucide-react";
 import {
-  LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
+  LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid,
 } from "recharts";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
@@ -30,10 +30,6 @@ const chartConfig = {
 function formatDate(ts: number) {
   return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
-function formatTime(ts: number) {
-  return new Date(ts).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-}
-
 function MetricCard({ label, value, trend, subtitle, destructive }: {
   label: string; value: string; trend?: "up" | "down" | "neutral"; subtitle?: string; destructive?: boolean;
 }) {
@@ -74,10 +70,8 @@ export default function Trading() {
   const mt5Total = mt5Data?.total || 0;
   const mt5TotalPages = mt5Data?.totalPages || 1;
   const seedMutation = useApiMutation<any, any>("post", "/api/trading/seed-demo");
-  const resetMutation = useApiMutation<any, any>("post", "/api/trading/reset-demo");
   const syncMutation = useApiMutation<any, any>("post", "/api/trading/sync");
   const [seeding, setSeeding] = useState(false);
-  const [resettingId, setResettingId] = useState<string | null>(null);
   const [autoSeeding, setAutoSeeding] = useState(false);
   const [seedResult, setSeedResult] = useState<string | null>(null);
   const autoSeedingRef = useRef(false);
@@ -159,7 +153,7 @@ export default function Trading() {
       if (result?.synced > 0) {
         toast.success(`Synced ${result.synced} challenge(s) with latest metrics`);
       }
-    } catch (e: any) {
+    } catch {
       // Silently ignore sync errors
     }
     setSyncing(false);

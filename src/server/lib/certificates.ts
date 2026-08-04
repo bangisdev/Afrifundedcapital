@@ -1,4 +1,3 @@
-import { getDb } from "../db";
 import { certificates, userChallenges, notifications, users } from "../schema";
 import { eq, and } from "drizzle-orm";
 import { randomBytes } from "crypto";
@@ -98,7 +97,7 @@ export function maybeGenerateCertificate(
       link: "/dashboard/certificates",
       createdAt: now,
     }).run();
-  } catch (e) {
+  } catch {
     // Non-critical — don't fail cert generation if notification insert fails
   }
 
@@ -111,7 +110,7 @@ export function maybeGenerateCertificate(
       // When email service is integrated, send here:
       // await sendEmail({ to: user.email, subject: `Certificate Earned: ${typeLabel}`, template: 'certificate-earned', data: { certNumber, typeLabel, verificationCode } });
     }
-  } catch (e) {
+  } catch {
     // Non-critical
   }
 

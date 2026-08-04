@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 
@@ -39,7 +39,7 @@ vi.mock("@/hooks/use-auth", () => ({
 const queryDataMap: Record<string, any> = {};
 
 vi.mock("@/hooks/use-api", () => ({
-  useApiQuery: vi.fn((key: string[], path: string, opts?: any) => {
+  useApiQuery: vi.fn((key: string[], _path: string, _opts?: any) => {
     const dataKey = `${key.join("/")}`;
     if (queryDataMap[dataKey] === undefined) {
       return { data: undefined, isLoading: true };
@@ -62,7 +62,6 @@ vi.stubGlobal("print", mockPrint);
 
 // ─── Import component after mocks ─────────────────────────
 import VerifyCertificate from "@/pages/VerifyCertificate";
-import { toast } from "sonner";
 
 // ─── Test data factories ──────────────────────────────────
 function makeVerifyResult(overrides: any = {}) {

@@ -128,7 +128,6 @@ function simulateDailySync(
 
   // Use previous day's balance as starting point
   const prevBalance = prev?.balance ?? baseBalance;
-  const prevEquity = prev?.equity ?? baseBalance;
 
   // Simulate daily P/L with realistic variance (slight upward bias)
   const dailyVariance = (Math.random() - 0.47) * baseBalance * 0.015; // ~1.5% max daily swing
@@ -152,8 +151,6 @@ function simulateDailySync(
   const winRate = baseWinRate + (Math.random() - 0.5) * 6;
 
   const openPositions = Math.floor(Math.random() * 6);
-  const wins = Math.floor(closedTrades * (winRate / 100));
-  const losses = closedTrades - wins;
   const avgRR = 1.2 + Math.random() * 1.5;
   const profitFactor = 1.0 + (winRate / 100) * avgRR * 0.5 + (Math.random() - 0.5) * 0.3;
 
@@ -218,7 +215,6 @@ function simulateDailySync(
  */
 function syncChallenge(db: any, challenge: any): boolean {
   const now = Date.now();
-  const DAY = 86400000;
 
   // Get latest metrics for this challenge
   const latestMetrics = db.select().from(tradingMetrics)
@@ -419,7 +415,6 @@ app.post("/seed-demo", requireAuth, async (c) => {
   const DAY = 86400000;
   const baseBalance = challenge.accountSize;
 
-  let prevMetrics: any = null;
   for (let i = 0; i < 60; i++) {
     const t = now - (60 - i) * DAY;
     const variance = (Math.random() - 0.45) * baseBalance * 0.02;
@@ -461,7 +456,6 @@ app.post("/seed-demo", requireAuth, async (c) => {
     };
 
     db.insert(tradingMetrics).values(metricsData).run();
-    prevMetrics = metricsData;
   }
 
   return c.json({ success: true, seeded: true });

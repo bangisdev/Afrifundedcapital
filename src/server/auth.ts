@@ -347,7 +347,7 @@ authRouter.post("/sign-out", (c) => {
     try {
       const db = getDb();
       db.delete(sessions).where(eq(sessions.token, token)).run();
-    } catch (e) {
+    } catch {
       // Non-critical
     }
   }
@@ -404,7 +404,7 @@ authRouter.put("/update-user", async (c) => {
 
   try {
     db.update(users).set(updates).where(eq(users.id, session.userId)).run();
-  } catch (e) {
+  } catch {
     return c.json({ error: "Failed to update user" }, 500);
   }
 

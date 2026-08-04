@@ -24,7 +24,7 @@ interface AuthProps {
 }
 
 function Auth({ redirectAfterAuth }: AuthProps = {}) {
-  const { isLoading: authLoading, isAuthenticated, signIn, error: authError } = useAuth();
+  const { isLoading: authLoading, isAuthenticated, signIn } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const refCode = useMemo(() => searchParams.get("ref") || null, [searchParams]);

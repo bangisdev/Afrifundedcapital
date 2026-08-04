@@ -244,7 +244,7 @@ app.post("/verify", requireAuth, async (c) => {
       headers: { Authorization: `Bearer ${secretKey}` },
     });
     verificationResult = await response.json();
-  } catch (err) {
+  } catch {
     return c.json({ error: "Failed to verify with Flutterwave" }, 500);
   }
 

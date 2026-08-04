@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 import { useApiQuery } from "@/hooks/use-api";
@@ -73,12 +73,12 @@ vi.mock("@/hooks/use-api", () => ({
     }
     return { data: base, isLoading: false };
   }),
-  useApiMutation: vi.fn((method: string, path: string, _onSuccess?: any) => {
+  useApiMutation: vi.fn((_method: string, _path: string, _onSuccess?: any) => {
     let resolvePromise: (value: any) => void;
-    const pendingPromise = new Promise((resolve) => { resolvePromise = resolve; });
+    new Promise((resolve) => { resolvePromise = resolve; });
 
     return {
-      mutateAsync: vi.fn(async (body?: any) => {
+      mutateAsync: vi.fn(async (_body?: any) => {
         if (path === "/api/trading/seed-demo") {
           return { message: "Seeded 60 days of demo trading data" };
         }
@@ -113,7 +113,7 @@ vi.mock("recharts", () => ({
 
 // ─── Mock: @/components/ui/chart ──────────────────────────
 vi.mock("@/components/ui/chart", () => ({
-  ChartContainer: ({ children, config }: any) =>
+  ChartContainer: ({ children }: any) =>
     React.createElement("div", { "data-testid": "chart-container" }, children),
   ChartTooltip: () => React.createElement("div", { "data-testid": "chart-tooltip" }),
   ChartTooltipContent: () => React.createElement("div", { "data-testid": "chart-tooltip-content" }),

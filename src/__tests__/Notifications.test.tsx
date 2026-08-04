@@ -202,7 +202,6 @@ describe("Notifications Page", () => {
         "notifications/my": [makeNotification({ read: false })],
       });
       render(<Notifications />);
-      const dot = document.querySelector(".h-1\\.5.w-1\\.5");
       // Unread dot is a small colored circle
       const unreadDots = document.querySelectorAll("[class*='rounded-full'][class*='bg-foreground']");
       expect(unreadDots.length).toBeGreaterThanOrEqual(1);

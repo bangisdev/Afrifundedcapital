@@ -7,7 +7,6 @@ import {
   buildTestApp,
   cleanupTestDb,
   signUp,
-  signIn,
   authGet,
   authPost,
   getTestDb,

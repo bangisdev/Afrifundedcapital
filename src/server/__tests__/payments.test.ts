@@ -388,7 +388,7 @@ describe("POST /api/payments/admin/test-webhook", () => {
 
 describe("POST /api/payments/verify", () => {
   it("returns 404 for non-existent payment", async () => {
-    const { status, body } = await authPost(app, "/api/payments/verify", userCookie, {
+    const { status } = await authPost(app, "/api/payments/verify", userCookie, {
       paymentId: 99999,
       transactionId: "12345",
       flwRef: "FLW-REF-TEST",
@@ -409,7 +409,7 @@ describe("POST /api/payments/verify", () => {
     await signUp(app, { name: "Other", email: "other@test.com", password: "Secure@123" });
     const otherSignIn = await signIn(app, { email: "other@test.com", password: "Secure@123" });
 
-    const { status, body } = await authPost(app, "/api/payments/verify", otherSignIn.cookie, {
+    const { status } = await authPost(app, "/api/payments/verify", otherSignIn.cookie, {
       paymentId,
       transactionId: "12345",
     });
@@ -1050,7 +1050,7 @@ describe("POST /api/payments/admin/:id/resume", () => {
 
   it("does not restore the redemption when the coupon has expired", async () => {
     const db = getTestDb();
-    const { users, payments, challengeTemplates, accountSizes, coupons, userChallenges, couponRedemptions, auditLogs } = await import("../schema");
+    const { users, payments, challengeTemplates, accountSizes, coupons, userChallenges, couponRedemptions } = await import("../schema");
     const { eq } = await import("drizzle-orm");
 
     const trader = db.select().from(users).where(eq(users.email, TEST_USER.email)).get();
@@ -1159,7 +1159,7 @@ describe("POST /api/payments/admin/:id/resume", () => {
 
   it("does not restore the redemption when the coupon is past its usage limit", async () => {
     const db = getTestDb();
-    const { users, payments, challengeTemplates, accountSizes, coupons, userChallenges, couponRedemptions, auditLogs } = await import("../schema");
+    const { users, payments, challengeTemplates, accountSizes, coupons, userChallenges, couponRedemptions } = await import("../schema");
     const { eq } = await import("drizzle-orm");
 
     const trader = db.select().from(users).where(eq(users.email, TEST_USER.email)).get();

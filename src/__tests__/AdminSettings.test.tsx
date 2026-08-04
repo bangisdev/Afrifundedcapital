@@ -3,7 +3,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import React from "react";
 
 // ─── Mock: sonner ──────────────────────────────────────────
 vi.mock("sonner", () => ({
@@ -30,7 +29,7 @@ const mockUpdateSetting = vi.fn(async () => ({ message: "ok" }));
 const mockSeedData = vi.fn(async () => ({ message: "seeded" }));
 
 vi.mock("@/hooks/use-api", () => ({
-  useApiQuery: vi.fn((key: string[], path: string, _opts?: any) => {
+  useApiQuery: vi.fn((key: string[], _path: string, _opts?: any) => {
     const dataKey = `${key.join("/")}`;
     if (queryDataMap[dataKey] === undefined) {
       return { data: undefined, isLoading: true, refetch: mockRefetch };

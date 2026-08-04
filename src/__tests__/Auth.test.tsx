@@ -15,7 +15,7 @@ vi.mock("react-router", () => ({
 
 // ─── Mock: useAuth ─────────────────────────────────────────
 const mockSignIn = vi.fn();
-const mockUseAuth = vi.fn((...args: any[]): any => ({
+const mockUseAuth = vi.fn((..._args: any[]): any => ({
   isLoading: false,
   isAuthenticated: false,
   user: null,
@@ -64,7 +64,7 @@ vi.mock("lucide-react", () => {
 
 // ─── Mock: shadcn UI components ───────────────────────────
 vi.mock("@/components/ui/button", () => ({
-  Button: React.forwardRef<HTMLButtonElement, any>(({ children, onClick, variant, size, className, disabled, type, ...props }, ref) =>
+  Button: React.forwardRef<HTMLButtonElement, any>(({ children, onClick, className, disabled, type, ...props }, ref) =>
     React.createElement("button", { ref, onClick, className, disabled, type, ...props }, children)
   ),
 }));

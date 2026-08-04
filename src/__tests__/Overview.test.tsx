@@ -43,7 +43,7 @@ vi.mock("react-router", () => ({
 // ─── Mock: useApiQuery / useApiMutation ────────────────────
 const queryDataMap: Record<string, any> = {};
 vi.mock("@/hooks/use-api", () => ({
-  useApiQuery: vi.fn((key: string[], path: string, _opts?: any) => {
+  useApiQuery: vi.fn((key: string[], _path: string, _opts?: any) => {
     const dataKey = `${key.join("/")}`;
     if (queryDataMap[dataKey] === undefined) {
       return { data: undefined, isLoading: true };
@@ -69,7 +69,7 @@ vi.stubGlobal("localStorage", {
 vi.mock("framer-motion", () => ({
   motion: {
     div: ({ children, ...props }: any) => {
-      const { initial, animate, exit, transition, ...validProps } = props;
+      const { ...validProps } = props;
       return <div {...validProps}>{children}</div>;
     },
   },

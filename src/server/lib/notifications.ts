@@ -1,4 +1,3 @@
-import { getDb } from "../db";
 import { notifications, users, ROLES } from "../schema";
 import { eq, sql } from "drizzle-orm";
 import { sendEmail, securityAlertEmail, type SendEmailParams } from "./email";

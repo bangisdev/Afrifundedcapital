@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 import { useApiQuery } from "@/hooks/use-api";
@@ -53,7 +53,6 @@ vi.mock("@/hooks/use-api", () => ({
 }));
 
 import AdminSupport from "@/pages/admin/AdminSupport";
-import { toast } from "sonner";
 
 function clearAll() { Object.keys(queryDataMap).forEach((k) => delete queryDataMap[k]); }
 function setQueryData(updates: Record<string, any>) { clearAll(); Object.assign(queryDataMap, { "admin/tickets": [], "admin/briefUsers": [], ...updates }); }

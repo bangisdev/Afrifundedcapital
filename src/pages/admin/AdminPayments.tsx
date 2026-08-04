@@ -111,14 +111,6 @@ export default function AdminPayments() {
     setPage(1);
   });
 
-  // Sortable columns matching the server whitelist for /api/payments/admin/all
-  const SORT_COLUMNS: Array<{ key: string; label: string }> = [
-    { key: "reference", label: "Reference" },
-    { key: "amount", label: "Amount" },
-    { key: "provider", label: "Provider" },
-    { key: "status", label: "Status" },
-    { key: "createdAt", label: "Date" },
-  ];
 
   const handleSort = (key: string) => {
     if (sortBy === key) {

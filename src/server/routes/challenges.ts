@@ -5,11 +5,10 @@ import {
   accountSizes,
   userChallenges,
   tradingMetrics,
-  users,
   payments,
   mt5Accounts,
 } from "../schema";
-import { eq, desc, asc, count, sql, and, type SQLWrapper } from "drizzle-orm";
+import { eq, desc, asc, count, and, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification } from "../lib/notifications";
 import { maybeGenerateCertificate } from "../lib/certificates";

@@ -550,7 +550,6 @@ describe("Wallet Page", () => {
     });
 
     it("shows all transactions when filter is 'all'", async () => {
-      const user = userEvent.setup();
       setQueryData({
         "wallet/txns": [
           makeTransaction({ id: 1, type: "deposit", amount: 50000, description: "Deposit" }),

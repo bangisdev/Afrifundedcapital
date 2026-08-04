@@ -6,7 +6,7 @@ import { eq, and, gt } from "drizzle-orm";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { initDatabase } from "./db";
-import type { Plugin, ViteDevServer } from "vite";
+import type { Plugin } from "vite";
 import {
   signInRateLimit,
   signUpRateLimit,
@@ -94,7 +94,7 @@ app.get("/api/settings/public", (c) => {
       }
     }
     return c.json(result);
-  } catch (err) {
+  } catch {
     return c.json({ error: "Failed to load settings" }, 500);
   }
 });
@@ -750,12 +750,9 @@ app.route("/api/test-email", testEmailRouter);
 //  VITE PLUGIN — mounts Hono into dev server
 // ═══════════════════════════════════════════════
 export function honoPlugin(): Plugin {
-  let server: ViteDevServer | null = null;
-
   return {
     name: "hono-server",
     configureServer(devServer) {
-      server = devServer;
       devServer.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith("/api/")) {
           return next();

@@ -151,7 +151,7 @@ describe("GET /api/users/audit-logs", () => {
 
 describe("DELETE /api/users/:id", () => {
   it("writes a user.deleted audit entry before deleting", async () => {
-    const created = await signUp(app, {
+    await signUp(app, {
       name: "To Be Deleted",
       email: "delete-me@test.com",
       password: "Secure@123",

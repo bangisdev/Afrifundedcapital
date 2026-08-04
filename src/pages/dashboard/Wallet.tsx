@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Loader2, ArrowUpRight, ArrowDownLeft, RefreshCw, Search, Filter,
-  FileText, ChevronDown, CheckCircle, XCircle, Clock, WalletIcon, TrendingUp, Copy,
+  FileText, CheckCircle, XCircle, Clock, WalletIcon, TrendingUp,
   ArrowUp, ArrowDown, ArrowUpDown,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -37,7 +37,7 @@ export default function Wallet() {
   const requestWithdrawal = useApiMutation<any, any>("post", "/api/wallets/withdraw");
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState("");
-  const [withdrawMethod, setWithdrawMethod] = useState("bank_transfer");
+  const [withdrawMethod] = useState("bank_transfer");
   const [withdrawDetails, setWithdrawDetails] = useState("");
   const [activeTab, setActiveTab] = useState<TabView>("transactions");
   const [txFilter, setTxFilter] = useState("all");

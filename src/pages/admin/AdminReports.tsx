@@ -14,7 +14,6 @@ import {
   DollarSign,
   ChevronDown,
   Calendar,
-  Filter,
 } from "lucide-react";
 
 type ReportType = "users" | "payments" | "challenges";
@@ -99,8 +98,6 @@ export default function AdminReports() {
   const { data: usersData, isLoading: usersLoading } = useApiQuery<any>(["admin", "users", "report"], "/api/users/list?page=1&pageSize=100");
   const { data: paymentsData, isLoading: paymentsLoading } = useApiQuery<any>(["admin", "payments", "report"], "/api/payments/admin/all?page=1&pageSize=100");
   const { data: challenges, isLoading: challengesLoading } = useApiQuery<any[]>(["admin", "allChallenges"], "/api/challenges/admin/all");
-  const { data: userStats } = useApiQuery<any>(["admin", "userStats"], "/api/users/stats");
-  const { data: paymentStats } = useApiQuery<any>(["admin", "paymentStats"], "/api/payments/admin/stats");
 
   const users = usersData?.users || [];
   const payments = paymentsData?.items || [];

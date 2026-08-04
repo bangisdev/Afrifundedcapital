@@ -120,7 +120,6 @@ export function accountLockout(opts: {
 }) {
   const maxAttempts = opts.maxAttempts ?? 5;
   const lockoutDurationMs = opts.lockoutDurationMs ?? 15 * 60 * 1000; // 15 minutes
-  const windowMs = opts.windowMs ?? 15 * 60 * 1000;
 
   return createMiddleware(async (c, next) => {
     // Clone request to read body without consuming it for the handler

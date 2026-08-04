@@ -3,7 +3,6 @@ import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Loader2,
   Send,

@@ -33,7 +33,7 @@ const queryDataMap: Record<string, any> = {};
 const mockUpdatePrefs = vi.fn(async () => ({ message: "ok" }));
 
 vi.mock("@/hooks/use-api", () => ({
-  useApiQuery: vi.fn((key: string[], path: string, _opts?: any) => {
+  useApiQuery: vi.fn((key: string[], _path: string, _opts?: any) => {
     const dataKey = `${key.join("/")}`;
     if (queryDataMap[dataKey] === undefined) {
       return { data: undefined, isLoading: true };

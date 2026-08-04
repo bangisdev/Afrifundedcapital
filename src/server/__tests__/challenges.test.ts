@@ -33,7 +33,7 @@ beforeAll(async () => {
   userCookie = uc;
 
   // Create an admin user
-  const { cookie: ac } = await signUp(app, {
+  await signUp(app, {
     name: "Admin User",
     email: "challenge-admin@test.com",
     password: "Secure@123",

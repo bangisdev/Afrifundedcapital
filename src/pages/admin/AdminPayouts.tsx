@@ -203,40 +203,6 @@ export default function AdminPayouts() {
     }
   };
 
-  const handleBulkApprove = async () => {
-    if (selected.size === 0) return;
-    setBulkLoading(true);
-    try {
-      const result = await bulkApprove.mutateAsync({ ids: Array.from(selected) });
-      toast.success(`Approved ${result?.approved || selected.size} payouts`);
-      setSelected(new Set());
-      refetch();
-    } catch {
-      toast.error("Bulk approve failed");
-    } finally {
-      setBulkLoading(false);
-    }
-  };
-
-  const handleBulkReject = async (reason: string) => {
-    if (selected.size === 0) return;
-    setBulkLoading(true);
-    try {
-      let rejected = 0;
-      for (const id of selected) {
-        try {
-          await rejectPayout.mutateAsync({ id, reason: reason || "Bulk rejection by admin" });
-          rejected++;
-        } catch { /* skip */ }
-      }
-      toast.success(`Rejected ${rejected} payouts`);
-      setSelected(new Set());
-      refetch();
-    } finally {
-      setBulkLoading(false);
-    }
-  };
-
   const exportCSV = useCallback(() => {
     const items = payouts || [];
     if (items.length === 0) {

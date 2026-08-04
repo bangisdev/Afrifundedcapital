@@ -48,7 +48,7 @@ vi.mock("@/hooks/use-auth", () => ({
 const queryDataMap: Record<string, any> = {};
 
 vi.mock("@/hooks/use-api", () => ({
-  useApiQuery: vi.fn((key: string[], path: string, _opts?: any) => {
+  useApiQuery: vi.fn((key: string[], _path: string, _opts?: any) => {
     const dataKey = `${key.join("/")}`;
     if (queryDataMap[dataKey] === undefined) {
       return { data: undefined, isLoading: true };
@@ -80,7 +80,7 @@ vi.mock("recharts", () => ({
 
 // ─── Mock: @/components/ui/chart ──────────────────────────
 vi.mock("@/components/ui/chart", () => ({
-  ChartContainer: ({ children, config }: any) =>
+  ChartContainer: ({ children }: any) =>
     React.createElement("div", { "data-testid": "chart-container" }, children),
   ChartTooltip: () => React.createElement("div", { "data-testid": "chart-tooltip" }),
   ChartTooltipContent: () => React.createElement("div", { "data-testid": "chart-tooltip-content" }),
@@ -89,7 +89,6 @@ vi.mock("@/components/ui/chart", () => ({
 // ─── Import component after mocks ─────────────────────────
 import ChallengeDetail from "@/pages/dashboard/ChallengeDetail";
 import { useAuth } from "@/hooks/use-auth";
-import { useApiQuery } from "@/hooks/use-api";
 
 // ─── Test data factories ──────────────────────────────────
 function makeChallenge(overrides: any = {}) {

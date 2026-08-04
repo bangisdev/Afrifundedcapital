@@ -191,7 +191,7 @@ vi.mock("@/hooks/use-api", () => ({
     return { data: base, isLoading: false };
   }),
   useApiMutation: vi.fn((method: string, path: string) => ({
-    mutateAsync: vi.fn(async (body?: any) => {
+    mutateAsync: vi.fn(async (_body?: any) => {
       if (path === "/api/challenges/demo-purchase") return { message: "Demo challenge created", challengeId: 100 };
       if (path === "/api/trading/seed-demo") return { message: "Seeded demo data" };
       if (path === "/api/trading/sync") return { synced: 1 };
@@ -231,7 +231,7 @@ vi.mock("@/components/ui/chart", () => ({
 }));
 
 vi.mock("@/components/ui/button", () => ({
-  Button: React.forwardRef<HTMLButtonElement, any>(({ children, onClick, variant, size, className, disabled, type, ...props }, ref) =>
+  Button: React.forwardRef<HTMLButtonElement, any>(({ children, onClick, className, disabled, type, ...props }, ref) =>
     React.createElement("button", { ref, onClick, className, disabled, type, ...props }, children)
   ),
 }));
@@ -252,7 +252,7 @@ vi.mock("@/components/ui/card", () => ({
 }));
 
 vi.mock("@/components/ui/dialog", () => ({
-  Dialog: ({ open, onOpenChange, children }: any) => {
+  Dialog: ({ open, _onOpenChange, children }: any) => {
     if (!open) return null;
     return React.createElement("div", { "data-testid": "dialog" }, children);
   },
@@ -291,7 +291,7 @@ vi.mock("@/components/ui/label", () => ({
   Label: ({ children, htmlFor, className }: any) => React.createElement("label", { htmlFor, className }, children),
 }));
 vi.mock("@/components/ui/badge", () => ({
-  Badge: ({ children, variant, className }: any) => React.createElement("span", { className, "data-testid": "badge" }, children),
+  Badge: ({ children, className }: any) => React.createElement("span", { className, "data-testid": "badge" }, children),
 }));
 vi.mock("@/components/ui/separator", () => ({ Separator: () => React.createElement("hr") }));
 vi.mock("@/components/ui/accordion", () => ({

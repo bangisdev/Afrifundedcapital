@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getDb } from "../db";
-import { profitPayouts, fundedAccounts, userChallenges, users } from "../schema";
+import { profitPayouts, fundedAccounts, users } from "../schema";
 import { eq, desc, asc, and, count, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification } from "../lib/notifications";

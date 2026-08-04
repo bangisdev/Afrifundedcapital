@@ -33,7 +33,6 @@ import {
   Banknote,
   Copy,
   ExternalLink,
-  X,
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
@@ -250,7 +249,6 @@ function AffiliatePayoutsTab() {
   const total = data?.total || 0;
   const totalPages = data?.totalPages || 1;
   const stats = data?.stats || EMPTY_PAYOUT_STATS;
-  const hasActiveFilters = debouncedSearch || statusFilter !== "all";
 
   const handleApprove = async (payout: PayoutRow) => {
     setProcessingId(payout.id);
@@ -760,14 +758,12 @@ function AffiliatesListTab() {
   const {
     data,
     isLoading,
-    refetch,
   } = useApiQuery<AffiliatesResponse>(["admin", "affiliates", listQuery], listQuery);
 
   const affiliates = data?.affiliates || [];
   const total = data?.total || 0;
   const totalPages = data?.totalPages || 1;
   const stats = data?.stats || EMPTY_AFFILIATE_STATS;
-  const hasActiveFilters = debouncedSearch || statusFilter !== "all";
 
   if (isLoading) {
     return (

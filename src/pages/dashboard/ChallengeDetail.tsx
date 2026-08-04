@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { Loader2, ArrowLeft, TrendingUp, Activity, BarChart3 } from "lucide-react";
+import { Loader2, ArrowLeft, Activity, BarChart3 } from "lucide-react";
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts";
 import { useMemo } from "react";
 

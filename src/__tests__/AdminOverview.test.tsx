@@ -27,7 +27,7 @@ const queryDataMap: Record<string, any> = {};
 const mockRefetch = vi.fn();
 
 vi.mock("@/hooks/use-api", () => ({
-  useApiQuery: vi.fn((key: string[], path: string, _opts?: any) => {
+  useApiQuery: vi.fn((key: string[], _path: string, _opts?: any) => {
     const dataKey = `${key.join("/")}`;
     if (queryDataMap[dataKey] === undefined) {
       return { data: undefined, isLoading: false, refetch: mockRefetch };

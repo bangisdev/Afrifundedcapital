@@ -3,7 +3,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import React from "react";
 import { useApiQuery } from "@/hooks/use-api";
 
 // ─── Mock: sonner ──────────────────────────────────────────
@@ -190,7 +189,7 @@ describe("Profile Page", () => {
         signOut: vi.fn() as any,
         refetch: vi.fn() as any,
       });
-      const { container } = render(<Profile />);
+      render(<Profile />);
       expect(container.querySelector(".animate-spin")).toBeTruthy();
     });
   });
@@ -591,7 +590,7 @@ describe("Profile Page", () => {
     it("creates hidden file input for each document type", async () => {
       const user = userEvent.setup();
       setQueryData({});
-      const { container } = render(<Profile />);
+      render(<Profile />);
       await user.click(screen.getByTestId("tab-trigger-kyc"));
       const fileInputs = container.querySelectorAll('input[type="file"]');
       expect(fileInputs.length).toBe(5);
@@ -600,7 +599,7 @@ describe("Profile Page", () => {
     it("file inputs accept correct file types", async () => {
       const user = userEvent.setup();
       setQueryData({});
-      const { container } = render(<Profile />);
+      render(<Profile />);
       await user.click(screen.getByTestId("tab-trigger-kyc"));
       const fileInputs = container.querySelectorAll('input[type="file"]');
       fileInputs.forEach((input) => {
@@ -614,7 +613,7 @@ describe("Profile Page", () => {
     it("rejects invalid file types with toast error", async () => {
       const user = userEvent.setup();
       setQueryData({});
-      const { container } = render(<Profile />);
+      render(<Profile />);
       await user.click(screen.getByTestId("tab-trigger-kyc"));
       const fileInputs = container.querySelectorAll('input[type="file"]');
       const invalidFile = new File(["test"], "test.exe", { type: "application/x-msdownload" });
@@ -628,7 +627,7 @@ describe("Profile Page", () => {
     it("rejects oversized files with toast error", async () => {
       const user = userEvent.setup();
       setQueryData({});
-      const { container } = render(<Profile />);
+      render(<Profile />);
       await user.click(screen.getByTestId("tab-trigger-kyc"));
       const fileInputs = container.querySelectorAll('input[type="file"]');
       const bigFile = new File(["x".repeat(6 * 1024 * 1024)], "big.jpg", { type: "image/jpeg" });
@@ -642,7 +641,7 @@ describe("Profile Page", () => {
     it("accepts valid JPEG file and calls upload mutation", async () => {
       const user = userEvent.setup();
       setQueryData({});
-      const { container } = render(<Profile />);
+      render(<Profile />);
       await user.click(screen.getByTestId("tab-trigger-kyc"));
       const fileInputs = container.querySelectorAll('input[type="file"]');
       const validFile = new File(["image-data"], "passport.jpg", { type: "image/jpeg" });
@@ -656,7 +655,7 @@ describe("Profile Page", () => {
     it("accepts valid PDF file", async () => {
       const user = userEvent.setup();
       setQueryData({});
-      const { container } = render(<Profile />);
+      render(<Profile />);
       await user.click(screen.getByTestId("tab-trigger-kyc"));
       const fileInputs = container.querySelectorAll('input[type="file"]');
       const validPdf = new File(["pdf-data"], "doc.pdf", { type: "application/pdf" });
@@ -673,7 +672,7 @@ describe("Profile Page", () => {
     it("shows Upload text for each unsubmitted document", async () => {
       const user = userEvent.setup();
       setQueryData({});
-      const { container } = render(<Profile />);
+      render(<Profile />);
       await user.click(screen.getByTestId("tab-trigger-kyc"));
       const uploadButtons = screen.getAllByText("Upload");
       expect(uploadButtons.length).toBe(5);
@@ -692,7 +691,7 @@ describe("Profile Page", () => {
           makeKycDoc({ id: 2, documentType: "national_id", status: "pending" }),
         ],
       });
-      const { container } = render(<Profile />);
+      render(<Profile />);
       await user.click(screen.getByTestId("tab-trigger-kyc"));
       expect(screen.getByText("Re-upload")).toBeTruthy();
       // The rejected doc shows Re-upload, the pending doc shows "Under review" text
@@ -711,7 +710,7 @@ describe("Profile Page", () => {
           makeKycDoc({ id: 5, documentType: "selfie", status: "approved" }),
         ],
       });
-      const { container } = render(<Profile />);
+      render(<Profile />);
       await user.click(screen.getByTestId("tab-trigger-kyc"));
       // All 5 docs approved = no Upload/Re-upload buttons
       const uploadButtons = screen.queryAllByText((t) => t === "Upload" || t === "Re-upload");
@@ -759,7 +758,7 @@ describe("Profile Page", () => {
         isLoading: false, isAuthenticated: true, user: null as any,
         error: null, signIn: vi.fn() as any, signOut: vi.fn() as any, refetch: vi.fn() as any,
       });
-      const { container } = render(<Profile />);
+      render(<Profile />);
       expect(container.querySelector(".animate-spin")).toBeTruthy();
 
       vi.mocked(useAuth).mockReturnValue({

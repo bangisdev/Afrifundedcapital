@@ -221,7 +221,7 @@ describe("Full checkout flow: initiate → sandbox webhook → challenge + My Co
 
   it("is idempotent — a duplicate webhook does not create a second challenge or redemption", async () => {
     const db = getTestDb();
-    const { payments, userChallenges, couponRedemptions } = await import("../schema");
+    const { userChallenges, couponRedemptions } = await import("../schema");
     const { eq } = await import("drizzle-orm");
 
     // Re-run a purchase with a coupon to get a fresh payment + redemption

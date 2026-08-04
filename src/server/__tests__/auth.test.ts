@@ -11,8 +11,6 @@ import {
   authGet,
   authPost,
   getTestDb,
-  hashPassword,
-  generateToken,
 } from "./setup";
 
 let app: Hono;
@@ -107,7 +105,7 @@ describe("POST /api/auth/sign-in/email", () => {
   });
 
   it("returns 401 with non-existent email", async () => {
-    const { status, body } = await signIn(app, {
+    const { status } = await signIn(app, {
       email: "nobody@test.com",
       password: "Secure@123",
     });
@@ -219,7 +217,7 @@ describe("POST /api/auth/promote-admin", () => {
   });
 
   it("returns 404 for non-existent user", async () => {
-    const { status, body } = await authPost(app, "/api/auth/promote-admin", "", {
+    const { status } = await authPost(app, "/api/auth/promote-admin", "", {
       userId: 99999,
     });
 
@@ -227,7 +225,7 @@ describe("POST /api/auth/promote-admin", () => {
   });
 
   it("returns error when userId is missing", async () => {
-    const { status, body } = await authPost(app, "/api/auth/promote-admin", "", {});
+    const { status } = await authPost(app, "/api/auth/promote-admin", "", {});
     expect(status).toBe(400);
   });
 });

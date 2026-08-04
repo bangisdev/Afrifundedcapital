@@ -1,8 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -16,7 +15,6 @@ import {
   Clock,
   AlertCircle,
   User,
-  Tag,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -223,7 +221,6 @@ export default function AdminSupport() {
 
   // Detail view
   if (showDetail && selectedTicket) {
-    const statusCfg = STATUS_CONFIG[selectedTicket.status] || STATUS_CONFIG.open;
     const priorityCfg = PRIORITY_CONFIG[selectedTicket.priority] || PRIORITY_CONFIG.medium;
     const assignee = briefUsers?.find((u) => u.id === selectedTicket.assignedTo);
 

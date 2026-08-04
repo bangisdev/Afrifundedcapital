@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
-import { useNavigate } from "react-router";
 import { useState, useEffect } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
@@ -62,7 +61,6 @@ function getRelativeDate(timestamp: number) {
 }
 
 export default function Notifications() {
-  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
@@ -110,9 +108,7 @@ export default function Notifications() {
     );
   };
 
-  const markRead = useApiMutation<any, any>("put", "/api/notifications/${id}/read");
   const markAllRead = useApiMutation<any, any>("put", "/api/notifications/read-all");
-  const deleteNotif = useApiMutation<any, any>("delete", "/api/notifications/${id}");
 
   // Debounce the search input so we don't hit the API on every keystroke
   useEffect(() => {

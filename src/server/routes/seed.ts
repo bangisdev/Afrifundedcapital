@@ -114,7 +114,7 @@ app.post("/admin", async (c) => {
     sqlite.prepare(
       "INSERT OR IGNORE INTO wallets (user_id, balance, referral_balance, bonus_balance, currency, created_at, updated_at) VALUES (?, 0, 0, 0, 'NGN', ?, ?)"
     ).run(result.id, now, now);
-  } catch (e) {
+  } catch {
     // Wallet creation is non-critical
   }
 
@@ -254,7 +254,6 @@ app.post("/backfill-affiliates", requireAuth, requireAdmin, (c) => {
 
   let createdAffiliates = 0;
   let createdWallets = 0;
-  let skipped = 0;
 
   for (const user of allUsers) {
     // Check if affiliate record exists
@@ -767,11 +766,6 @@ app.post("/bulk", requireAuth, requireAdmin, async (c) => {
       const tmpl = db.select().from(challengeTemplates).limit(1).get();
       const sizes = tmpl ? db.select().from(accountSizes).where(eq(accountSizes.templateId, tmpl.id)).all() : [];
       if (tmpl && sizes.length > 0) {
-        const size25k = sizes.find(s => s.size === 25000) || sizes[2] || sizes[0];
-        const size50k = sizes.find(s => s.size === 50000) || sizes[3] || sizes[0];
-        const size10k = sizes.find(s => s.size === 10000) || sizes[1] || sizes[0];
-        const size100k = sizes.find(s => s.size === 100000) || sizes[4] || sizes[0];
-
         const sampleUsersData = [
           { name: "Adebayo Okonkwo", email: "adebayo@test.com", phone: "+234 801 234 5678", country: "Nigeria", tradingExperience: "intermediate", kycStatus: "approved", kycVerifiedAt: now - 30 * 86400000, onboardingComplete: true },
           { name: "Chioma Nwosu", email: "chioma@test.com", phone: "+234 802 345 6789", country: "Nigeria", tradingExperience: "beginner", kycStatus: "pending", onboardingComplete: true },
@@ -853,12 +847,10 @@ app.post("/users", requireAuth, requireAdmin, async (c) => {
     return c.json({ error: "No challenge templates/sizes found. Run /api/seed/seed first." }, 400);
   }
 
-  const size5k = allSizes.find(s => s.size === 5000) || allSizes[0];
   const size10k = allSizes.find(s => s.size === 10000) || allSizes[1] || allSizes[0];
   const size25k = allSizes.find(s => s.size === 25000) || allSizes[2] || allSizes[0];
   const size50k = allSizes.find(s => s.size === 50000) || allSizes[3] || allSizes[0];
   const size100k = allSizes.find(s => s.size === 100000) || allSizes[4] || allSizes[0];
-  const size200k = allSizes.find(s => s.size === 200000) || allSizes[5] || allSizes[0];
 
   // ── Sample user definitions ──
   const sampleUsers = [
@@ -1046,13 +1038,13 @@ app.post("/users", requireAuth, requireAdmin, async (c) => {
 
     // Create a payment record
     const paymentRef = "PAY-" + Math.random().toString(36).substring(2, 10).toUpperCase();
-    const payment = db.insert(payments).values({
+    db.insert(payments).values({
       userId: user.id, amount: accountSize.price, currency: "NGN",
       provider: "flutterwave", status: "completed",
       reference: paymentRef, description: "Challenge purchase: " + template.name,
       templateId: template.id, accountSizeId: accountSize.id,
       createdAt: challengeStartedAt - 86400000, completedAt: challengeStartedAt,
-    }).returning().get();
+    }).run();
     results.payments++;
 
     // Create MT5 account for users who have them
@@ -1098,11 +1090,11 @@ app.post("/users", requireAuth, requireAdmin, async (c) => {
 
     // Create funded account record
     if (cc.hasFunded && mt5Id) {
-      const funded = db.insert(fundedAccounts).values({
+      db.insert(fundedAccounts).values({
         userId: user.id, challengeId: challenge.id, mt5AccountId: mt5Id,
         accountSize: accountSize.size, currency: "USD", profitSharePercent: 80,
         isActive: true, activatedAt: fundedAt || now, totalPayouts: 0,
-      }).returning().get();
+      }).run();
       results.fundedAccounts++;
 
       // Generate 30 days of trading metrics for funded user

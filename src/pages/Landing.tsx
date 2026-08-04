@@ -4,7 +4,6 @@ import { useAuth } from "@/hooks/use-auth";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import {
   Accordion,
   AccordionContent,
@@ -27,14 +26,12 @@ import {
   Award,
   ChevronRight,
   TrendingUp,
-  CheckCircle,
   Quote,
   Star,
   MoveRight,
   Sparkles,
   MousePointer2,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { LogoDropdown } from "@/components/LogoDropdown";
 
 // ─── Animation Variants ───

@@ -75,13 +75,11 @@ export default function Support() {
 
   const { data, isLoading } = useApiQuery<SupportResponse>(["support", "my", listQuery], listQuery);
   const createTicket = useApiMutation<any, any>("post", "/api/support/create");
-  const addMessage = useApiMutation<any, any>("post", "/api/support/${id}/messages");
   const [showCreate, setShowCreate] = useState(false);
   const [subject, setSubject] = useState("");
   const [category, setCategory] = useState("general");
   const [message, setMessage] = useState("");
-  const [selectedTicket, setSelectedTicket] = useState<any>(null);
-  const [reply, setReply] = useState("");
+  const [, setSelectedTicket] = useState<any>(null);
 
   const tickets = data?.tickets || [];
   const total = data?.total || 0;

@@ -15,7 +15,7 @@ import {
   getTestDb,
   getTestSqlite,
 } from "./setup";
-import { users, mt5Accounts } from "../schema";
+import { users } from "../schema";
 import { eq } from "drizzle-orm";
 
 let app: Hono;
@@ -33,7 +33,7 @@ beforeAll(async () => {
   });
   userCookie = uc;
 
-  const { cookie: ac } = await signUp(app, {
+  await signUp(app, {
     name: "Trading Admin",
     email: "trading-admin@test.com",
     password: "Secure@123",
@@ -179,7 +179,7 @@ describe("GET /api/trading/challenge/:id/metrics", () => {
     const challenge = ((challenges as Record<string, unknown>).challenges as Record<string, unknown>[])[0];
     if (!challenge) return;
 
-    const { status, body } = await authGet(app, `/api/trading/challenge/${challenge.id}/metrics`, userCookie);
+    const { status } = await authGet(app, `/api/trading/challenge/${challenge.id}/metrics`, userCookie);
     expect(status).toBe(200);
     // May be null if no metrics seeded yet
   });
@@ -279,7 +279,7 @@ describe("GET /api/trading/challenge/:id/metrics (after seeding)", () => {
     const challenge = ((challenges as Record<string, unknown>).challenges as Record<string, unknown>[])[0];
     if (!challenge) return;
 
-    const { status, body } = await authGet(app, `/api/trading/challenge/${challenge.id}/metrics`, userCookie);
+    const { status } = await authGet(app, `/api/trading/challenge/${challenge.id}/metrics`, userCookie);
     expect(status).toBe(200);
     const metrics = body as Record<string, unknown> | null;
     if (metrics) {
@@ -348,7 +348,7 @@ describe("POST /api/trading/sync", () => {
     const challenge = ((challenges as Record<string, unknown>).challenges as Record<string, unknown>[])[0];
     if (!challenge) return;
 
-    const { status, body } = await authPost(app, "/api/trading/sync", userCookie, {
+    const { status } = await authPost(app, "/api/trading/sync", userCookie, {
       challengeId: String(challenge.id),
     });
     expect(status).toBe(200);
@@ -431,10 +431,6 @@ describe("POST /api/trading/sync — data verification", () => {
     sqlite
       .prepare("UPDATE trading_metrics SET recorded_at = ? WHERE challenge_id = ?")
       .run(Date.now() - 25 * 60 * 60 * 1000, syncChallengeId);
-
-    const before = sqlite
-      .prepare("SELECT balance, equity FROM mt5_accounts WHERE id = ?")
-      .get(syncMt5Id) as { balance: number; equity: number };
 
     await authPost(app, "/api/trading/sync", userCookie, {});
 
@@ -541,7 +537,7 @@ describe("POST /api/trading/sync — data verification", () => {
       .get(otherChallenge.id) as { cnt: number };
 
     // Sync only the specified challenge
-    const { status, body } = await authPost(app, "/api/trading/sync", userCookie, {
+    const { status } = await authPost(app, "/api/trading/sync", userCookie, {
       challengeId: String(otherChallenge.id),
     });
     expect(status).toBe(200);
@@ -649,7 +645,7 @@ describe("Full cycle: seed → sync → challenge status transition", () => {
       .run(Date.now() - 25 * 60 * 60 * 1000, cycleChallengeId);
 
     // Sync — with mocked random, profit should exceed 0.1% target
-    const { status, body } = await authPost(app, "/api/trading/sync", cycleUserCookie, {});
+    const { status } = await authPost(app, "/api/trading/sync", cycleUserCookie, {});
 
     vi.restoreAllMocks();
 

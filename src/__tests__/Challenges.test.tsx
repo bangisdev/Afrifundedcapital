@@ -100,7 +100,7 @@ vi.mock("@/hooks/use-api", () => ({
   }),
   useApiMutation: vi.fn((method: string, path: string, _onSuccess?: any) => {
     return {
-      mutateAsync: vi.fn(async (body?: any) => {
+      mutateAsync: vi.fn(async (_body?: any) => {
         if (path === "/api/challenges/demo-purchase") {
           return { message: "Demo challenge created", challengeId: 999 };
         }
@@ -198,7 +198,6 @@ vi.mock("@/components/ui/tabs", () => {
 import Challenges from "@/pages/dashboard/Challenges";
 import { useAuth } from "@/hooks/use-auth";
 import { useFlutterwavePayment, type CheckoutState } from "@/hooks/use-flutterwave";
-import { toast } from "sonner";
 
 // ─── Test data factories ──────────────────────────────────
 function makeTemplate(overrides: any = {}) {

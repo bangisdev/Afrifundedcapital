@@ -12,7 +12,6 @@ import {
   authPost,
   authDelete,
   getTestDb,
-  getTestSqlite,
 } from "./setup";
 import { auditLogs, notifications } from "../schema";
 import { eq, desc, and } from "drizzle-orm";
@@ -146,7 +145,7 @@ describe("POST /api/kyc/upload", () => {
   });
 
   it("creates a dashboard notification for the submission", async () => {
-    const { status, body } = await authPost(app, "/api/kyc/upload", userCookie, {
+    const { status } = await authPost(app, "/api/kyc/upload", userCookie, {
       documentType: "drivers_license",
       fileData: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
       fileName: "license.png",

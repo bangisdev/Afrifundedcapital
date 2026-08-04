@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 import { useApiQuery } from "@/hooks/use-api";
@@ -48,7 +48,7 @@ vi.mock("@/hooks/use-api", () => ({
 
 // ─── Mock: AlertDialog ─────────────────────────────────────
 vi.mock("@/components/ui/alert-dialog", () => ({
-  AlertDialog: ({ open, onOpenChange, children }: any) => {
+  AlertDialog: ({ open, _onOpenChange, children }: any) => {
     if (!open) return null;
     return <div data-testid="alert-dialog">{children}</div>;
   },
@@ -814,7 +814,6 @@ describe("AdminChallenges Page", () => {
     });
 
     it("shows correct stats after adding challenges", async () => {
-      const user = userEvent.setup();
       setQueryData({
         "admin/templates": [makeTemplate()],
         "admin/allChallenges": [
