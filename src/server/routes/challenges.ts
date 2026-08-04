@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { getDb } from "../db";
+import { getDb, type Db } from "../db";
 import {
   challengeTemplates,
   accountSizes,
@@ -16,7 +16,7 @@ import { writeAuditLog } from "../lib/audit";
 
 let seeded = false;
 
-function autoSeed(db: any) {
+function autoSeed(db: Db) {
   if (seeded) return;
   const existing = db.select({ cnt: count() }).from(challengeTemplates).get();
   if (existing && (existing.cnt ?? 0) > 0) { seeded = true; return; }
@@ -623,7 +623,7 @@ app.put("/admin/:id/status", requireAuth, requireAdmin, async (c) => {
   if (!challenge) return c.json({ error: "Challenge not found" }, 404);
 
   // Build update object with timestamp fields
-  const updateFields: any = { status: newStatus, updatedAt: now };
+  const updateFields: Partial<typeof userChallenges.$inferInsert> = { status: newStatus, updatedAt: now };
   if (newStatus === "phase_1_passed") updateFields.phase1PassedAt = now;
   if (newStatus === "phase_2_passed") updateFields.phase2PassedAt = now;
   if (newStatus === "funded") updateFields.fundedAt = now;

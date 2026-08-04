@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { Hono } from "hono";
 import {
+  ApiEnvelope,
   buildTestApp,
   cleanupTestDb,
   signUp,
@@ -119,7 +120,7 @@ describe("GET /api/affiliates/payouts", () => {
   it("returns an empty envelope for a user without payouts", async () => {
     const { status, body } = await authGet(app, "/api/affiliates/payouts", userCookie);
     expect(status).toBe(200);
-    const env = body as Record<string, any>;
+    const env = body as ApiEnvelope;
     expect(Array.isArray(env.payouts)).toBe(true);
     expect(env.payouts.length).toBe(0);
     expect(env.total).toBe(0);
@@ -155,7 +156,7 @@ describe("GET /api/affiliates/payouts", () => {
     }
 
     const page1 = (await authGet(app, "/api/affiliates/payouts?page=1&pageSize=10", adminCookie))
-      .body as Record<string, any>;
+      .body as ApiEnvelope;
     expect(page1.payouts.length).toBe(10);
     expect(page1.total).toBe(12);
     expect(page1.page).toBe(1);
@@ -167,7 +168,7 @@ describe("GET /api/affiliates/payouts", () => {
     expect(page1.stats.byStatus.pending).toBe(4);
 
     const page2 = (await authGet(app, "/api/affiliates/payouts?page=2&pageSize=10", adminCookie))
-      .body as Record<string, any>;
+      .body as ApiEnvelope;
     expect(page2.payouts.length).toBe(2);
     expect(page2.page).toBe(2);
   });
@@ -215,7 +216,7 @@ describe("GET /api/affiliates/referrals", () => {
   it("returns an empty envelope for a user without referrals", async () => {
     const { status, body } = await authGet(app, "/api/affiliates/referrals", userCookie);
     expect(status).toBe(200);
-    const env = body as Record<string, any>;
+    const env = body as ApiEnvelope;
     expect(Array.isArray(env.referrals)).toBe(true);
     expect(env.referrals.length).toBe(0);
     expect(env.total).toBe(0);
@@ -260,12 +261,12 @@ describe("GET /api/affiliates/referrals", () => {
 
     const { status, body } = await authGet(app, "/api/affiliates/referrals?sortBy=status&sortOrder=asc", adminCookie);
     expect(status).toBe(200);
-    const env = body as Record<string, any>;
+    const env = body as ApiEnvelope;
     expect(env.total).toBeGreaterThanOrEqual(2);
     expect(env.referrals.length).toBeGreaterThanOrEqual(2);
 
     // Joined referred user info is present
-    const names = env.referrals.map((r: any) => r.referredName);
+    const names = env.referrals.map((r: ApiEnvelope) => r.referredName);
     expect(names).toContain("Referral Alpha");
     expect(names).toContain("Referral Beta");
 

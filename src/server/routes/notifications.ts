@@ -173,22 +173,23 @@ app.post("/broadcast/segmented", requireAuth, requireAdmin, async (c) => {
   } else if (body.segment) {
     // Segment-based targeting
     const segment = body.segment as string;
-    let query = db.select({ id: users.id }).from(users);
+    const idQuery = db.select({ id: users.id }).from(users);
 
-    if (segment === "admins") {
-      query = query.where(sql`${users.role} IS NOT NULL AND ${users.role} != 'user'`) as any;
-    } else if (segment === "verified") {
-      query = query.where(eq(users.emailVerified, true)) as any;
-    } else if (segment === "kyc_approved") {
-      query = query.where(eq(users.kycStatus, "approved")) as any;
-    } else if (segment === "onboarded") {
-      query = query.where(eq(users.onboardingComplete, true)) as any;
-    } else if (segment === "new_users") {
-      const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
-      query = query.where(sql`${users.createdAt} > ${thirtyDaysAgo}`) as any;
-    }
-
-    const rows = query.all();
+    const rows = idQuery
+      .where(
+        segment === "admins"
+          ? sql`${users.role} IS NOT NULL AND ${users.role} != 'user'`
+          : segment === "verified"
+            ? eq(users.emailVerified, true)
+            : segment === "kyc_approved"
+              ? eq(users.kycStatus, "approved")
+              : segment === "onboarded"
+                ? eq(users.onboardingComplete, true)
+                : segment === "new_users"
+                  ? sql`${users.createdAt} > ${now - 30 * 24 * 60 * 60 * 1000}`
+                  : sql`1 = 0`,
+      )
+      .all();
     targetUserIds = rows.map((r) => r.id);
   } else {
     return c.json({ error: "Provide userIds or segment" }, 400);

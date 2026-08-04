@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Route, Routes } from "react-router";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import Overview from "./Overview";

@@ -1,13 +1,14 @@
 import { notifications, users, ROLES } from "../schema";
 import { eq, sql } from "drizzle-orm";
 import { sendEmail, securityAlertEmail, type SendEmailParams } from "./email";
+import type { Db } from "../db";
 
 /**
  * Create a dashboard notification for a user.
  * Non-critical — failures are silently logged so they never break the calling flow.
  */
 export function createNotification(
-  db: any,
+  db: Db,
   userId: number,
   opts: {
     type: string;
@@ -38,7 +39,7 @@ export function createNotification(
  * Non-critical — failures are silently logged.
  */
 export async function sendEmailToUser(
-  db: any,
+  db: Db,
   userId: number,
   emailParams: Omit<SendEmailParams, "to">,
 ): Promise<boolean> {
@@ -82,7 +83,7 @@ export async function sendEmailToUser(
  * Create a notification and optionally send an email.
  */
 export async function notify(
-  db: any,
+  db: Db,
   userId: number,
   opts: {
     type: string;
@@ -144,7 +145,7 @@ export function isSensitiveSettingKey(key: string): boolean {
  * Never throws — alerting must never break the settings save.
  */
 export function notifyAdminsOfSecurityEvent(
-  db: any,
+  db: Db,
   opts: {
     actorId: number;
     actorName: string;

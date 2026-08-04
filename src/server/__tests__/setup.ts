@@ -18,6 +18,17 @@ import fs from "fs";
 import * as schema from "../schema";
 import { runMigrations } from "../migrate";
 
+/**
+ * Generic shape of a JSON API response body in tests.
+ *
+ * API responses are dynamic JSON (envelopes with `payments`, `coupons`,
+ * `documents`, etc.), so a single documented envelope type keeps test
+ * assertions ergonomic without scattering `any` annotations across the
+ * test files. This alias is defined here — the one place that is exempt
+ * from the no-explicit-any rule.
+ */
+export type ApiEnvelope = Record<string, any>;
+
 // ─── Unique test DB per run ──────────────────────────────────
 const TEST_DB_PATH = path.join(
   process.cwd(),

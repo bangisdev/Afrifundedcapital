@@ -41,7 +41,7 @@ function generateCertNumber(type: string): string {
 app.post("/generate", requireAuth, async (c) => {
   const userId = c.get("userId");
   const db = getDb();
-  let body: any = {};
+  let body: Record<string, unknown> = {};
   try { body = await c.req.json(); } catch {}
 
   const challengeId = body?.challengeId as number;
@@ -115,7 +115,7 @@ app.post("/generate", requireAuth, async (c) => {
 app.post("/generate-on-completion", requireAuth, async (c) => {
   const userId = c.get("userId");
   const db = getDb();
-  let body: any = {};
+  let body: Record<string, unknown> = {};
   try { body = await c.req.json(); } catch {}
 
   const challengeId = body?.challengeId as number;
@@ -626,7 +626,7 @@ app.get("/admin/all", requireAuth, requireAdmin, (c) => {
 // ─── Admin: Issue certificate for a challenge ──────────────
 app.post("/admin/issue", requireAuth, requireAdmin, async (c) => {
   const db = getDb();
-  let body: any = {};
+  let body: Record<string, unknown> = {};
   try { body = await c.req.json(); } catch {}
 
   const { challengeId, type } = body as { challengeId: number; type: string };

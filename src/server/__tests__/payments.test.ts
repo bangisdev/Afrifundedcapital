@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import type { Hono } from "hono";
 import {
+  ApiEnvelope,
   buildTestApp,
   cleanupTestDb,
   signUp,
@@ -200,8 +201,8 @@ describe("POST /api/payments/initiate", () => {
 
     // The redemption is recorded with the real discount (visible in My Coupons)
     const { body: myBody } = await authGet(app, "/api/coupons/my", userCookie);
-    const redemptions = (myBody as Record<string, any>).coupons;
-    const redemption = redemptions.find((r: any) => r.code === "TESTDISCOUNT");
+    const redemptions = (myBody as ApiEnvelope).coupons;
+    const redemption = redemptions.find((r: ApiEnvelope) => r.code === "TESTDISCOUNT");
     expect(redemption).toBeTruthy();
     expect(redemption.discountAmount).toBe(5000);
     expect(redemption.originalAmount).toBe(50000);
@@ -289,7 +290,7 @@ describe("POST /api/payments/admin/cleanup-stale", () => {
 
     const { status, body } = await authPost(app, "/api/payments/admin/cleanup-stale", adminCookie, {});
     expect(status).toBe(200);
-    const result = body as Record<string, any>;
+    const result = body as ApiEnvelope;
     expect(result.stale).toBeGreaterThanOrEqual(1);
     expect(result.voided).toBeGreaterThanOrEqual(1);
 
@@ -330,7 +331,7 @@ describe("POST /api/payments/admin/test-webhook", () => {
     const { status, body } = await authPost(app, "/api/payments/admin/test-webhook", adminCookie, {});
 
     expect(status).toBe(200);
-    const result = body as Record<string, any>;
+    const result = body as ApiEnvelope;
     expect(result.success).toBe(true);
     // Fake tx_ref → no matching payment → the webhook safely reports "ignored"
     expect(result.webhookStatus).toBe("ignored");
@@ -365,7 +366,7 @@ describe("POST /api/payments/admin/test-webhook", () => {
     });
 
     expect(status).toBe(200);
-    const result = body as Record<string, any>;
+    const result = body as ApiEnvelope;
     expect(result.usedPayment).toBe(true);
     expect(result.paymentId).toBe(pay.id);
     expect(result.webhookStatus).toBe("ok");
@@ -568,7 +569,7 @@ describe("GET /api/payments/my", () => {
     const { status, body } = await authGet(app, "/api/payments/my", userCookie);
 
     expect(status).toBe(200);
-    const env = body as Record<string, any>;
+    const env = body as ApiEnvelope;
     expect(Array.isArray(env.payments)).toBe(true);
     // We initiated 2 payments in earlier tests
     expect(env.payments.length).toBeGreaterThanOrEqual(1);
@@ -588,7 +589,7 @@ describe("GET /api/payments/my", () => {
   it("paginates payments server-side", async () => {
     // Get the user id from an existing payment, then seed 12 more directly.
     const { body: first } = await authGet(app, "/api/payments/my", userCookie);
-    const env0 = first as Record<string, any>;
+    const env0 = first as ApiEnvelope;
     const userId = env0.payments[0].userId;
 
     const db = getTestDb();
@@ -609,7 +610,7 @@ describe("GET /api/payments/my", () => {
     }
 
     const page1 = (await authGet(app, "/api/payments/my?page=1&pageSize=10", userCookie))
-      .body as Record<string, any>;
+      .body as ApiEnvelope;
     expect(page1.payments.length).toBe(10);
     expect(page1.pageSize).toBe(10);
     expect(page1.total).toBeGreaterThanOrEqual(13); // 1 existing + 12 seeded
@@ -618,7 +619,7 @@ describe("GET /api/payments/my", () => {
     expect(page1.stats.total).toBe(page1.total);
 
     const page2 = (await authGet(app, "/api/payments/my?page=2&pageSize=10", userCookie))
-      .body as Record<string, any>;
+      .body as ApiEnvelope;
     expect(page2.payments.length).toBeGreaterThan(0);
     expect(page2.page).toBe(2);
   });
@@ -689,7 +690,7 @@ describe("POST /api/payments/admin/:id/refund", () => {
   it("refunds a payment as admin", async () => {
     // Get the first payment
     const { body: payments } = await authGet(app, "/api/payments/my", userCookie);
-    const env = payments as Record<string, any>;
+    const env = payments as ApiEnvelope;
     const payment = env.payments[0];
     expect(payment).toBeTruthy();
 
@@ -714,7 +715,7 @@ describe("POST /api/payments/admin/:id/refund", () => {
 
     const { status, body } = await authPost(app, `/api/payments/admin/${paymentId}/refund`, adminCookie);
     expect(status).toBe(200);
-    const refundBody = body as Record<string, any>;
+    const refundBody = body as ApiEnvelope;
     expect(refundBody.success).toBe(true);
     expect(refundBody.refundGateway.status).toBe("skipped");
     expect(refundBody.refundGateway.error).toContain("No Flutterwave transaction");
@@ -794,7 +795,7 @@ describe("POST /api/payments/admin/:id/refund", () => {
       description: "Refund Flow Challenge",
     });
     expect(init.status).toBe(200);
-    const initBody = init.body as Record<string, any>;
+    const initBody = init.body as ApiEnvelope;
     const paymentId = initBody.paymentId as number;
 
     // Complete it via the sandbox webhook (charge.completed)
@@ -833,7 +834,7 @@ describe("POST /api/payments/admin/:id/refund", () => {
     // Refund as admin
     const refund = await authPost(app, `/api/payments/admin/${paymentId}/refund`, adminCookie);
     expect(refund.status).toBe(200);
-    const refundBody = refund.body as Record<string, any>;
+    const refundBody = refund.body as ApiEnvelope;
     expect(refundBody.success).toBe(true);
     expect(refundBody.challengeDeactivated).toBe(1);
     expect(refundBody.mt5Suspended).toBe(1);
@@ -886,7 +887,7 @@ describe("POST /api/payments/admin/:id/refund", () => {
 
     const res = await authPost(app, `/api/payments/admin/${payment!.id}/refund`, adminCookie);
     expect(res.status).toBe(200);
-    const body = res.body as Record<string, any>;
+    const body = res.body as ApiEnvelope;
     expect(body.success).toBe(true);
     expect(body.challengeDeactivated).toBe(0);
     expect(body.redemptionVoided).toBe(false);
@@ -962,7 +963,7 @@ describe("POST /api/payments/admin/:id/resume", () => {
       description: "Resume Flow Challenge",
     });
     expect(init.status).toBe(200);
-    const initBody = init.body as Record<string, any>;
+    const initBody = init.body as ApiEnvelope;
     const paymentId = initBody.paymentId as number;
 
     // Complete it via the sandbox webhook
@@ -998,7 +999,7 @@ describe("POST /api/payments/admin/:id/resume", () => {
     // ── Resume ────────────────────────────────────────────────
     const resume = await authPost(app, `/api/payments/admin/${paymentId}/resume`, adminCookie);
     expect(resume.status).toBe(200);
-    const resumeBody = resume.body as Record<string, any>;
+    const resumeBody = resume.body as ApiEnvelope;
     expect(resumeBody.success).toBe(true);
     expect(resumeBody.challengeResumed).toBe(1);
     expect(resumeBody.mt5Reactivated).toBe(1);
@@ -1112,7 +1113,7 @@ describe("POST /api/payments/admin/:id/resume", () => {
       description: "Expired Coupon Resume",
     });
     expect(init.status).toBe(200);
-    const paymentId = (init.body as Record<string, any>).paymentId as number;
+    const paymentId = (init.body as ApiEnvelope).paymentId as number;
 
     // Complete via webhook
     const payment = db.select().from(payments).where(eq(payments.id, paymentId)).get();
@@ -1137,7 +1138,7 @@ describe("POST /api/payments/admin/:id/resume", () => {
 
     const resume = await authPost(app, `/api/payments/admin/${paymentId}/resume`, adminCookie);
     expect(resume.status).toBe(200);
-    const body = resume.body as Record<string, any>;
+    const body = resume.body as ApiEnvelope;
     expect(body.success).toBe(true);
     expect(body.redemptionRestored).toBe(false);
     expect(body.redemptionRestoreReason).toBe("expired");
@@ -1219,7 +1220,7 @@ describe("POST /api/payments/admin/:id/resume", () => {
       description: "Limit Coupon Resume",
     });
     expect(init.status).toBe(200);
-    const paymentId = (init.body as Record<string, any>).paymentId as number;
+    const paymentId = (init.body as ApiEnvelope).paymentId as number;
 
     // Complete via webhook
     const payment = db.select().from(payments).where(eq(payments.id, paymentId)).get();
@@ -1244,7 +1245,7 @@ describe("POST /api/payments/admin/:id/resume", () => {
 
     const resume = await authPost(app, `/api/payments/admin/${paymentId}/resume`, adminCookie);
     expect(resume.status).toBe(200);
-    const body = resume.body as Record<string, any>;
+    const body = resume.body as ApiEnvelope;
     expect(body.success).toBe(true);
     expect(body.redemptionRestored).toBe(false);
     expect(body.redemptionRestoreReason).toBe("usage_limit");

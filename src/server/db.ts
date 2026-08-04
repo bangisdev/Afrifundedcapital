@@ -23,6 +23,9 @@ export function getDb() {
   return dbInstance;
 }
 
+/** The Drizzle database instance type used across server libs/routes. */
+export type Db = ReturnType<typeof getDb>;
+
 // Initialize database and run migrations on startup
 export function initDatabase() {
   const sqlite = new Database(DB_PATH);

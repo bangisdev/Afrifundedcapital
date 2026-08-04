@@ -41,12 +41,17 @@ export function useApiMutation<T, R = void>(
 //  AUTH HOOKS
 // ═══════════════════════════════════════════════
 
+interface SessionData {
+  user: Record<string, unknown>;
+  session: { id: string; expiresAt: number };
+}
+
 export function useSession() {
-  return useApiQuery<any>(["session"], "/auth/session", { enabled: false });
+  return useApiQuery<SessionData | null>(["session"], "/auth/session", { enabled: false });
 }
 
 export function useSignIn() {
-  return useMutation<any, Error, { email: string; password: string }>({
+  return useMutation<Record<string, unknown>, Error, { email: string; password: string }>({
     mutationFn: async (body) => {
       const res = await fetch("/api/auth/sign-in/email", {
         method: "POST",
@@ -64,7 +69,7 @@ export function useSignIn() {
 }
 
 export function useSignUp() {
-  return useMutation<any, Error, { name: string; email: string; password: string }>({
+  return useMutation<Record<string, unknown>, Error, { name: string; email: string; password: string }>({
     mutationFn: async (body) => {
       const res = await fetch("/api/auth/sign-up/email", {
         method: "POST",

@@ -16,6 +16,7 @@ import {
   CarouselItem,
   CarouselNext,
   CarouselPrevious,
+  type CarouselApi,
 } from "@/components/ui/carousel";
 import {
   ArrowRight,
@@ -204,7 +205,7 @@ export default function Landing() {
   const heroOpacity = useTransform(scrollYProgress, [0, 0.25], [1, 0]);
 
   // Auto-play carousel
-  const [carouselApi, setCarouselApi] = useState<any>(null);
+  const [carouselApi, setCarouselApi] = useState<CarouselApi | null>(null);
   useEffect(() => {
     if (!carouselApi || !autoplay) return;
     autoplayRef.current = setInterval(() => {

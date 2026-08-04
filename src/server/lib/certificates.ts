@@ -1,6 +1,7 @@
 import { certificates, userChallenges, notifications, users } from "../schema";
 import { eq, and } from "drizzle-orm";
 import { randomBytes } from "crypto";
+import type { Db } from "../db";
 
 /**
  * Maps challenge status to certificate type.
@@ -40,10 +41,10 @@ function generateCertNumber(type: string): string {
  * no certificate was needed or one already existed.
  */
 export function maybeGenerateCertificate(
-  db: any,
+  db: Db,
   challengeId: number,
   newStatus: string,
-): any | null {
+): typeof certificates.$inferSelect | null {
   const certType = certTypeForStatus(newStatus);
   if (!certType) return null;
 

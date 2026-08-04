@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { getDb } from "../db";
+import { getDb, type Db } from "../db";
 import { tradingMetrics, mt5Accounts, drawdownHistory, userChallenges, users } from "../schema";
 import { eq, desc, asc, and, sql, count, like, or, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
@@ -7,6 +7,12 @@ import { maybeGenerateCertificate } from "../lib/certificates";
 import { createNotification } from "../lib/notifications";
 
 const app = new Hono();
+
+/** Metric columns populated by the daily sync (everything except FK/timestamp columns). */
+type SyncMetrics = Omit<
+  typeof tradingMetrics.$inferInsert,
+  "id" | "mt5AccountId" | "challengeId" | "recordedAt"
+>;
 
 // ─── MT5 Accounts ──────────────────────────────────────
 
@@ -117,10 +123,10 @@ app.get("/challenge/:id/drawdown", requireAuth, (c) => {
  * challenge's current state and random market behavior.
  */
 function simulateDailySync(
-  challenge: any,
-  previousMetrics: any | null,
+  challenge: typeof userChallenges.$inferSelect,
+  previousMetrics: typeof tradingMetrics.$inferSelect | null | undefined,
 ): {
-  metrics: Record<string, number>;
+  metrics: SyncMetrics;
   accountUpdate: { balance: number; equity: number };
 } {
   const baseBalance = challenge.accountSize;
@@ -213,7 +219,7 @@ function simulateDailySync(
 /**
  * Sync a single challenge — pulls latest "MT5 data" and stores it.
  */
-function syncChallenge(db: any, challenge: any): boolean {
+function syncChallenge(db: Db, challenge: typeof userChallenges.$inferSelect): boolean {
   const now = Date.now();
 
   // Get latest metrics for this challenge

@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { Hono } from "hono";
 import {
+  ApiEnvelope,
   buildTestApp,
   cleanupTestDb,
   signUp,
@@ -67,7 +68,7 @@ beforeAll(async () => {
   const { body: challenges } = await authGet(app, "/api/challenges/my", userCookie);
   const challengeList = Array.isArray(challenges)
     ? challenges
-    : (challenges as Record<string, any>).challenges || [];
+    : (challenges as ApiEnvelope).challenges || [];
   const challenge = (challengeList as Array<{ id: number }>)[0];
   if (challenge) {
     await authPut(app, `/api/challenges/admin/${challenge.id}/status`, adminCookie, {
@@ -138,7 +139,7 @@ describe("GET /api/payouts/my/funded", () => {
   it("returns funded accounts", async () => {
     const { status, body } = await authGet(app, "/api/payouts/my/funded", userCookie);
     expect(status).toBe(200);
-    const env = body as Record<string, any>;
+    const env = body as ApiEnvelope;
     expect(Array.isArray(env.accounts)).toBe(true);
     expect(env.accounts.length).toBeGreaterThanOrEqual(1);
     expect(env.total).toBeGreaterThanOrEqual(1);
@@ -183,14 +184,14 @@ describe("GET /api/payouts/my/funded", () => {
         userCookie
       );
       expect(status).toBe(200);
-      const env = body as Record<string, any>;
+      const env = body as ApiEnvelope;
       const sizes = (env.accounts as Array<Record<string, number>>).map((a) => a.accountSize);
       for (let i = 1; i < sizes.length; i++) {
         expect(sizes[i - 1]).toBeLessThanOrEqual(sizes[i]);
       }
 
       const descRes = await authGet(app, "/api/payouts/my/funded?sortBy=accountSize&sortOrder=desc", userCookie);
-      const descEnv = descRes.body as Record<string, any>;
+      const descEnv = descRes.body as ApiEnvelope;
       const descSizes = (descEnv.accounts as Array<Record<string, number>>).map((a) => a.accountSize);
       for (let i = 1; i < descSizes.length; i++) {
         expect(descSizes[i - 1]).toBeGreaterThanOrEqual(descSizes[i]);
@@ -205,7 +206,7 @@ describe("GET /api/payouts/my/funded", () => {
   it("falls back to the default sort for an unknown sortBy", async () => {
     const { status, body } = await authGet(app, "/api/payouts/my/funded?sortBy=notAColumn&sortOrder=asc", userCookie);
     expect(status).toBe(200);
-    const env = body as Record<string, any>;
+    const env = body as ApiEnvelope;
     // Default is activatedAt desc — newest first
     const activatedAts = (env.accounts as Array<Record<string, number>>).map((a) => a.activatedAt);
     for (let i = 1; i < activatedAts.length; i++) {

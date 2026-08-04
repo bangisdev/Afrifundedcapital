@@ -105,7 +105,7 @@ export function useFlutterwavePayment() {
         // Step 4: Open Flutterwave checkout modal
         await openFlutterwaveInline({
           ...flutterwaveConfig,
-          callback: async (response: any) => {
+          callback: async (response: FlutterwaveCallbackResponse) => {
             setState({ status: "verifying" });
             try {
               const verifyRes = await fetch("/api/payments/verify", {
@@ -162,6 +162,11 @@ export function useFlutterwavePayment() {
 /**
  * Opens the Flutterwave Inline checkout modal by dynamically loading the SDK script.
  */
+interface FlutterwaveCallbackResponse {
+  transaction_id?: string;
+  flw_ref?: string;
+}
+
 interface FlutterwaveCheckoutInstance {
   (config: {
     public_key: string;
@@ -172,7 +177,7 @@ interface FlutterwaveCheckoutInstance {
     customer: { email: string; phone_number: string; name: string };
     customizations: { title: string; description: string; logo: string };
     meta?: Record<string, unknown>;
-    callback: (response: { transaction_id?: string; flw_ref?: string }) => void;
+    callback: (response: FlutterwaveCallbackResponse) => void;
     onclose: () => void;
   }): void;
 }

@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { Hono } from "hono";
 import {
+  ApiEnvelope,
   buildTestApp,
   cleanupTestDb,
   signUp,
@@ -65,7 +66,7 @@ describe("GET /api/wallets/transactions", () => {
   it("returns empty envelope for new wallet", async () => {
     const { status, body } = await authGet(app, "/api/wallets/transactions", userCookie);
     expect(status).toBe(200);
-    const env = body as Record<string, any>;
+    const env = body as ApiEnvelope;
     expect(Array.isArray(env.transactions)).toBe(true);
     expect(env.transactions.length).toBe(0);
     expect(env.total).toBe(0);
@@ -84,7 +85,7 @@ describe("GET /api/wallets/transactions", () => {
   it("paginates transactions server-side", async () => {
     // Get the wallet + user id, then seed 15 transactions directly.
     const { body: walletBody } = await authGet(app, "/api/wallets/my", userCookie);
-    const wallet = walletBody as Record<string, any>;
+    const wallet = walletBody as ApiEnvelope;
     const db = getTestDb();
     const now = Date.now();
     for (let i = 1; i <= 15; i++) {
@@ -103,7 +104,7 @@ describe("GET /api/wallets/transactions", () => {
     }
 
     const page1 = (await authGet(app, "/api/wallets/transactions?page=1&pageSize=10", userCookie))
-      .body as Record<string, any>;
+      .body as ApiEnvelope;
     expect(page1.transactions.length).toBe(10);
     expect(page1.total).toBe(15);
     expect(page1.page).toBe(1);
@@ -113,16 +114,16 @@ describe("GET /api/wallets/transactions", () => {
     expect(String(page1.transactions[0].description)).toBe("Transaction 1");
 
     const page2 = (await authGet(app, "/api/wallets/transactions?page=2&pageSize=10", userCookie))
-      .body as Record<string, any>;
+      .body as ApiEnvelope;
     expect(page2.transactions.length).toBe(5);
     expect(page2.totalPages).toBe(2);
   });
 
   it("filters transactions by type", async () => {
     const { body } = await authGet(app, "/api/wallets/transactions?type=deposit&pageSize=50", userCookie);
-    const env = body as Record<string, any>;
+    const env = body as ApiEnvelope;
     expect(env.transactions.length).toBeGreaterThan(0);
-    expect(env.transactions.every((t: any) => t.type === "deposit")).toBe(true);
+    expect(env.transactions.every((t: ApiEnvelope) => t.type === "deposit")).toBe(true);
     // Stats remain unfiltered
     expect(env.stats.total).toBe(15);
   });
@@ -133,9 +134,9 @@ describe("GET /api/wallets/transactions", () => {
       `/api/wallets/transactions?search=${encodeURIComponent("Transaction 1")}&pageSize=50`,
       userCookie,
     );
-    const env = body as Record<string, any>;
+    const env = body as ApiEnvelope;
     expect(env.transactions.length).toBeGreaterThan(0);
-    expect(env.transactions.every((t: any) => String(t.description).includes("Transaction 1"))).toBe(true);
+    expect(env.transactions.every((t: ApiEnvelope) => String(t.description).includes("Transaction 1"))).toBe(true);
   });
 });
 

@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { Hono } from "hono";
 import {
+  ApiEnvelope,
   buildTestApp,
   cleanupTestDb,
   signUp,
@@ -207,8 +208,8 @@ describe("POST /api/coupons/redeem", () => {
 
     // The redemption now shows real savings in My Coupons
     const { body: myBody } = await authGet(app, "/api/coupons/my", userCookie);
-    const myCoupons = (myBody as Record<string, any>).coupons;
-    const redemption = myCoupons.find((r: any) => r.paymentId === 99999);
+    const myCoupons = (myBody as ApiEnvelope).coupons;
+    const redemption = myCoupons.find((r: ApiEnvelope) => r.paymentId === 99999);
     expect(redemption).toBeTruthy();
     expect(redemption.discountAmount).toBe(7500);
     expect(redemption.originalAmount).toBe(50000);
@@ -269,7 +270,7 @@ describe("GET /api/coupons/my", () => {
     });
     const { status, body } = await authGet(app, "/api/coupons/my", freshCookie);
     expect(status).toBe(200);
-    const env = body as Record<string, any>;
+    const env = body as ApiEnvelope;
     expect(Array.isArray(env.coupons)).toBe(true);
     expect(env.coupons.length).toBe(0);
     expect(env.total).toBe(0);
@@ -311,7 +312,7 @@ describe("GET /api/coupons/my", () => {
 
     const { status, body } = await authGet(app, "/api/coupons/my?sortBy=discountAmount&sortOrder=desc", userCookie);
     expect(status).toBe(200);
-    const env = body as Record<string, any>;
+    const env = body as ApiEnvelope;
     expect(env.total).toBeGreaterThanOrEqual(2);
     expect(env.coupons.length).toBeGreaterThanOrEqual(2);
 

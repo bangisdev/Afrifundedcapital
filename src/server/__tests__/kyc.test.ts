@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { Hono } from "hono";
 import {
+  ApiEnvelope,
   buildTestApp,
   cleanupTestDb,
   signUp,
@@ -182,7 +183,7 @@ describe("GET /api/kyc/my", () => {
     const { status, body } = await authGet(app, "/api/kyc/my", userCookie);
 
     expect(status).toBe(200);
-    const env = body as Record<string, any>;
+    const env = body as ApiEnvelope;
     expect(Array.isArray(env.documents)).toBe(true);
     expect(env.documents.length).toBeGreaterThanOrEqual(2);
     expect(env.total).toBeGreaterThanOrEqual(2);
@@ -203,7 +204,7 @@ describe("GET /api/kyc/my", () => {
   it("sorts documents by documentType asc", async () => {
     const { status, body } = await authGet(app, "/api/kyc/my?sortBy=documentType&sortOrder=asc", userCookie);
     expect(status).toBe(200);
-    const env = body as Record<string, any>;
+    const env = body as ApiEnvelope;
     const types = (env.documents as Array<Record<string, string>>).map((d) => d.documentType);
     const sorted = [...types].sort((a, b) => a.localeCompare(b));
     expect(types).toEqual(sorted);
@@ -213,7 +214,7 @@ describe("GET /api/kyc/my", () => {
   it("sorts documents by documentType desc", async () => {
     const { status, body } = await authGet(app, "/api/kyc/my?sortBy=documentType&sortOrder=desc", userCookie);
     expect(status).toBe(200);
-    const env = body as Record<string, any>;
+    const env = body as ApiEnvelope;
     const types = (env.documents as Array<Record<string, string>>).map((d) => d.documentType);
     const sortedDesc = [...types].sort((a, b) => b.localeCompare(a));
     expect(types).toEqual(sortedDesc);
@@ -222,7 +223,7 @@ describe("GET /api/kyc/my", () => {
   it("falls back to the default sort column for an unknown sortBy", async () => {
     const { status, body } = await authGet(app, "/api/kyc/my?sortBy=notAColumn&sortOrder=asc", userCookie);
     expect(status).toBe(200);
-    const env = body as Record<string, any>;
+    const env = body as ApiEnvelope;
     // Fallback column is uploadedAt, and sortOrder=asc is respected
     const uploadedAts = (env.documents as Array<Record<string, number>>).map((d) => d.uploadedAt);
     const sortedAsc = [...uploadedAts].sort((a, b) => a - b);
@@ -260,7 +261,7 @@ describe("POST /api/kyc/admin/:id/approve", () => {
   it("approves a pending document", async () => {
     // Get the document ID
     const { body: docs } = await authGet(app, "/api/kyc/my", userCookie);
-    const docList = (docs as Record<string, any>).documents as Array<Record<string, unknown>>;
+    const docList = (docs as ApiEnvelope).documents as Array<Record<string, unknown>>;
     const passportDoc = docList.find((d) => d.documentType === "passport");
     expect(passportDoc).toBeTruthy();
 
@@ -302,7 +303,7 @@ describe("POST /api/kyc/admin/:id/approve", () => {
 describe("POST /api/kyc/admin/:id/reject", () => {
   it("rejects a document with a reason", async () => {
     const { body: docs } = await authGet(app, "/api/kyc/my", userCookie);
-    const docList = (docs as Record<string, any>).documents as Array<Record<string, unknown>>;
+    const docList = (docs as ApiEnvelope).documents as Array<Record<string, unknown>>;
     const proofDoc = docList.find((d) => d.documentType === "proof_of_address");
     expect(proofDoc).toBeTruthy();
 
@@ -362,7 +363,7 @@ describe("DELETE /api/kyc/my/:id", () => {
 
   it("cannot delete an approved document", async () => {
     const { body: docs } = await authGet(app, "/api/kyc/my", userCookie);
-    const docList = (docs as Record<string, any>).documents as Array<Record<string, unknown>>;
+    const docList = (docs as ApiEnvelope).documents as Array<Record<string, unknown>>;
     const approvedDoc = docList.find((d) => d.status === "approved");
 
     if (approvedDoc) {
@@ -389,14 +390,14 @@ describe("DELETE /api/kyc/my/:id", () => {
 describe("GET /api/kyc/my/:id/history", () => {
   it("returns the full document timeline (uploaded + review events)", async () => {
     const { body: docs } = await authGet(app, "/api/kyc/my", userCookie);
-    const docList = (docs as Record<string, any>).documents as Array<Record<string, any>>;
+    const docList = (docs as ApiEnvelope).documents as Array<ApiEnvelope>;
     const passportDoc = docList.find((d) => d.documentType === "passport");
     expect(passportDoc).toBeTruthy();
 
     // The passport doc was approved earlier in the suite
     const { status, body } = await authGet(app, `/api/kyc/my/${passportDoc!.id}/history`, userCookie);
     expect(status).toBe(200);
-    const events = (body as Record<string, any>).events as Array<Record<string, any>>;
+    const events = (body as ApiEnvelope).events as Array<ApiEnvelope>;
     expect(events.length).toBeGreaterThanOrEqual(2);
     expect(events.some((e) => e.action === "kyc.uploaded")).toBe(true);
     expect(events.some((e) => e.action === "kyc.approved")).toBe(true);
@@ -410,13 +411,13 @@ describe("GET /api/kyc/my/:id/history", () => {
 
   it("returns the rejection reason in the timeline", async () => {
     const { body: docs } = await authGet(app, "/api/kyc/my", userCookie);
-    const docList = (docs as Record<string, any>).documents as Array<Record<string, any>>;
+    const docList = (docs as ApiEnvelope).documents as Array<ApiEnvelope>;
     const proofDoc = docList.find((d) => d.documentType === "proof_of_address");
     expect(proofDoc).toBeTruthy();
 
     const { status, body } = await authGet(app, `/api/kyc/my/${proofDoc!.id}/history`, userCookie);
     expect(status).toBe(200);
-    const events = (body as Record<string, any>).events as Array<Record<string, any>>;
+    const events = (body as ApiEnvelope).events as Array<ApiEnvelope>;
     const rejected = events.find((e) => e.action === "kyc.rejected");
     expect(rejected).toBeTruthy();
     expect(rejected?.details?.reason).toContain("blurry");
@@ -428,7 +429,7 @@ describe("GET /api/kyc/my/:id/history", () => {
     const other = await signIn(app, { email: "other-kyc@test.com", password: "Secure@123" });
 
     const { body: docs } = await authGet(app, "/api/kyc/my", userCookie);
-    const docList = (docs as Record<string, any>).documents as Array<Record<string, any>>;
+    const docList = (docs as ApiEnvelope).documents as Array<ApiEnvelope>;
     const anyDoc = docList[0];
     expect(anyDoc).toBeTruthy();
 
@@ -438,7 +439,7 @@ describe("GET /api/kyc/my/:id/history", () => {
 
   it("returns 401 without authentication", async () => {
     const { body: docs } = await authGet(app, "/api/kyc/my", userCookie);
-    const docList = (docs as Record<string, any>).documents as Array<Record<string, any>>;
+    const docList = (docs as ApiEnvelope).documents as Array<ApiEnvelope>;
     const anyDoc = docList[0];
     expect(anyDoc).toBeTruthy();
 

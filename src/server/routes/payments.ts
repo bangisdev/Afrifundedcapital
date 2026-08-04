@@ -10,6 +10,22 @@ import { writeAuditLog, redactSetting } from "../lib/audit";
 
 const app = new Hono();
 
+/** Shape of a Flutterwave transaction verification response. */
+interface FlutterwaveVerifyResponse {
+  status?: string;
+  message?: string;
+  data?: {
+    status?: string;
+    amount?: number;
+    currency?: string;
+    charged_amount?: number;
+    flw_ref?: string;
+    processor_response?: string;
+    payment_type?: string;
+    customer?: { email?: string; name?: string } | null;
+  } | null;
+}
+
 // ─── Flutterwave Config ────────────────────────────────
 app.get("/flutterwave-config", requireAuth, (c) => {
   const db = getDb();
@@ -237,13 +253,13 @@ app.post("/verify", requireAuth, async (c) => {
       if (config.secretKey) secretKey = config.secretKey;
     }
   } catch {}
-  let verificationResult: any;
+  let verificationResult: FlutterwaveVerifyResponse;
 
   try {
     const response = await fetch(`https://api.flutterwave.com/v3/transactions/${transactionId}/verify`, {
       headers: { Authorization: `Bearer ${secretKey}` },
     });
-    verificationResult = await response.json();
+    verificationResult = (await response.json()) as FlutterwaveVerifyResponse;
   } catch {
     return c.json({ error: "Failed to verify with Flutterwave" }, 500);
   }
@@ -924,7 +940,8 @@ app.post("/admin/:id/refund", requireAuth, requireAdmin, async (c) => {
           body: JSON.stringify({}),
         },
       );
-      const result: any = await response.json();
+      const result: { status?: string; message?: string; data?: { amount_refunded?: number } | null } =
+        (await response.json()) as { status?: string; message?: string; data?: { amount_refunded?: number } | null };
 
       // Log every gateway attempt for the webhook/refund trail
       db.insert(paymentLogs).values({
@@ -948,8 +965,8 @@ app.post("/admin/:id/refund", requireAuth, requireAdmin, async (c) => {
         };
       }
     }
-  } catch (err: any) {
-    refundGateway = { status: "failed", error: err?.message || "Refund API request failed" };
+  } catch (err: unknown) {
+    refundGateway = { status: "failed", error: err instanceof Error ? err.message : "Refund API request failed" };
   }
 
   db.update(payments).set({ status: "refunded", completedAt: now }).where(eq(payments.id, id)).run();

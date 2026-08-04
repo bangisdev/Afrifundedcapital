@@ -6,6 +6,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import type { Hono } from "hono";
 import {
+  ApiEnvelope,
   buildTestApp,
   cleanupTestDb,
   signUp,
@@ -80,7 +81,7 @@ describe("GET /api/trading/mt5", () => {
   it("returns MT5 accounts for the user", async () => {
     const { status, body } = await authGet(app, "/api/trading/mt5", userCookie);
     expect(status).toBe(200);
-    const env = body as Record<string, any>;
+    const env = body as ApiEnvelope;
     expect(Array.isArray(env.accounts)).toBe(true);
     expect(env.accounts.length).toBeGreaterThanOrEqual(1);
     expect(env.total).toBeGreaterThanOrEqual(1);
@@ -137,14 +138,14 @@ describe("GET /api/trading/mt5", () => {
         userCookie
       );
       expect(status).toBe(200);
-      const env = body as Record<string, any>;
+      const env = body as ApiEnvelope;
       const bals = (env.accounts as Array<Record<string, number>>).map((a) => a.balance);
       for (let i = 1; i < bals.length; i++) {
         expect(bals[i - 1]).toBeLessThanOrEqual(bals[i]);
       }
 
       const descRes = await authGet(app, "/api/trading/mt5?sortBy=balance&sortOrder=desc", userCookie);
-      const descEnv = descRes.body as Record<string, any>;
+      const descEnv = descRes.body as ApiEnvelope;
       const descBals = (descEnv.accounts as Array<Record<string, number>>).map((a) => a.balance);
       for (let i = 1; i < descBals.length; i++) {
         expect(descBals[i - 1]).toBeGreaterThanOrEqual(descBals[i]);
@@ -160,7 +161,7 @@ describe("GET /api/trading/mt5", () => {
   it("falls back to the default sort for an unknown sortBy", async () => {
     const { status, body } = await authGet(app, "/api/trading/mt5?sortBy=notAColumn&sortOrder=asc", userCookie);
     expect(status).toBe(200);
-    const env = body as Record<string, any>;
+    const env = body as ApiEnvelope;
     // Default is createdAt desc — newest first
     const createdAts = (env.accounts as Array<Record<string, number>>).map((a) => a.createdAt);
     for (let i = 1; i < createdAts.length; i++) {
