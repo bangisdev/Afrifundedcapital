@@ -73,7 +73,7 @@ vi.mock("@/hooks/use-api", () => ({
     }
     return { data: base, isLoading: false };
   }),
-  useApiMutation: vi.fn((_method: string, _path: string, _onSuccess?: any) => {
+  useApiMutation: vi.fn((_method: string, path: string, _onSuccess?: any) => {
     let resolvePromise: (value: any) => void;
     new Promise((resolve) => { resolvePromise = resolve; });
 

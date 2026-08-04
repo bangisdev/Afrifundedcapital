@@ -189,7 +189,7 @@ describe("Profile Page", () => {
         signOut: vi.fn() as any,
         refetch: vi.fn() as any,
       });
-      render(<Profile />);
+      const { container } = render(<Profile />);
       expect(container.querySelector(".animate-spin")).toBeTruthy();
     });
   });
@@ -590,7 +590,7 @@ describe("Profile Page", () => {
     it("creates hidden file input for each document type", async () => {
       const user = userEvent.setup();
       setQueryData({});
-      render(<Profile />);
+      const { container } = render(<Profile />);
       await user.click(screen.getByTestId("tab-trigger-kyc"));
       const fileInputs = container.querySelectorAll('input[type="file"]');
       expect(fileInputs.length).toBe(5);
@@ -599,7 +599,7 @@ describe("Profile Page", () => {
     it("file inputs accept correct file types", async () => {
       const user = userEvent.setup();
       setQueryData({});
-      render(<Profile />);
+      const { container } = render(<Profile />);
       await user.click(screen.getByTestId("tab-trigger-kyc"));
       const fileInputs = container.querySelectorAll('input[type="file"]');
       fileInputs.forEach((input) => {
@@ -613,7 +613,7 @@ describe("Profile Page", () => {
     it("rejects invalid file types with toast error", async () => {
       const user = userEvent.setup();
       setQueryData({});
-      render(<Profile />);
+      const { container } = render(<Profile />);
       await user.click(screen.getByTestId("tab-trigger-kyc"));
       const fileInputs = container.querySelectorAll('input[type="file"]');
       const invalidFile = new File(["test"], "test.exe", { type: "application/x-msdownload" });
@@ -627,7 +627,7 @@ describe("Profile Page", () => {
     it("rejects oversized files with toast error", async () => {
       const user = userEvent.setup();
       setQueryData({});
-      render(<Profile />);
+      const { container } = render(<Profile />);
       await user.click(screen.getByTestId("tab-trigger-kyc"));
       const fileInputs = container.querySelectorAll('input[type="file"]');
       const bigFile = new File(["x".repeat(6 * 1024 * 1024)], "big.jpg", { type: "image/jpeg" });
@@ -641,7 +641,7 @@ describe("Profile Page", () => {
     it("accepts valid JPEG file and calls upload mutation", async () => {
       const user = userEvent.setup();
       setQueryData({});
-      render(<Profile />);
+      const { container } = render(<Profile />);
       await user.click(screen.getByTestId("tab-trigger-kyc"));
       const fileInputs = container.querySelectorAll('input[type="file"]');
       const validFile = new File(["image-data"], "passport.jpg", { type: "image/jpeg" });
@@ -655,7 +655,7 @@ describe("Profile Page", () => {
     it("accepts valid PDF file", async () => {
       const user = userEvent.setup();
       setQueryData({});
-      render(<Profile />);
+      const { container } = render(<Profile />);
       await user.click(screen.getByTestId("tab-trigger-kyc"));
       const fileInputs = container.querySelectorAll('input[type="file"]');
       const validPdf = new File(["pdf-data"], "doc.pdf", { type: "application/pdf" });
@@ -758,7 +758,7 @@ describe("Profile Page", () => {
         isLoading: false, isAuthenticated: true, user: null as any,
         error: null, signIn: vi.fn() as any, signOut: vi.fn() as any, refetch: vi.fn() as any,
       });
-      render(<Profile />);
+      const { container } = render(<Profile />);
       expect(container.querySelector(".animate-spin")).toBeTruthy();
 
       vi.mocked(useAuth).mockReturnValue({

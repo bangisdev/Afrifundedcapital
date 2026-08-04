@@ -279,7 +279,7 @@ describe("GET /api/trading/challenge/:id/metrics (after seeding)", () => {
     const challenge = ((challenges as Record<string, unknown>).challenges as Record<string, unknown>[])[0];
     if (!challenge) return;
 
-    const { status } = await authGet(app, `/api/trading/challenge/${challenge.id}/metrics`, userCookie);
+    const { status, body } = await authGet(app, `/api/trading/challenge/${challenge.id}/metrics`, userCookie);
     expect(status).toBe(200);
     const metrics = body as Record<string, unknown> | null;
     if (metrics) {
