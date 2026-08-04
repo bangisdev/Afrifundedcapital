@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { Button } from "@/components/ui/button";
-import { Bell, Check, CheckCheck, X, Award, AlertTriangle, Shield, CreditCard, MessageSquare, TrendingDown, Clock, ChevronRight } from "lucide-react";
+import { Bell, CheckCheck, Award, AlertTriangle, Shield, CreditCard, MessageSquare, Clock, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Notification {
