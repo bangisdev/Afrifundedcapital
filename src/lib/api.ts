@@ -37,7 +37,7 @@ async function request<T>(
     try {
       const err = await res.json();
       message = err.message || err.error || message;
-    } catch {}
+    } catch { /* non-critical */ }
     throw new ApiError(res.status, message);
   }
 

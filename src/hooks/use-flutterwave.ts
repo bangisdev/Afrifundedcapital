@@ -40,14 +40,14 @@ export function useFlutterwavePayment() {
               flwPublicKey = flwSetting.value.publicKey;
             }
           }
-        } catch {}
+        } catch { /* non-critical */ }
         // Fallback: try the direct config endpoint
         if (!flwPublicKey) {
           try {
             const configRes = await fetch("/api/payments/flutterwave-config", { credentials: "include" });
             const config = await configRes.json();
             if (config.publicKey) flwPublicKey = config.publicKey;
-          } catch {}
+          } catch { /* non-critical */ }
         }
         if (!flwPublicKey) {
           setState({ status: "error", message: "Flutterwave is not configured. Please add your API key." });

@@ -42,7 +42,7 @@ app.get("/flutterwave-config", requireAuth, (c) => {
       if (config.provider) provider = config.provider;
       if (config.isEnabled !== undefined) isEnabled = config.isEnabled;
     }
-  } catch {}
+  } catch { /* non-critical */ }
   
   return c.json({ publicKey, provider, isEnabled });
 });
@@ -65,7 +65,7 @@ app.post("/admin/flutterwave-config", requireAuth, requireAdmin, async (c) => {
   if (existing) {
     try {
       oldConfig = JSON.parse(existing.value);
-    } catch {}
+    } catch { /* non-critical */ }
     db.update(settings).set({ value: JSON.stringify(config) }).where(eq(settings.key, "flutterwave_config")).run();
   } else {
     db.insert(settings).values({
@@ -126,7 +126,7 @@ app.get("/admin/flutterwave-config", requireAuth, requireAdmin, (c) => {
         isEnabled: config.isEnabled !== undefined ? config.isEnabled : true,
       });
     }
-  } catch {}
+  } catch { /* non-critical */ }
   
   // Fall back to env vars
   return c.json({
@@ -148,7 +148,7 @@ app.post("/initiate", requireAuth, async (c) => {
   // coupon usage (non-critical — failures are ignored).
   try {
     voidStaleRedemptions(db);
-  } catch {}
+  } catch { /* non-critical */ }
 
   // Validate and apply coupon if provided
   let finalAmount = body.amount;
@@ -223,7 +223,7 @@ app.post("/initiate", requireAuth, async (c) => {
       if (coupon) {
         db.update(coupons).set({ currentUses: (coupon.currentUses || 0) + 1 }).where(eq(coupons.id, coupon.id)).run();
       }
-    } catch {}
+    } catch { /* non-critical */ }
   }
 
   return c.json({ paymentId: payment.id, reference, finalAmount, discount });
@@ -252,7 +252,7 @@ app.post("/verify", requireAuth, async (c) => {
       const config = JSON.parse(setting.value);
       if (config.secretKey) secretKey = config.secretKey;
     }
-  } catch {}
+  } catch { /* non-critical */ }
   let verificationResult: FlutterwaveVerifyResponse;
 
   try {
@@ -284,7 +284,7 @@ app.post("/verify", requireAuth, async (c) => {
     // and its usage counter (idempotent).
     try {
       ensureRedemptionForPayment(db, payment);
-    } catch {}
+    } catch { /* non-critical */ }
 
     // Store Flutterwave transaction
     db.insert(flutterwaveTransactions).values({
@@ -424,7 +424,7 @@ app.post("/verify", requireAuth, async (c) => {
   // or show up in the user's My Coupons list.
   try {
     voidRedemptionForPayment(db, payment.id);
-  } catch {}
+  } catch { /* non-critical */ }
 
   return c.json({ status: "failed", message: "Payment verification failed" });
 });
@@ -443,7 +443,7 @@ app.post("/webhook/flutterwave", async (c) => {
       const config = JSON.parse(setting.value);
       if (config.secretHash) secretHash = config.secretHash;
     }
-  } catch {}
+  } catch { /* non-critical */ }
   const signature = c.req.header("verif-hash") || "";
   if (secretHash && signature !== secretHash) {
     return c.json({ error: "Invalid signature" }, 401);
@@ -481,7 +481,7 @@ app.post("/webhook/flutterwave", async (c) => {
     // and its usage counter (idempotent).
     try {
       ensureRedemptionForPayment(db, payment);
-    } catch {}
+    } catch { /* non-critical */ }
 
     // Store Flutterwave transaction
     db.insert(flutterwaveTransactions).values({
@@ -817,7 +817,7 @@ app.post("/admin/cleanup-stale", requireAuth, requireAdmin, (c) => {
 app.post("/admin/test-webhook", requireAuth, requireAdmin, async (c) => {
   const db = getDb();
   let body: Record<string, unknown> = {};
-  try { body = await c.req.json(); } catch {}
+  try { body = await c.req.json(); } catch { /* non-critical */ }
 
   // Resolve the currently configured secret hash so the sample is signed
   // exactly the way Flutterwave's dashboard would sign a real webhook.
@@ -828,7 +828,7 @@ app.post("/admin/test-webhook", requireAuth, requireAdmin, async (c) => {
       const config = JSON.parse(setting.value);
       if (config.secretHash) secretHash = config.secretHash;
     }
-  } catch {}
+  } catch { /* non-critical */ }
 
   const now = Date.now();
   let paymentId: number | null = null;
@@ -914,7 +914,7 @@ app.post("/admin/:id/refund", requireAuth, requireAdmin, async (c) => {
         const config = JSON.parse(setting.value);
         if (config.secretKey) secretKey = config.secretKey;
       }
-    } catch {}
+    } catch { /* non-critical */ }
 
     // Find the Flutterwave transaction stored for this payment
     const flwTx = db
@@ -1017,7 +1017,7 @@ app.post("/admin/:id/refund", requireAuth, requireAdmin, async (c) => {
   let redemptionVoided = false;
   try {
     redemptionVoided = voidRedemptionForPayment(db, id);
-  } catch {}
+  } catch { /* non-critical */ }
 
   // Notify the user so they know the challenge was deactivated.
   let userNotified = false;
@@ -1032,7 +1032,7 @@ app.post("/admin/:id/refund", requireAuth, requireAdmin, async (c) => {
       });
       userNotified = true;
     }
-  } catch {}
+  } catch { /* non-critical */ }
 
   // Record the admin action in the audit log (who refunded, what changed).
   try {
@@ -1054,7 +1054,7 @@ app.post("/admin/:id/refund", requireAuth, requireAdmin, async (c) => {
       },
       ipAddress: c.req.header("x-forwarded-for") || undefined,
     });
-  } catch {}
+  } catch { /* non-critical */ }
 
   return c.json({
     success: true,
@@ -1137,7 +1137,7 @@ app.post("/admin/:id/resume", requireAuth, requireAdmin, async (c) => {
     const restoreResult = restoreRedemptionIfValid(db, payment);
     redemptionRestored = restoreResult.restored;
     if (restoreResult.reason) redemptionRestoreReason = restoreResult.reason;
-  } catch {}
+  } catch { /* non-critical */ }
 
   // Notify the user that their challenge is back.
   let userNotified = false;
@@ -1152,7 +1152,7 @@ app.post("/admin/:id/resume", requireAuth, requireAdmin, async (c) => {
       });
       userNotified = true;
     }
-  } catch {}
+  } catch { /* non-critical */ }
 
   // Record the admin action in the audit log (who resumed, what changed).
   try {
@@ -1173,7 +1173,7 @@ app.post("/admin/:id/resume", requireAuth, requireAdmin, async (c) => {
       },
       ipAddress: c.req.header("x-forwarded-for") || undefined,
     });
-  } catch {}
+  } catch { /* non-critical */ }
 
   return c.json({
     success: true,

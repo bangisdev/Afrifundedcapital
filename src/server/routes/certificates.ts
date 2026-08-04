@@ -42,7 +42,7 @@ app.post("/generate", requireAuth, async (c) => {
   const userId = c.get("userId");
   const db = getDb();
   let body: Record<string, unknown> = {};
-  try { body = await c.req.json(); } catch {}
+  try { body = await c.req.json(); } catch { /* non-critical */ }
 
   const challengeId = body?.challengeId as number;
   const certType = (body?.type as string) || "phase_1";
@@ -116,7 +116,7 @@ app.post("/generate-on-completion", requireAuth, async (c) => {
   const userId = c.get("userId");
   const db = getDb();
   let body: Record<string, unknown> = {};
-  try { body = await c.req.json(); } catch {}
+  try { body = await c.req.json(); } catch { /* non-critical */ }
 
   const challengeId = body?.challengeId as number;
   if (!challengeId) {
@@ -627,7 +627,7 @@ app.get("/admin/all", requireAuth, requireAdmin, (c) => {
 app.post("/admin/issue", requireAuth, requireAdmin, async (c) => {
   const db = getDb();
   let body: Record<string, unknown> = {};
-  try { body = await c.req.json(); } catch {}
+  try { body = await c.req.json(); } catch { /* non-critical */ }
 
   const { challengeId, type } = body as { challengeId: number; type: string };
   if (!challengeId || !type) {

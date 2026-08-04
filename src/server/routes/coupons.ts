@@ -162,7 +162,7 @@ app.get("/my", requireAuth, (c) => {
   // lists real purchases (non-critical — failures are ignored).
   try {
     voidStaleRedemptions(db);
-  } catch {}
+  } catch { /* non-critical */ }
 
   const qPage = Number(c.req.query("page") || 1);
   const qPageSize = Number(c.req.query("pageSize") || 10);

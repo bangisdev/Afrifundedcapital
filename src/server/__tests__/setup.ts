@@ -136,7 +136,7 @@ export async function buildTestApp(): Promise<Hono> {
   // ── Auth: Sign Up ────────────────────────────────────────────
   app.post("/api/auth/sign-up/email", async (c) => {
     let body: Record<string, unknown> = {};
-    try { body = await c.req.json(); } catch {}
+    try { body = await c.req.json(); } catch { /* non-critical */ }
 
     const name = (body.name as string)?.trim();
     const email = (body.email as string)?.trim().toLowerCase();
@@ -186,7 +186,7 @@ export async function buildTestApp(): Promise<Hono> {
   // ── Auth: Sign In ────────────────────────────────────────────
   app.post("/api/auth/sign-in/email", async (c) => {
     let body: Record<string, unknown> = {};
-    try { body = await c.req.json(); } catch {}
+    try { body = await c.req.json(); } catch { /* non-critical */ }
 
     const email = (body.email as string)?.trim().toLowerCase();
     const password = body.password as string;
@@ -202,13 +202,13 @@ export async function buildTestApp(): Promise<Hono> {
         "SELECT password FROM accounts WHERE user_id = ? AND provider_id = 'email' LIMIT 1"
       ).get(String(user.id)) as { password: string } | undefined;
       if (row?.password) passwordHash = row.password;
-    } catch {}
+    } catch { /* non-critical */ }
 
     if (!passwordHash) {
       try {
         const row = sqlite.prepare("SELECT password FROM users WHERE id = ?").get(user.id) as { password?: string } | undefined;
         if (row?.password) passwordHash = row.password;
-      } catch {}
+      } catch { /* non-critical */ }
     }
 
     if (!passwordHash) return c.json({ error: "Invalid email or password" }, 401);
@@ -262,7 +262,7 @@ export async function buildTestApp(): Promise<Hono> {
     const cookies = parseCookies(cookieHeader);
     const token = cookies[COOKIE_NAME];
     if (token) {
-      try { db.delete(schema.sessions).where(eq(schema.sessions.token, token)).run(); } catch {}
+      try { db.delete(schema.sessions).where(eq(schema.sessions.token, token)).run(); } catch { /* non-critical */ }
     }
     c.header("Set-Cookie", `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
     return c.json({ success: true });
@@ -271,7 +271,7 @@ export async function buildTestApp(): Promise<Hono> {
   // ── Auth: Promote Admin ──────────────────────────────────────
   app.post("/api/auth/promote-admin", async (c) => {
     let body: Record<string, unknown> = {};
-    try { body = await c.req.json(); } catch {}
+    try { body = await c.req.json(); } catch { /* non-critical */ }
 
     const userId = body.userId as number;
     if (!userId) return c.json({ error: "userId is required" }, 400);
@@ -341,7 +341,7 @@ export function cleanupTestDb() {
       const p = TEST_DB_PATH + ext;
       if (fs.existsSync(p)) fs.unlinkSync(p);
     }
-  } catch {}
+  } catch { /* non-critical */ }
   dbInstance = null;
 }
 

@@ -150,7 +150,7 @@ app.get("/api/payments/flutterwave-config", (c) => {
       const config = JSON.parse(setting.value);
       if (config.publicKey) publicKey = config.publicKey;
     }
-  } catch {}
+  } catch { /* non-critical */ }
   return c.json({ publicKey });
 });
 
@@ -162,7 +162,7 @@ app.get("/api/payments/flutterwave-config", (c) => {
 app.post("/api/auth/sign-up/email", signUpRateLimit, async (c) => {
   try {
     let body: Record<string, unknown> = {};
-    try { body = await c.req.json(); } catch {}
+    try { body = await c.req.json(); } catch { /* non-critical */ }
 
     const name = (body.name as string)?.trim();
     const email = (body.email as string)?.trim().toLowerCase();
@@ -236,7 +236,7 @@ app.post("/api/auth/sign-up/email", signUpRateLimit, async (c) => {
 app.post("/api/auth/sign-in/email", signInRateLimit, loginAccountLockout, async (c) => {
   try {
     let body: Record<string, unknown> = {};
-    try { body = await c.req.json(); } catch {}
+    try { body = await c.req.json(); } catch { /* non-critical */ }
 
     const email = (body.email as string)?.trim().toLowerCase();
     const password = body.password as string;
@@ -271,7 +271,7 @@ app.post("/api/auth/sign-in/email", signInRateLimit, loginAccountLockout, async 
         const sqlite = getSqlite();
         const row = sqlite.prepare("SELECT password FROM users WHERE id = ?").get(user.id) as { password?: string } | undefined;
         if (row?.password) passwordHash = row.password;
-      } catch {}
+      } catch { /* non-critical */ }
     }
 
     if (!passwordHash) {
@@ -322,7 +322,7 @@ app.post("/api/auth/reset-admin", async (c) => {
   } catch { return c.json({ error: "Auth check failed" }, 401); }
   try {
     let body: Record<string, unknown> = {};
-    try { body = await c.req.json(); } catch {}
+    try { body = await c.req.json(); } catch { /* non-critical */ }
 
     const email = (body.email as string) || "admin@afrifundedcapital.com";
     const password = (body.password as string) || "Admin@123456";
@@ -371,7 +371,7 @@ app.post("/api/auth/reset-admin", async (c) => {
       sqlite.prepare(
         "INSERT OR IGNORE INTO wallets (user_id, balance, referral_balance, bonus_balance, currency, created_at, updated_at) VALUES (?, 0, 0, 0, 'NGN', ?, ?)"
       ).run(user.id, now, now);
-    } catch {}
+    } catch { /* non-critical */ }
 
     return c.json({
       success: true,
@@ -388,7 +388,7 @@ app.post("/api/auth/reset-admin", async (c) => {
 app.post("/api/auth/promote-admin", promoteAdminRateLimit, async (c) => {
   try {
     let body: Record<string, unknown> = {};
-    try { body = await c.req.json(); } catch {}
+    try { body = await c.req.json(); } catch { /* non-critical */ }
 
     const userId = body.userId as number;
     if (!userId) return c.json({ error: "userId is required" }, 400);
@@ -486,7 +486,7 @@ app.post("/api/auth/sign-out", (c) => {
       try {
         const db = getDb();
         db.delete(sessions).where(eq(sessions.token, token)).run();
-      } catch {}
+      } catch { /* non-critical */ }
     }
 
     c.header("Set-Cookie", `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
@@ -513,7 +513,7 @@ app.post("/api/auth/cleanup-orphan", async (c) => {
   } catch { return c.json({ error: "Auth check failed" }, 401); }
   try {
     let body: Record<string, unknown> = {};
-    try { body = await c.req.json(); } catch {}
+    try { body = await c.req.json(); } catch { /* non-critical */ }
 
     const email = (body.email as string)?.trim().toLowerCase();
     const action = (body.action as string) || "reset-password"; // "reset-password" or "delete"
@@ -584,7 +584,7 @@ app.post("/api/auth/nuke-duplicate", async (c) => {
   } catch { return c.json({ error: "Auth check failed" }, 401); }
   try {
     let body: Record<string, unknown> = {};
-    try { body = await c.req.json(); } catch {}
+    try { body = await c.req.json(); } catch { /* non-critical */ }
 
     const keepEmail = (body.email as string)?.trim().toLowerCase() || "admin@afrifundedcapital.com";
     const sqlite = (await import("./db")).getSqlite();
@@ -636,7 +636,7 @@ app.post("/api/auth/delete-user", async (c) => {
     }
 
     let body: Record<string, unknown> = {};
-    try { body = await c.req.json(); } catch {}
+    try { body = await c.req.json(); } catch { /* non-critical */ }
 
     const email = (body.email as string)?.trim().toLowerCase();
     if (!email) return c.json({ error: "Email is required" }, 400);
@@ -692,7 +692,7 @@ app.put("/api/auth/update-user", async (c) => {
     if (!session) return c.json({ error: "Invalid session" }, 401);
 
     let body: Record<string, unknown> = {};
-    try { body = await c.req.json(); } catch {}
+    try { body = await c.req.json(); } catch { /* non-critical */ }
 
     const allowedFields = [
       "name", "tradingExperience", "country", "timezone",
@@ -718,7 +718,7 @@ app.put("/api/auth/update-user", async (c) => {
         const { getSqlite } = await import("./db");
         const sqlite = getSqlite();
         sqlite.prepare("UPDATE users SET role = ?, updated_at = ? WHERE id = ?").run(updates.role, Date.now(), session.userId);
-      } catch {}
+      } catch { /* non-critical */ }
     }
 
     return c.json({ success: true });

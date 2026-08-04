@@ -20,7 +20,7 @@ export const authRouter = new Hono();
 // ─── POST /api/auth/sign-up/email ──────────────────────────
 authRouter.post("/sign-up/email", async (c) => {
   let body: Record<string, unknown> = {};
-  try { body = await c.req.json(); } catch {}
+  try { body = await c.req.json(); } catch { /* non-critical */ }
 
   const name = (body.name as string)?.trim();
   const email = (body.email as string)?.trim().toLowerCase();
@@ -213,7 +213,7 @@ authRouter.post("/sign-up/email", async (c) => {
 // ─── POST /api/auth/sign-in/email ──────────────────────────
 authRouter.post("/sign-in/email", async (c) => {
   let body: Record<string, unknown> = {};
-  try { body = await c.req.json(); } catch {}
+  try { body = await c.req.json(); } catch { /* non-critical */ }
 
   const email = (body.email as string)?.trim().toLowerCase();
   const password = body.password as string;
@@ -380,7 +380,7 @@ authRouter.put("/update-user", async (c) => {
   if (!session) return c.json({ error: "Invalid session" }, 401);
 
   let body: Record<string, unknown> = {};
-  try { body = await c.req.json(); } catch {}
+  try { body = await c.req.json(); } catch { /* non-critical */ }
 
   // Only allow updating safe fields
   const allowedFields = [

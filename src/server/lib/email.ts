@@ -35,7 +35,7 @@ function getResendClient(): Resend | null {
         return _resend;
       }
     }
-  } catch {}
+  } catch { /* non-critical */ }
 
   // Fall back to environment variable
   const envKey = process.env.RESEND_API_KEY || "";
@@ -56,7 +56,7 @@ function getFromEmail(): string {
       const config = JSON.parse(setting.value);
       if (config.fromEmail) return config.fromEmail;
     }
-  } catch {}
+  } catch { /* non-critical */ }
   return process.env.RESEND_EMAIL_FROM || FROM_EMAIL_FALLBACK;
 }
 

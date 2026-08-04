@@ -25,7 +25,7 @@ app.post("/admin", async (c) => {
   const db = getDb();
 
   let body: Record<string, unknown> = {};
-  try { body = await c.req.json(); } catch {}
+  try { body = await c.req.json(); } catch { /* non-critical */ }
 
   const email = (body.email as string) || "admin@afrifundedcapital.com";
   const password = (body.password as string) || "Admin@123456";
@@ -76,7 +76,7 @@ app.post("/admin", async (c) => {
       sqlite.prepare("DELETE FROM sessions WHERE user_id = ?").run(existing.id);
       sqlite.prepare("DELETE FROM accounts WHERE user_id = ?").run(String(existing.id));
       sqlite.prepare("DELETE FROM wallets WHERE user_id = ?").run(existing.id);
-    } catch {}
+    } catch { /* non-critical */ }
     db.delete(users).where(eq(users.id, existing.id)).run();
   }
 
@@ -319,7 +319,7 @@ app.post("/delete-user", requireAuth, requireAdmin, async (c) => {
   const sqlite = getSqlite();
 
   let body: Record<string, unknown> = {};
-  try { body = await c.req.json(); } catch {}
+  try { body = await c.req.json(); } catch { /* non-critical */ }
 
   const email = (body.email as string)?.trim().toLowerCase();
   if (!email) return c.json({ error: "Email is required" }, 400);

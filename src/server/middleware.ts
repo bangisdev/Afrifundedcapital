@@ -128,7 +128,7 @@ export function accountLockout(opts: {
       const clonedReq = c.req.raw.clone();
       const body = await clonedReq.json() as Record<string, unknown>;
       email = (body.email as string)?.trim().toLowerCase() || null;
-    } catch {}
+    } catch { /* non-critical */ }
 
     if (!email) {
       await next();
