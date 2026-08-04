@@ -1,10 +1,11 @@
 import '@vly-ai/integrations';
 import { Toaster } from "@/components/ui/sonner";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
-import React, { StrictMode, useEffect, lazy, Suspense } from "react";
+import React, { StrictMode, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Route, Routes, useLocation } from "react-router";
+import { BrowserRouter, Route, Routes } from "react-router";
 import { ThemeProvider } from "@/components/theme-provider";
+import { RouteLoading, RouteSyncer } from "@/components/route-utils";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "./index.css";
 
@@ -24,14 +25,6 @@ const queryClient = new QueryClient({
     },
   },
 });
-
-function RouteLoading() {
-  return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-pulse text-muted-foreground text-sm">Loading…</div>
-    </div>
-  );
-}
 
 class ToolbarErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -84,29 +77,6 @@ class RootErrorBoundary extends React.Component<
     }
     return this.props.children;
   }
-}
-
-function RouteSyncer() {
-  const location = useLocation();
-  useEffect(() => {
-    window.parent.postMessage(
-      { type: "iframe-route-change", path: location.pathname },
-      "*",
-    );
-  }, [location.pathname]);
-
-  useEffect(() => {
-    function handleMessage(event: MessageEvent) {
-      if (event.data?.type === "navigate") {
-        if (event.data.direction === "back") window.history.back();
-        if (event.data.direction === "forward") window.history.forward();
-      }
-    }
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, []);
-
-  return null;
 }
 
 createRoot(document.getElementById("root")!).render(

@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- exports toggleVariants alongside the Toggle component */
 import * as React from "react"
 import * as TogglePrimitive from "@radix-ui/react-toggle"
 import { cva, type VariantProps } from "class-variance-authority"

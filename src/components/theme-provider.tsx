@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-refresh/only-export-components -- exports the useTheme hook alongside the ThemeProvider component */
 
 import { createContext, useContext, useEffect, useState } from "react";
 

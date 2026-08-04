@@ -1,4 +1,5 @@
 "use client"
+/* eslint-disable react-refresh/only-export-components -- exports the useSidebar hook alongside the Sidebar components */
 
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
