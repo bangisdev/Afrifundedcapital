@@ -27,19 +27,6 @@ export default function ChallengeDetail() {
   const { data: metricsHistory, isLoading: mLoading } = useApiQuery<any[]>(["challenge", challengeId, "metrics"], `/api/challenges/my/${challengeId}/metrics`);
   const { data: metrics } = useApiQuery<any>(["challenge", challengeId, "latest"], `/api/trading/challenge/${challengeId}/metrics`);
 
-  if (cLoading || mLoading) {
-    return <div className="flex items-center justify-center h-64"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
-  }
-
-  if (!challenge) {
-    return (
-      <div className="space-y-4">
-        <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard/challenges")}><ArrowLeft className="h-3 w-3 mr-1" /> Back</Button>
-        <div className="card-subtle p-8 text-center"><p className="text-sm text-muted-foreground">Challenge not found</p></div>
-      </div>
-    );
-  }
-
   const chartData = useMemo(() => {
     if (!metricsHistory || metricsHistory.length === 0) return [];
     const step = Math.max(1, Math.floor(metricsHistory.length / 50));
@@ -55,6 +42,19 @@ export default function ChallengeDetail() {
       time: formatDate(m.recordedAt), drawdown: m.currentDrawdown, dailyDrawdown: m.dailyDrawdown,
     }));
   }, [metricsHistory]);
+
+  if (cLoading || mLoading) {
+    return <div className="flex items-center justify-center h-64"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
+  }
+
+  if (!challenge) {
+    return (
+      <div className="space-y-4">
+        <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard/challenges")}><ArrowLeft className="h-3 w-3 mr-1" /> Back</Button>
+        <div className="card-subtle p-8 text-center"><p className="text-sm text-muted-foreground">Challenge not found</p></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
