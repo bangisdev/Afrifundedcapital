@@ -74,12 +74,18 @@ function getRateLimit(
  * @param opts.windowMs - Time window in milliseconds
  * @param opts.keyPrefix - Prefix for the rate limit key (e.g., "sign-in")
  * @param opts.getKey - Optional function to derive the rate limit key (defaults to IP)
+ * @param opts.refundOnSuccess - When true, a request that succeeds (2xx response)
+ *   has its consumed slot refunded. Successful logins / session checks are the
+ *   opposite of brute force, so they should not burn quota and lock out
+ *   legitimate users — e.g. several staff members signing in from the same
+ *   office IP.
  */
 export function rateLimiter(opts: {
   maxRequests: number;
   windowMs: number;
   keyPrefix: string;
   getKey?: (c: { req: { header(name: string): string | undefined } }) => string;
+  refundOnSuccess?: boolean;
 }) {
   return createMiddleware(async (c, next) => {
     const ip = getClientIp(c);
@@ -106,6 +112,17 @@ export function rateLimiter(opts: {
     }
 
     await next();
+
+    // Refund the consumed slot when the downstream handler succeeded. Keeps
+    // brute-force protection (failed attempts still count) without penalizing
+    // legitimate successful requests.
+    if (opts.refundOnSuccess && c.res.status >= 200 && c.res.status < 300) {
+      const entry = rateLimitStore.get(key);
+      if (entry) {
+        entry.count = Math.max(0, entry.count - 1);
+        if (entry.count === 0) rateLimitStore.delete(key);
+      }
+    }
   });
 }
 
@@ -184,12 +201,15 @@ export const signInRateLimit = rateLimiter({
   maxRequests: 5,
   windowMs: 15 * 60 * 1000, // 5 attempts per 15 minutes
   keyPrefix: "sign-in",
+  // Successful logins shouldn't consume brute-force quota — only failures do.
+  refundOnSuccess: true,
 });
 
 export const signUpRateLimit = rateLimiter({
   maxRequests: 3,
   windowMs: 60 * 60 * 1000, // 3 registrations per hour
   keyPrefix: "sign-up",
+  refundOnSuccess: true,
 });
 
 export const promoteAdminRateLimit = rateLimiter({
@@ -202,6 +222,8 @@ export const sessionCheckRateLimit = rateLimiter({
   maxRequests: 30,
   windowMs: 5 * 60 * 1000, // 30 session checks per 5 minutes
   keyPrefix: "session",
+  // Valid-session checks are legitimate traffic — refund on success.
+  refundOnSuccess: true,
 });
 
 export const loginAccountLockout = accountLockout({

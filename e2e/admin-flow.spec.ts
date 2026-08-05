@@ -89,7 +89,14 @@ async function warmUp(page: Page, path: string): Promise<boolean> {
   return false;
 }
 
-/** Sign in as admin via the UI auth page */
+/**
+ * Sign in as admin via the UI auth page.
+ *
+ * The app rate-limits sign-in attempts per IP (5 / 15 min). Fresh runs never
+ * trip it, but a long-running dev server with residual in-memory limiter state
+ * (or a parallel run) can 429 the form. When that happens we honor the
+ * server's `Retry-After` and retry instead of hard-failing.
+ */
 async function signInAsAdmin(page: Page) {
   const ready = await warmUp(page, "/auth");
   if (!ready) {
@@ -102,14 +109,56 @@ async function signInAsAdmin(page: Page) {
   const emailInput = page.locator('input[type="email"]').first();
   await emailInput.waitFor({ state: "visible", timeout: 30_000 });
 
-  const passwordInput = page.locator('input[type="password"]').first();
-  await emailInput.fill(ADMIN_EMAIL);
-  await passwordInput.fill(ADMIN_PASSWORD);
+  const SIGNIN_MAX_ATTEMPTS = 5;
+  const SIGNIN_MAX_WAIT_MS = 90_000;
+  let waitBeforeRetryMs = 0;
 
-  const submitBtn = page.locator('button[type="submit"]').first();
-  await submitBtn.click();
+  for (let attempt = 1; attempt <= SIGNIN_MAX_ATTEMPTS; attempt++) {
+    if (waitBeforeRetryMs > 0) {
+      console.log(
+        `[e2e] Sign-in rate-limited — waiting ${Math.round(waitBeforeRetryMs / 1000)}s (attempt ${attempt}/${SIGNIN_MAX_ATTEMPTS})`,
+      );
+      await page.waitForTimeout(waitBeforeRetryMs);
+    }
 
-  await page.waitForURL((url) => !url.pathname.includes("/auth"), { timeout: 20_000 });
+    const passwordInput = page.locator('input[type="password"]').first();
+    await emailInput.fill(ADMIN_EMAIL);
+    await passwordInput.fill(ADMIN_PASSWORD);
+
+    const responsePromise = page
+      .waitForResponse(
+        (res) => res.url().includes("/api/auth/sign-in/") && res.request().method() === "POST",
+        { timeout: 20_000 },
+      )
+      .catch(() => null);
+
+    await page.locator('button[type="submit"]').first().click();
+
+    const response = await responsePromise;
+    if (response && response.status() === 429) {
+      const retryAfter = Number(response.headers()["retry-after"] || 15);
+      waitBeforeRetryMs = Math.min(retryAfter * 1000 + 2_000, SIGNIN_MAX_WAIT_MS);
+      continue;
+    }
+
+    // No rate limit — expect the redirect away from /auth.
+    try {
+      await page.waitForURL((url) => !url.pathname.includes("/auth"), { timeout: 20_000 });
+      return;
+    } catch {
+      const body = await page.textContent("body").catch(() => "");
+      if (body?.includes("Too many requests")) {
+        waitBeforeRetryMs = 15_000;
+        continue;
+      }
+      throw new Error("Sign-in did not navigate away from /auth within 20s");
+    }
+  }
+
+  throw new Error(
+    `Sign-in was repeatedly rate-limited (${SIGNIN_MAX_ATTEMPTS} attempts, ~${SIGNIN_MAX_WAIT_MS / 1000}s total wait). ` +
+      "The app's sign-in limiter (5/15min per IP) is exhausted; wait for the window or restart the dev server.",
+  );
 }
 
 // ─── Tests ────────────────────────────────────────────────
