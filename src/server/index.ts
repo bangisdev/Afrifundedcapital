@@ -771,6 +771,24 @@ export function honoPlugin(): Plugin {
             if (v) headers.set(k, Array.isArray(v) ? v.join(", ") : v);
           }
 
+          // The dev proxy is the edge for API traffic, so seed the client-IP
+          // headers the auth rate limiter keys on (mirrors nginx's
+          // `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for`).
+          // Without this every request falls back to the shared "unknown" key
+          // and the in-memory limiter buckets all clients together — one
+          // user's failed attempts would lock out everyone behind the proxy.
+          const socketAddress = req.socket?.remoteAddress;
+          const incomingForwardedFor = req.headers["x-forwarded-for"];
+          headers.set(
+            "x-forwarded-for",
+            incomingForwardedFor
+              ? `${incomingForwardedFor}, ${socketAddress ?? "unknown"}`
+              : (socketAddress ?? "unknown"),
+          );
+          if (!headers.has("x-real-ip") && socketAddress) {
+            headers.set("x-real-ip", socketAddress);
+          }
+
           let body: BodyInit | undefined;
           if (req.method !== "GET" && req.method !== "HEAD") {
             const raw = await new Promise<Buffer>((resolve, reject) => {

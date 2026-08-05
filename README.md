@@ -363,6 +363,10 @@ PLAYWRIGHT_BASE_URL=http://localhost:5173 bun test:e2e
 
 The spec signs in through the real `/auth` page, so it exercises the app's actual password auth flow.
 
+### Rate limiting during e2e runs
+
+The app rate-limits sign-in (5/15 min per IP) and locks accounts after 5 failed attempts. A serial suite that signs in dozens of times from one IP would trip that — so `playwright.config.ts` boots the web server with `E2E_TESTING=1`, which bypasses the in-memory limiter and lockout for that process only (see `src/server/middleware.ts`). Production and normal dev traffic are unaffected.
+
 ### CI
 
 `CI=true bun test:e2e` runs with retries and forbids `test.only`. In headless environments the Freebuff platform cold-start overlay can delay first paint, so the suite's `warmUp` helper retries page loads; when running against a raw local dev server this isn't an issue.

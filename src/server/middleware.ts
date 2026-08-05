@@ -88,6 +88,15 @@ export function rateLimiter(opts: {
   refundOnSuccess?: boolean;
 }) {
   return createMiddleware(async (c, next) => {
+    // End-to-end test mode (opt-in via E2E_TESTING=1, set by the Playwright
+    // webServer): the admin-flow suite signs in dozens of times from a single
+    // IP, which would exhaust production-grade limits and lock the admin
+    // account. Skipping here keeps production fully protected while the
+    // e2e run stays deterministic.
+    if (process.env.E2E_TESTING === "1") {
+      return next();
+    }
+
     const ip = getClientIp(c);
     const customKey = opts.getKey ? opts.getKey(c) : ip;
     const key = `${opts.keyPrefix}:${customKey}`;
@@ -139,6 +148,11 @@ export function accountLockout(opts: {
   const lockoutDurationMs = opts.lockoutDurationMs ?? 15 * 60 * 1000; // 15 minutes
 
   return createMiddleware(async (c, next) => {
+    // Same e2e escape hatch as the rate limiter above.
+    if (process.env.E2E_TESTING === "1") {
+      return next();
+    }
+
     // Clone request to read body without consuming it for the handler
     let email: string | null = null;
     try {

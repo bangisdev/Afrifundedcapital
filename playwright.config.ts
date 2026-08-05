@@ -1,39 +1,50 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:5173";
+// ─── Config ───────────────────────────────────────────────
+// Defaults to the local Vite dev server. Override with PLAYWRIGHT_BASE_URL
+// to point the suite at any running instance (e.g. the Freebuff preview).
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:5173";
 
 export default defineConfig({
   testDir: "./e2e",
+  // The suite is a serial admin journey sharing one seeded admin account.
   fullyParallel: false,
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 3 : 1,
   workers: 1,
-  reporter: "list",
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 2 : 0,
   timeout: 90_000,
-  expect: { timeout: 10_000 },
+  expect: { timeout: 15_000 },
+  reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
+
   use: {
-    baseURL,
-    trace: "on-first-retry",
+    baseURL: BASE_URL,
+    trace: "retain-on-failure",
     screenshot: "only-on-failure",
-    video: "retain-on-failure",
-    actionTimeout: 15_000,
-    navigationTimeout: 30_000,
+    video: "off",
   },
-  // Boot the dev server automatically before the run and tear it down after.
-  // If a server is already listening on the port (e.g. the platform preview),
-  // Playwright reuses it instead of starting a second one.
-  webServer: {
-    command: "bun run dev",
-    url: baseURL,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
-  // Seed the super-admin account before any test runs.
-  globalSetup: "./e2e/global-setup.ts",
+
   projects: [
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
     },
   ],
+
+  globalSetup: "./e2e/global-setup.ts",
+
+  // Auto-boot the app for the run. With reuseExistingServer: true an
+  // already-listening server on the port (e.g. the Freebuff preview) is
+  // reused instead, so the suite works in both setups.
+  webServer: {
+    command: "bun run dev",
+    url: BASE_URL,
+    reuseExistingServer: true,
+    timeout: 180_000,
+    env: {
+      ...(process.env as Record<string, string>),
+      // Opt into the e2e escape hatch: disables the auth rate limiter and
+      // account lockout so the serial suite's many sign-ins stay deterministic.
+      E2E_TESTING: "1",
+    },
+  },
 });
