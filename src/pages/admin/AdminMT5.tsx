@@ -62,7 +62,13 @@ export default function AdminMT5() {
   const listQuery = `/api/trading/admin/mt5?${params.toString()}`;
 
   const { data, isLoading, refetch } = useApiQuery<Mt5Response>(["admin", "mt5", listQuery], listQuery);
-  const createAccount = useApiMutation<any, any>("post", "/api/trading/admin/mt5");
+  // Mutations invalidate ONLY the queries they touch instead of the whole
+  // cache — the old blanket invalidateQueries() refetched every query on the
+  // page (accounts list, status, config, queue, reconciliation) at once, which
+  // churned the dev proxy and reset the active tab.
+  const createAccount = useApiMutation<any, any>("post", "/api/trading/admin/mt5", {
+    invalidateKeys: [["admin", "mt5"]],
+  });
   const { data: users } = useApiQuery<any[]>(["admin", "usersBrief"], "/api/users/brief");
   const [selectedUser, setSelectedUser] = useState("");
   const [showCreate, setShowCreate] = useState(false);
@@ -81,8 +87,12 @@ export default function AdminMT5() {
     ["admin", "mt5Config"],
     "/api/trading/admin/config",
   );
-  const saveConfig = useApiMutation<any, any>("put", "/api/trading/admin/config");
-  const testConnection = useApiMutation<any, any>("post", "/api/trading/admin/test-connection");
+  const saveConfig = useApiMutation<any, any>("put", "/api/trading/admin/config", {
+    invalidateKeys: [["admin", "mt5Config"], ["admin", "mt5Status"]],
+  });
+  const testConnection = useApiMutation<any, any>("post", "/api/trading/admin/test-connection", {
+    invalidateKeys: [],
+  });
   const [testResult, setTestResult] = useState<any>(null);
 
   // Local config form state (seeded once from the server)
@@ -110,8 +120,12 @@ export default function AdminMT5() {
     ["admin", "mt5Queue"],
     "/api/trading/admin/queue",
   );
-  const processQueue = useApiMutation<any, any>("post", "/api/trading/admin/queue/process");
-  const retryJob = useApiMutation<any, any>("post", "/api/trading/admin/queue/retry-all");
+  const processQueue = useApiMutation<any, any>("post", "/api/trading/admin/queue/process", {
+    invalidateKeys: [["admin", "mt5Queue"], ["admin", "mt5Status"]],
+  });
+  const retryJob = useApiMutation<any, any>("post", "/api/trading/admin/queue/retry-all", {
+    invalidateKeys: [["admin", "mt5Queue"], ["admin", "mt5Status"]],
+  });
   const [processingQueue, setProcessingQueue] = useState(false);
 
   // ── Reconciliation ─────────────────────────────────────────
@@ -119,7 +133,9 @@ export default function AdminMT5() {
     ["admin", "mt5Reconcile"],
     "/api/trading/admin/reconcile/history",
   );
-  const runReconcile = useApiMutation<any, any>("post", "/api/trading/admin/reconcile");
+  const runReconcile = useApiMutation<any, any>("post", "/api/trading/admin/reconcile", {
+    invalidateKeys: [["admin", "mt5Reconcile"], ["admin", "mt5Status"]],
+  });
   const [reconciling, setReconciling] = useState(false);
 
   const [showSecrets, setShowSecrets] = useState(false);

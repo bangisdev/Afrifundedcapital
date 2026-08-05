@@ -20,7 +20,16 @@ export function useApiQuery<T>(
 export function useApiMutation<T, R = void>(
   method: "post" | "put" | "delete",
   path: string,
-  onSuccess?: () => void,
+  options?: {
+    /**
+     * Query keys to invalidate after a successful mutation. When omitted the
+     * legacy behavior is kept (invalidate EVERY query, which refetches all
+     * page queries and can cause heavy re-render storms on data-heavy pages).
+     * Pass an empty array to skip invalidation entirely.
+     */
+    invalidateKeys?: Array<Array<string | number>>;
+    onSuccess?: () => void;
+  },
 ) {
   const queryClient = useQueryClient();
 
@@ -31,8 +40,18 @@ export function useApiMutation<T, R = void>(
       return api.delete<R>(path);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries();
-      onSuccess?.();
+      if (options?.invalidateKeys) {
+        // Scoped: refresh exactly the queries that depend on this mutation
+        // (empty array = refresh nothing). Query keys match by prefix, so a
+        // key like ["admin", "mt5"] covers every paginated list under it.
+        for (const key of options.invalidateKeys) {
+          queryClient.invalidateQueries({ queryKey: key });
+        }
+      } else {
+        // Legacy default for callers that rely on a full cache refresh.
+        queryClient.invalidateQueries();
+      }
+      options?.onSuccess?.();
     },
   });
 }

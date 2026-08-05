@@ -411,9 +411,9 @@ test.describe("Admin Dashboard E2E Flow", () => {
       await expect(page.locator("body")).toContainText(/Reconciliation: \d+ checked/, {
         timeout: 25_000,
       });
-      // The mutation invalidates every query on the page, which can remount the
-      // SPA under Vite's dev reload — re-open the tab so the assertion targets
-      // the history list regardless of the tab state reset.
+      // The mutation now invalidates only the reconciliation + status queries,
+      // but re-opening the tab keeps the assertion robust against any Vite
+      // dev-server reload resetting the SPA mid-run.
       await page.getByRole("tab", { name: /Reconciliation/ }).click();
       await expect(page.locator("body")).toContainText(
         /matched|mismatch|No reconciliation entries yet/,
