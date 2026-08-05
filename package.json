@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run src/server/__tests__ && vitest run src/__tests__",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",

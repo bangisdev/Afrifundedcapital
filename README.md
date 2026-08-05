@@ -315,8 +315,10 @@ Configure the gateway in **Admin → Settings → MT5** (persisted as the `mt5_c
 
 The project has 48 test files: server tests (`src/server/__tests__/*.test.ts`, node environment — routes, auth, KYC, payments, MT5 connector, retry-queue backoff, reconciliation drift, scheduler) and frontend tests (`src/__tests__/*.test.tsx`, jsdom environment — pages and the full user journey).
 
+The `test` script runs the two environments as **two separate phases** (`src/server/__tests__` first, then `src/__tests__`). Bun's runtime cannot switch vitest's environment (node → jsdom) inside a single fork (`pool: "forks"` + `singleFork: true`), which corrupted shared global state when all 48 files ran in one command. Splitting keeps every file in one homogeneous environment, so `bun test` is green under Bun and Node alike.
+
 ```bash
-bun test            # run once
+bun test            # run once (server tests, then frontend tests)
 bun test:watch      # watch mode
 bun test:coverage   # with coverage report
 ```
