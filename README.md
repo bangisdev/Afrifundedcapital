@@ -313,7 +313,7 @@ Configure the gateway in **Admin → Settings → MT5** (persisted as the `mt5_c
 
 ## Unit & integration tests (Vitest)
 
-The project has ~31 test files: server tests (`src/server/__tests__/*.test.ts`, node environment — routes, auth, KYC, payments, MT5 connector, retry queue, reconciliation, scheduler) and frontend tests (`src/__tests__/*.test.tsx`, jsdom environment — pages and the full user journey).
+The project has 48 test files: server tests (`src/server/__tests__/*.test.ts`, node environment — routes, auth, KYC, payments, MT5 connector, retry-queue backoff, reconciliation drift, scheduler) and frontend tests (`src/__tests__/*.test.tsx`, jsdom environment — pages and the full user journey).
 
 ```bash
 bun test            # run once

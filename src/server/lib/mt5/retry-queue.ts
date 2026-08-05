@@ -82,9 +82,10 @@ export function getQueueEntries(
 
 /**
  * Backoff delay before the next attempt for a job with `retryCount` previous
- * failures: base * 2^n, capped at 1 hour.
+ * failures: base * 2^n, capped at 1 hour. Exported so the schedule itself is
+ * unit-testable.
  */
-function backoffDelayMs(retryCount: number, baseMs = 30_000): number {
+export function backoffDelayMs(retryCount: number, baseMs = 30_000): number {
   return Math.min(60 * 60 * 1000, baseMs * 2 ** Math.max(0, retryCount));
 }
 
