@@ -48,17 +48,40 @@ async function waitForAppReady(page: Page) {
   }
 }
 
-/** Navigate to a page with retry logic for platform cold starts */
+/**
+ * Navigate to a page with retry logic for platform cold starts.
+ *
+ * Two failure modes are tolerated as "not ready yet":
+ *  1. The navigation itself aborts (`net::ERR_ABORTED`). In Vite dev this
+ *     happens on the first load of a heavy route: dependency discovery
+ *     triggers a full-page reload that cancels the in-flight `page.goto`.
+ *  2. The page is still showing a loading screen.
+ *
+ * A page counts as ready when it is not showing a loading screen AND either
+ * has real interactive elements (inputs/buttons/links) or a sizeable body.
+ * A bare body-length threshold is not enough on its own: compact pages like
+ * the auth form render fully with well under 200 chars of text.
+ */
 async function warmUp(page: Page, path: string): Promise<boolean> {
   for (let attempt = 0; attempt < WARMUP_RETRIES; attempt++) {
-    await page.goto(path, { waitUntil: "domcontentloaded" });
+    try {
+      await page.goto(path, { waitUntil: "domcontentloaded" });
+    } catch {
+      // Vite cold-start full reload aborted the navigation — retry.
+      await page.waitForTimeout(WARMUP_DELAY_MS);
+      continue;
+    }
     await page.waitForTimeout(2_000);
     const body = await page.textContent("body").catch(() => "");
+    const interactive = await page
+      .locator("input, button, a[href], select, textarea")
+      .count()
+      .catch(() => 0);
     const isReady =
-      body &&
-      body.length > 200 &&
+      !!body &&
       !body.includes("taking longer than usual") &&
-      !body.includes("Loading application");
+      !body.includes("Loading application") &&
+      (body.length > 200 || interactive > 0);
     if (isReady) return true;
     // Server not ready — wait and retry
     await page.waitForTimeout(WARMUP_DELAY_MS);

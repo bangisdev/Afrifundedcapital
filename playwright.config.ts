@@ -19,6 +19,17 @@ export default defineConfig({
     actionTimeout: 15_000,
     navigationTimeout: 30_000,
   },
+  // Boot the dev server automatically before the run and tear it down after.
+  // If a server is already listening on the port (e.g. the platform preview),
+  // Playwright reuses it instead of starting a second one.
+  webServer: {
+    command: "bun run dev",
+    url: baseURL,
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+  },
+  // Seed the super-admin account before any test runs.
+  globalSetup: "./e2e/global-setup.ts",
   projects: [
     {
       name: "chromium",
