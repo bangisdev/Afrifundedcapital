@@ -7,7 +7,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serveStatic } from "hono/bun";
 import { getDb, initDatabase } from "./src/server/db";
-import { users, sessions } from "./src/server/schema";
+import { users, sessions, settings } from "./src/server/schema";
 import { eq, and, gt } from "drizzle-orm";
 
 // Import all route modules
@@ -87,7 +87,7 @@ const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 app.post("/api/auth/sign-up/email", async (c) => {
   try {
     let body: Record<string, unknown> = {};
-    try { body = await c.req.json(); } catch {}
+    try { body = await c.req.json(); } catch { /* malformed JSON body falls back to empty */ }
 
     const name = (body.name as string)?.trim();
     const email = (body.email as string)?.trim().toLowerCase();
@@ -142,7 +142,7 @@ app.post("/api/auth/sign-up/email", async (c) => {
 app.post("/api/auth/sign-in/email", async (c) => {
   try {
     let body: Record<string, unknown> = {};
-    try { body = await c.req.json(); } catch {}
+    try { body = await c.req.json(); } catch { /* malformed JSON body falls back to empty */ }
 
     const email = (body.email as string)?.trim().toLowerCase();
     const password = body.password as string;
@@ -160,7 +160,7 @@ app.post("/api/auth/sign-in/email", async (c) => {
       const row = sqlite.prepare("SELECT password FROM accounts WHERE user_id = ? AND provider_id = 'email' LIMIT 1")
         .get(String(user.id)) as { password: string } | undefined;
       if (row?.password) passwordHash = row.password;
-    } catch {}
+    } catch { /* legacy accounts without a password hash are rejected below */ }
 
     if (!passwordHash) return c.json({ error: "Invalid email or password" }, 401);
 
@@ -228,7 +228,7 @@ app.post("/api/auth/sign-out", (c) => {
       try {
         const db = getDb();
         db.delete(sessions).where(eq(sessions.token, token)).run();
-      } catch {}
+      } catch { /* session may already be gone; sign-out still succeeds */ }
     }
     c.header("Set-Cookie", `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
     return c.json({ success: true });
@@ -254,7 +254,6 @@ app.route("/api/seed", seedRouter);
 app.get("/api/settings/public", (c) => {
   try {
     const db = getDb();
-    const { settings } = require("./src/server/schema");
     const allSettings = db.select().from(settings).all();
     const result: Record<string, unknown> = {};
     for (const s of allSettings) {
@@ -268,14 +267,12 @@ app.get("/api/payments/flutterwave-config", (c) => {
   let publicKey = process.env.FLW_PUBLIC_KEY || "";
   try {
     const db = getDb();
-    const { settings } = require("./src/server/schema");
-    const { eq } = require("drizzle-orm");
     const setting = db.select().from(settings).where(eq(settings.key, "flutterwave_config")).get();
     if (setting) {
       const config = JSON.parse(setting.value);
       if (config.publicKey) publicKey = config.publicKey;
     }
-  } catch {}
+  } catch { /* missing settings table or unparseable config falls back to env key */ }
   return c.json({ publicKey });
 });
 

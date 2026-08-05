@@ -255,3 +255,56 @@ When using convex, make sure:
 - This includes importing generated files like `@/convex/_generated/server`, `@/convex/_generated/api`
 - Remember to import functions like useQuery, useMutation, useAction, etc. from `convex/react`
 - NEVER have return type validators.
+
+# MT5 Integration
+
+AfriFundedCapital syncs live trading data from MetaTrader 5 through a **self-hosted gateway** that wraps the official **MT5 Manager API** (the standard bridging pattern — the Manager API is a binary/C++ protocol that cannot be called directly from Node).
+
+## How it works
+
+- The app holds an `MT5Provider` seam (`src/server/lib/mt5/types.ts`) with two implementations:
+  - `HttpMT5Provider` — the real connector. Talks to one or more gateway base URLs (failover) over HTTPS with a `Bearer` API key. Handles timeouts, exponential-backoff retries, and classifies transient failures (`MT5GatewayError`) for the retry queue. Manager credentials are stored in the DB and **never** returned to the client.
+  - `SimulatedMT5Provider` — deterministic fallback used when no gateway is configured, so demos and tests keep working. Demo data only moves when a user/admin explicitly triggers a sync.
+- **Metrics are real**: win rate, profit factor, streaks, and drawdowns are derived from actual closed trades fetched from the gateway — no random generation.
+- **Retry queue** (`mt5_sync_queue`) persists failed gateway operations; **reconciliation** (`mt5_reconciliation`) compares gateway vs. local account state. Both are exposed to admins.
+
+## Configuration
+
+Configure the gateway in **Admin → Settings → MT5** (persisted as the `mt5_config` JSON key in the settings table), or via `PUT /api/trading/admin/config`. Fields:
+
+| Field | Description |
+| --- | --- |
+| `enabled` | Master switch for the gateway |
+| `baseUrls` | One or more gateway URLs for failover (e.g. `https://mt5-gw-1.internal:8443`) |
+| `apiKey` | Shared gateway API key (`Authorization: Bearer …`) |
+| `managerLogin` / `managerPassword` | MT5 manager account used to connect to the Manager API |
+| `group` / `leverage` / `serverName` | Defaults applied to newly created accounts |
+| `requestTimeoutMs` / `maxRetries` / `retryBaseDelayMs` | Timeout and backoff tuning |
+| `reconciliationTolerance` | |Δ| (currency units) under which local vs. gateway balances count as matched |
+
+## Background scheduler
+
+`src/server/lib/mt5/scheduler.ts` (started from both the dev plugin and production `server.ts`) replaces the old manual-only daily sync:
+
+- **Retry queue drain** every 5 minutes (exponential backoff per job).
+- **Daily sync pass** every hour for active challenges that haven't synced in the last 23 hours.
+- The scheduler is a **no-op when no gateway is configured**, so simulated mode never moves demo data on its own.
+
+## Admin API (all require admin auth, under `/api/trading`)
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /admin/status` | Provider mode + gateway health summary |
+| `GET /admin/config` / `PUT /admin/config` | Read (redacted) / update gateway config |
+| `POST /admin/test-connection` | Ping the gateway with the stored config |
+| `GET /admin/queue` | Retry queue listing |
+| `POST /admin/queue/process` | Drain the queue on demand |
+| `POST /admin/queue/:id/retry` / `POST /admin/queue/retry-all` | Retry failed jobs |
+| `POST /admin/reconcile` / `GET /admin/reconcile/history` | Run / inspect reconciliation runs |
+| `POST /admin/sync-all` | Force a sync pass for all active challenges |
+
+## Going live
+
+1. Deploy the MT5 gateway (one of the standard open-source Manager API bridges) with your broker server's Manager API credentials.
+2. Set `enabled: true`, the gateway `baseUrls`, `apiKey`, and manager credentials in Admin → Settings → MT5.
+3. Click **Test connection** in the admin MT5 page — the scheduler starts syncing, retrying, and reconciling automatically.
