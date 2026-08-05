@@ -72,6 +72,41 @@ export default async function globalSetup(_config: FullConfig) {
   } catch (err) {
     console.warn(`[e2e/global-setup] Bulk seed error: ${err instanceof Error ? err.message : String(err)}`);
   }
+
+  // 5. Create an ACTIVE demo challenge with an MT5 account for the admin.
+  // The bulk seed creates funded accounts, but the MT5 reconciliation engine
+  // and the trading sync only process status === "active" challenges — so this
+  // guarantees the admin MT5 page (retry queue, reconciliation history) and
+  // the Trading page have live data to render. Idempotent: every run creates
+  // one more demo challenge, which the suite tolerates.
+  try {
+    const templatesRes = await fetch(`${baseURL}/api/challenges/templates`, {
+      headers: { Cookie: cookie },
+    });
+    const templates = (await templatesRes.json()) as Array<{ id: number }>;
+    const template = templates[0];
+    if (template) {
+      const sizesRes = await fetch(`${baseURL}/api/challenges/templates/${template.id}/sizes`, {
+        headers: { Cookie: cookie },
+      });
+      const sizes = (await sizesRes.json()) as Array<{ id: number }>;
+      if (sizes.length > 0) {
+        const demoRes = await fetch(`${baseURL}/api/challenges/demo-purchase`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: cookie },
+          body: JSON.stringify({ templateId: template.id, accountSizeId: sizes[0].id }),
+        });
+        const demoText = await demoRes.text();
+        if (!demoRes.ok) {
+          console.warn(`[e2e/global-setup] Demo challenge skipped (${demoRes.status}): ${demoText.slice(0, 160)}`);
+        } else {
+          console.log(`[e2e/global-setup] Active demo challenge: ${demoText.slice(0, 160)}`);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`[e2e/global-setup] Demo challenge error: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 /**
@@ -93,7 +128,10 @@ async function warmBrowserRoutes(baseURL: string, cookieValue: string) {
       },
     ]);
     const page = await context.newPage();
-    for (const path of ["/", "/auth", "/admin", "/admin/users", "/admin/payments", "/admin/challenges", "/admin/kyc"]) {
+    for (const path of [
+      "/", "/auth", "/admin", "/admin/users", "/admin/payments", "/admin/challenges", "/admin/kyc",
+      "/admin/mt5", "/dashboard/trading",
+    ]) {
       try {
         await page.goto(`${baseURL}${path}`, { waitUntil: "domcontentloaded", timeout: 30_000 });
         // Give the route time to fetch data + settle before the next visit.

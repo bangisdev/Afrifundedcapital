@@ -1,0 +1,2 @@
+{"type":"receive","time":1785935815545.06,"opcode":1,"data":"{\"type\":\"connected\"}"}
+{"type":"receive","time":1785935819229.8152,"opcode":1,"data":"{\"type\":\"full-reload\"}"}

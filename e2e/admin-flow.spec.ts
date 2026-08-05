@@ -3,7 +3,8 @@
  *
  * Drives the real UI in Chromium: landing → auth → admin overview → user
  * management → challenges → payments → cross-page navigation → responsive
- * viewports.
+ * viewports → MT5 manager (accounts, connector, retry queue, reconciliation)
+ * → client trading metrics.
  *
  * How it runs:
  *   - `playwright.config.ts` auto-boots `bun run dev` (with `E2E_TESTING=1`,
@@ -320,6 +321,153 @@ test.describe("Admin Dashboard E2E Flow", () => {
       await waitForAppReady(page);
       await expect(page.locator('input[type="email"]').first()).toBeVisible({ timeout: 30_000 });
       await expect(page.locator('button[type="submit"]').first()).toBeVisible();
+    });
+  });
+
+  // ─── 8. MT5 Manager (admin) ──────────────────────────
+  test.describe("8. MT5 Manager", () => {
+    test.beforeEach(async ({ page }) => {
+      await signInAsAdmin(page);
+    });
+
+    test("navigates to the MT5 manager page", async ({ page }) => {
+      await warmUp(page, "/admin");
+      await waitForAppReady(page);
+      const nav = page.locator("aside nav");
+      await nav.locator("button", { hasText: "MT5" }).first().click();
+      await expect.poll(() => page.url(), { timeout: 10_000 }).toContain("/admin/mt5");
+      await expect(page.getByRole("heading", { name: "MT5 Manager" })).toBeVisible({ timeout: 20_000 });
+    });
+
+    test("shows the provider status banner", async ({ page }) => {
+      await warmUp(page, "/admin/mt5");
+      await waitForAppReady(page);
+      // No gateway is configured in the e2e env, so the simulated provider is
+      // active and the banner surfaces queue/reconciliation counts.
+      await expect(page.locator("body")).toContainText(/Simulated Provider|Live MT5 Gateway/, {
+        timeout: 20_000,
+      });
+      await expect(page.locator("body")).toContainText(/queued|failed|No reconciliation yet/, {
+        timeout: 20_000,
+      });
+    });
+
+    test("displays account stat cards and account rows", async ({ page }) => {
+      await warmUp(page, "/admin/mt5");
+      await waitForAppReady(page);
+      await expect(page.locator("body")).toContainText(/Total Accounts|Active|Suspended|Combined Balance/, {
+        timeout: 20_000,
+      });
+      // Bulk seed provisions funded MT5 accounts for the admin (logins start
+      // with "AFC"), so rows render — or the empty state if seeding was skipped.
+      await expect(page.locator("body")).toContainText(/#AFC|No MT5 accounts found/, {
+        timeout: 20_000,
+      });
+      const search = page.locator('input[placeholder*="Search"]').first();
+      await expect(search).toBeVisible({ timeout: 20_000 });
+    });
+
+    test("connector tab reports gateway status and runs a test connection", async ({ page }) => {
+      await warmUp(page, "/admin/mt5");
+      await waitForAppReady(page);
+      await page.getByRole("tab", { name: /Connector/ }).click();
+      await expect(page.locator("body")).toContainText(/Gateway Status|Not configured|Configured/, {
+        timeout: 20_000,
+      });
+      await page.getByRole("button", { name: /Test Connection/ }).click();
+      // The simulated provider answers with ok:true and a message that names
+      // the simulated fallback — proof the button round-trips to the server.
+      await expect(page.locator("body")).toContainText(/No MT5 gateway configured/, {
+        timeout: 20_000,
+      });
+    });
+
+    test("retry queue tab shows stats and controls", async ({ page }) => {
+      await warmUp(page, "/admin/mt5");
+      await waitForAppReady(page);
+      await page.getByRole("tab", { name: /Retry Queue/ }).click();
+      await expect(page.locator("body")).toContainText(/Pending|Done|Failed|Total Jobs/, {
+        timeout: 20_000,
+      });
+      await expect(page.getByRole("button", { name: /Process Queue Now/ })).toBeVisible({
+        timeout: 20_000,
+      });
+      await expect(page.getByRole("button", { name: /Retry All Failed/ })).toBeVisible();
+      // Queue is empty on a fresh seed; jobs render once syncs have failed.
+      await expect(page.locator("body")).toContainText(/Queue is empty|Attempts:/, {
+        timeout: 20_000,
+      });
+    });
+
+    test("reconciliation tab runs and records entries", async ({ page }) => {
+      await warmUp(page, "/admin/mt5");
+      await waitForAppReady(page);
+      await page.getByRole("tab", { name: /Reconciliation/ }).click();
+      await expect(page.getByRole("button", { name: /Run Reconciliation/ })).toBeVisible({
+        timeout: 20_000,
+      });
+      await page.getByRole("button", { name: /Run Reconciliation/ }).click();
+      // The run POSTs to the server; the summary toast is the server's response.
+      await expect(page.locator("body")).toContainText(/Reconciliation: \d+ checked/, {
+        timeout: 25_000,
+      });
+      // The mutation invalidates every query on the page, which can remount the
+      // SPA under Vite's dev reload — re-open the tab so the assertion targets
+      // the history list regardless of the tab state reset.
+      await page.getByRole("tab", { name: /Reconciliation/ }).click();
+      await expect(page.locator("body")).toContainText(
+        /matched|mismatch|No reconciliation entries yet/,
+        { timeout: 25_000 },
+      );
+    });
+  });
+
+  // ─── 9. Trading metrics (client dashboard) ───────────
+  test.describe("9. Trading metrics", () => {
+    test.beforeEach(async ({ page }) => {
+      await signInAsAdmin(page);
+    });
+
+    test("loads the trading page with metric cards", async ({ page }) => {
+      await warmUp(page, "/dashboard/trading");
+      await waitForAppReady(page);
+      await expect(page.getByRole("heading", { name: "Trading" })).toBeVisible({ timeout: 20_000 });
+      await expect(page.locator("body")).toContainText(
+        /Total Balance|Total Equity|Active Challenges|MT5 Accounts/,
+        { timeout: 20_000 },
+      );
+      await expect(page.getByRole("button", { name: /Sync Now/ })).toBeVisible();
+    });
+
+    test("shows MT5 account cards with balances", async ({ page }) => {
+      await warmUp(page, "/dashboard/trading");
+      await waitForAppReady(page);
+      // Seeded funded accounts render as cards with balance/equity/leverage.
+      await expect(page.locator("body")).toContainText(/Account #|No MT5 accounts yet/, {
+        timeout: 20_000,
+      });
+      await expect(page.locator("body")).toContainText(/Balance|Equity|Leverage/, {
+        timeout: 20_000,
+      });
+    });
+
+    test("offers demo data generation when no metrics are recorded", async ({ page }) => {
+      await warmUp(page, "/dashboard/trading");
+      await waitForAppReady(page);
+      // Either the metrics empty-state with its generator is shown, or charts
+      // render if demo data was already seeded by a previous run.
+      await expect(page.locator("body")).toContainText(
+        /No trading metrics recorded yet|Performance Charts/,
+        { timeout: 25_000 },
+      );
+      const generate = page.getByRole("button", { name: /Generate Demo Data/ });
+      if (await generate.isVisible().catch(() => false)) {
+        await generate.click();
+        // Seeding fires a toast + confirmation line under the button.
+        await expect(page.locator("body")).toContainText(/Demo data generated|Generating/, {
+          timeout: 25_000,
+        });
+      }
     });
   });
 });
