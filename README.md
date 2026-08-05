@@ -308,3 +308,61 @@ Configure the gateway in **Admin → Settings → MT5** (persisted as the `mt5_c
 1. Deploy the MT5 gateway (one of the standard open-source Manager API bridges) with your broker server's Manager API credentials.
 2. Set `enabled: true`, the gateway `baseUrls`, `apiKey`, and manager credentials in Admin → Settings → MT5.
 3. Click **Test connection** in the admin MT5 page — the scheduler starts syncing, retrying, and reconciling automatically.
+
+# Testing
+
+## Unit & integration tests (Vitest)
+
+The project has ~31 test files: server tests (`src/server/__tests__/*.test.ts`, node environment — routes, auth, KYC, payments, MT5 connector, retry queue, reconciliation, scheduler) and frontend tests (`src/__tests__/*.test.tsx`, jsdom environment — pages and the full user journey).
+
+```bash
+bun test            # run once
+bun test:watch      # watch mode
+bun test:coverage   # with coverage report
+```
+
+## End-to-end tests (Playwright)
+
+The admin-flow e2e suite lives in `e2e/` and drives the real UI in Chromium: landing → auth → admin overview → user management → challenges → payments → cross-page navigation → responsive viewports.
+
+### Prerequisites
+
+1. Install Playwright's Chromium (one-time):
+
+   ```bash
+   bunx playwright install chromium
+   ```
+
+2. A running app instance. The config (`playwright.config.ts`) auto-boots `bun run dev` before the run and reuses an already-listening server on the port (the Freebuff preview qualifies), so usually you don't need to start anything yourself.
+
+### Run against a local dev server
+
+```bash
+# Start the dev server (or rely on the Freebuff preview), then:
+bun test:e2e                      # full suite
+bun test:e2e -- --grep "Payments" # single section
+bun test:e2e:ui                   # interactive UI mode
+bun test:e2e:debug                # step-through debugger
+```
+
+Point the suite at a specific server with `PLAYWRIGHT_BASE_URL`:
+
+```bash
+PLAYWRIGHT_BASE_URL=http://localhost:5173 bun test:e2e
+```
+
+### How admin auth is seeded
+
+`e2e/global-setup.ts` runs once before the suite and calls `POST /api/seed/admin` to guarantee a super-admin exists (idempotent — a 409 for an existing admin is treated as success). Defaults, overridable via env:
+
+| Env var | Default |
+| --- | --- |
+| `PLAYWRIGHT_BASE_URL` | `http://localhost:5173` |
+| `E2E_ADMIN_EMAIL` | `admin@afrifundedcapital.com` |
+| `E2E_ADMIN_PASSWORD` | `Admin@123456` |
+
+The spec signs in through the real `/auth` page, so it exercises the app's actual password auth flow.
+
+### CI
+
+`CI=true bun test:e2e` runs with retries and forbids `test.only`. In headless environments the Freebuff platform cold-start overlay can delay first paint, so the suite's `warmUp` helper retries page loads; when running against a raw local dev server this isn't an issue.
