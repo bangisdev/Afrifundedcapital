@@ -8,6 +8,7 @@
  *      admin pages render realistic content. Best-effort — the suite asserts
  *      on UI chrome that renders with or without data.
  */
+import { chromium } from "@playwright/test";
 import type { FullConfig } from "@playwright/test";
 
 const DEFAULT_BASE = "http://localhost:5173";
@@ -43,7 +44,19 @@ export default async function globalSetup(_config: FullConfig) {
   const setCookie = signInRes.headers.get("set-cookie");
   const cookie = setCookie ? setCookie.split(";")[0] : "";
 
-  // 3. Best-effort demo data seed. Failures are warnings, not fatal.
+  // 3. Warm the app's route chunks in a real browser. Vite's first-load
+  // dependency optimization triggers full-page reloads that abort in-flight
+  // navigations; doing it once here (pre-suite) keeps the tests from hitting
+  // that reload storm on heavy lazy routes like /admin.
+  if (cookie) {
+    try {
+      await warmBrowserRoutes(baseURL, cookie);
+    } catch (err) {
+      console.warn(`[e2e/global-setup] Browser warmup failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // 4. Best-effort demo data seed. Failures are warnings, not fatal.
   try {
     const bulkRes = await fetch(`${baseURL}/api/seed/bulk`, {
       method: "POST",
@@ -58,5 +71,43 @@ export default async function globalSetup(_config: FullConfig) {
     }
   } catch (err) {
     console.warn(`[e2e/global-setup] Bulk seed error: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * Visit every heavy route once with a real browser so Vite pre-transforms the
+ * lazy chunks (admin pages pull in a lot: recharts, tables, dialogs…). Uses the
+ * seeded admin session cookie so the authenticated admin pages render too.
+ */
+async function warmBrowserRoutes(baseURL: string, cookieValue: string) {
+  const hostname = new URL(baseURL).hostname;
+  const browser = await chromium.launch();
+  try {
+    const context = await browser.newContext();
+    await context.addCookies([
+      {
+        name: "afc_session",
+        value: cookieValue,
+        domain: hostname,
+        path: "/",
+      },
+    ]);
+    const page = await context.newPage();
+    for (const path of ["/", "/auth", "/admin", "/admin/users", "/admin/payments", "/admin/challenges", "/admin/kyc"]) {
+      try {
+        await page.goto(`${baseURL}${path}`, { waitUntil: "domcontentloaded", timeout: 30_000 });
+        // Give the route time to fetch data + settle before the next visit.
+        await page.waitForTimeout(800);
+        console.log(`[e2e/global-setup] Warm visit: ${path}`);
+      } catch (err) {
+        console.warn(
+          `[e2e/global-setup] Warm visit to ${path} failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    await page.close();
+    await context.close();
+  } finally {
+    await browser.close();
   }
 }

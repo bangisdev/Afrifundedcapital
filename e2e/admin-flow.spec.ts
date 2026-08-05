@@ -24,6 +24,9 @@ const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL || "admin@afrifundedcapital.com"
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD || "Admin@123456";
 const WARMUP_RETRIES = 5;
 const WARMUP_DELAY_MS = 5_000;
+// Hard ceiling for a single warmUp call so a bad server state fails the test
+// fast instead of spinning until the test-level timeout.
+const WARMUP_MAX_MS = 40_000;
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -62,15 +65,20 @@ async function waitForAppReady(page: Page) {
  * has real interactive elements (inputs/buttons/links) or a sizeable body.
  */
 async function warmUp(page: Page, path: string): Promise<boolean> {
-  for (let attempt = 0; attempt < WARMUP_RETRIES; attempt++) {
+  const deadline = Date.now() + WARMUP_MAX_MS;
+  for (let attempt = 0; attempt < WARMUP_RETRIES && Date.now() < deadline; attempt++) {
+    if (page.isClosed()) return false;
     try {
-      await page.goto(path, { waitUntil: "domcontentloaded" });
+      await page.goto(path, { waitUntil: "domcontentloaded", timeout: 15_000 });
     } catch {
       // Cold-start full reload aborted the navigation — retry.
+      if (page.isClosed()) return false;
       await page.waitForTimeout(WARMUP_DELAY_MS);
       continue;
     }
+    if (page.isClosed()) return false;
     await page.waitForTimeout(2_000);
+    if (page.isClosed()) return false;
     const body = await page.textContent("body").catch(() => "");
     const interactive = await page
       .locator("input, button, a[href], select, textarea")
