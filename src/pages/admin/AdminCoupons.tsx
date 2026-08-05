@@ -57,7 +57,11 @@ export default function AdminCoupons() {
   const qs = sortParams.toString();
   const listQuery = `/api/coupons/admin/all?${qs}`;
   const { data: coupons, isLoading, refetch } = useApiQuery<any[]>(["admin", "coupons", qs ? `?${qs}` : ""], listQuery);
-  const createCoupon = useApiMutation<any, any>("post", "/api/coupons/admin/create");
+  // Scoped: creating a coupon only changes the coupons list — no need to
+  // invalidate the whole cache.
+  const createCoupon = useApiMutation<any, any>("post", "/api/coupons/admin/create", {
+    invalidateKeys: [["admin", "coupons"]],
+  });
   const [showCreate, setShowCreate] = useState(false);
   const [code, setCode] = useState("");
   const [discountType, setDiscountType] = useState("percentage");

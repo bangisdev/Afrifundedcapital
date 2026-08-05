@@ -156,17 +156,22 @@ interface PayoutsResponse {
 }
 
 function AffiliatePayoutsTab() {
+  // Scoped invalidation: these mutations only change the payout list
+  // (and affiliate commission totals when marked paid) — no full-cache blast.
   const approvePayout = useApiMutation<any, any>(
     "post",
-    "/api/affiliates/admin/payouts/${id}/approve"
+    "/api/affiliates/admin/payouts/${id}/approve",
+    { invalidateKeys: [["admin", "affiliate-payouts"]] }
   );
   const rejectPayout = useApiMutation<any, any>(
     "post",
-    "/api/affiliates/admin/payouts/${id}/reject"
+    "/api/affiliates/admin/payouts/${id}/reject",
+    { invalidateKeys: [["admin", "affiliate-payouts"]] }
   );
   const markPaid = useApiMutation<any, any>(
     "post",
-    "/api/affiliates/admin/payouts/${id}/pay"
+    "/api/affiliates/admin/payouts/${id}/pay",
+    { invalidateKeys: [["admin", "affiliate-payouts"], ["admin", "affiliates"]] }
   );
 
   const [search, setSearch] = useState("");

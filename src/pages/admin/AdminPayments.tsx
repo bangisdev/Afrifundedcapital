@@ -84,9 +84,23 @@ interface PaymentsResponse {
 export default function AdminPayments() {
   const { data: stats } = useApiQuery<any>(["admin", "paymentStats"], "/api/payments/admin/stats");
   const { data: revenueGrowth } = useApiQuery<any>(["admin", "revenueGrowth"], "/api/payments/admin/revenue-growth");
-  const refundPayment = useApiMutation<any, any>("post", "/api/payments/admin/${id}/refund");
-  const resumePayment = useApiMutation<any, any>("post", "/api/payments/admin/${id}/resume");
-  const cleanupStale = useApiMutation<any, any>("post", "/api/payments/admin/cleanup-stale");
+  // Scoped invalidation: refresh only the queries these mutations touch
+  // (transactions list, revenue stats, month-over-month growth) instead of
+  // blasting the whole cache, which refetched every page query at once.
+  const PAYMENT_KEYS: Array<Array<string | number>> = [
+    ["admin", "payments"],
+    ["admin", "paymentStats"],
+    ["admin", "revenueGrowth"],
+  ];
+  const refundPayment = useApiMutation<any, any>("post", "/api/payments/admin/${id}/refund", {
+    invalidateKeys: PAYMENT_KEYS,
+  });
+  const resumePayment = useApiMutation<any, any>("post", "/api/payments/admin/${id}/resume", {
+    invalidateKeys: PAYMENT_KEYS,
+  });
+  const cleanupStale = useApiMutation<any, any>("post", "/api/payments/admin/cleanup-stale", {
+    invalidateKeys: PAYMENT_KEYS,
+  });
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");

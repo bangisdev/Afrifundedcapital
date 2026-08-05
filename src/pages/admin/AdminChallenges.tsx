@@ -133,8 +133,14 @@ export default function AdminChallenges() {
     );
   };
 
-  const createTemplate = useApiMutation<any, any>("post", "/api/challenges/admin/templates");
-  const createSize = useApiMutation<any, any>("post", "/api/challenges/admin/sizes");
+  // Scoped invalidation: creating a template/size only affects the template
+  // list (sizes are loaded per-template into local state) — no full-cache blast.
+  const createTemplate = useApiMutation<any, any>("post", "/api/challenges/admin/templates", {
+    invalidateKeys: [["admin", "templates"]],
+  });
+  const createSize = useApiMutation<any, any>("post", "/api/challenges/admin/sizes", {
+    invalidateKeys: [["admin", "templates"]],
+  });
 
   const apiPut = async (path: string, body: any) => {
     const res = await fetch(path, { method: "PUT", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(body) });

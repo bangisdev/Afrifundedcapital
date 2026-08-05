@@ -49,8 +49,13 @@ function formatTime(ts: number | null) {
 export default function AdminNotifications() {
   const { data: notifications, isLoading } = useApiQuery<any[]>(["admin", "notifications"], "/api/notifications/admin/all");
   const { data: stats } = useApiQuery<any>(["admin", "notifStats"], "/api/notifications/admin/stats");
-  const broadcast = useApiMutation<any, any>("post", "/api/notifications/broadcast");
-  const segmentedBroadcast = useApiMutation<any, any>("post", "/api/notifications/broadcast/segmented");
+  // Scoped: broadcasting only changes the sent-notification history + stats.
+  const broadcast = useApiMutation<any, any>("post", "/api/notifications/broadcast", {
+    invalidateKeys: [["admin", "notifications"], ["admin", "notifStats"]],
+  });
+  const segmentedBroadcast = useApiMutation<any, any>("post", "/api/notifications/broadcast/segmented", {
+    invalidateKeys: [["admin", "notifications"], ["admin", "notifStats"]],
+  });
 
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");

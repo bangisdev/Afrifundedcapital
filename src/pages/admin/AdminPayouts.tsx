@@ -105,11 +105,28 @@ export default function AdminPayouts() {
   const { data: payouts, isLoading, refetch } = useApiQuery<any[]>(["admin", "payouts", allQueryParams], `/api/payouts/admin/all${allQueryParams}`);
   const { data: stats } = useApiQuery<any>(["admin", "payout-stats", allQueryParams], `/api/payouts/admin/stats${allQueryParams}`);
   const { data: byUser } = useApiQuery<any[]>(["admin", "payout-by-user", allQueryParams], `/api/payouts/admin/by-user${allQueryParams}`);
-  const approvePayout = useApiMutation<any, any>("post", "/api/payouts/admin/${id}/approve");
-  const rejectPayout = useApiMutation<any, any>("post", "/api/payouts/admin/${id}/reject");
-  const bulkApprove = useApiMutation<any, any>("post", "/api/payouts/admin/bulk-approve");
-  const markPaid = useApiMutation<any, any>("post", "/api/payouts/admin/${id}/mark-paid");
-  const bulkMarkPaid = useApiMutation<any, any>("post", "/api/payouts/admin/bulk-mark-paid");
+  // Scoped invalidation: every payout mutation touches the same three
+  // queries (payout list, stats, per-user breakdown) — no full-cache blast.
+  const PAYOUT_KEYS: Array<Array<string | number>> = [
+    ["admin", "payouts"],
+    ["admin", "payout-stats"],
+    ["admin", "payout-by-user"],
+  ];
+  const approvePayout = useApiMutation<any, any>("post", "/api/payouts/admin/${id}/approve", {
+    invalidateKeys: PAYOUT_KEYS,
+  });
+  const rejectPayout = useApiMutation<any, any>("post", "/api/payouts/admin/${id}/reject", {
+    invalidateKeys: PAYOUT_KEYS,
+  });
+  const bulkApprove = useApiMutation<any, any>("post", "/api/payouts/admin/bulk-approve", {
+    invalidateKeys: PAYOUT_KEYS,
+  });
+  const markPaid = useApiMutation<any, any>("post", "/api/payouts/admin/${id}/mark-paid", {
+    invalidateKeys: PAYOUT_KEYS,
+  });
+  const bulkMarkPaid = useApiMutation<any, any>("post", "/api/payouts/admin/bulk-mark-paid", {
+    invalidateKeys: PAYOUT_KEYS,
+  });
 
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);

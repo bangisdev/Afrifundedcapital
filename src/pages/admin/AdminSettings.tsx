@@ -97,7 +97,10 @@ export default function AdminSettings() {
     ["admin", "settings"],
     "/api/seed/settings"
   );
-  const updateSetting = useApiMutation<any, any>("put", "/api/seed/settings/flutterwave_config");
+  // Scoped: saving a config only changes the settings list — no full-cache blast.
+  const updateSetting = useApiMutation<any, any>("put", "/api/seed/settings/flutterwave_config", {
+    invalidateKeys: [["admin", "settings"]],
+  });
 
   // Mode state
   const [liveMode, setLiveMode] = useState(false);

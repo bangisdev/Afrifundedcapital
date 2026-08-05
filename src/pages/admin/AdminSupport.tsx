@@ -75,9 +75,18 @@ interface TicketsResponse {
 
 export default function AdminSupport() {
   const { data: briefUsers } = useApiQuery<any[]>(["admin", "briefUsers"], "/api/users/brief");
-  const updateStatus = useApiMutation<any, any>("put", "/api/support/admin/${id}/status");
-  const assignTicket = useApiMutation<any, any>("put", "/api/support/admin/${id}/assign");
-  const addMessage = useApiMutation<any, any>("post", "/api/support/${id}/messages");
+  // Scoped invalidation: status/assign only touch the ticket list; adding a
+  // message also refreshes the open thread (["ticket-messages"]) and the list
+  // (updatedAt drives the sort). No full-cache blast.
+  const updateStatus = useApiMutation<any, any>("put", "/api/support/admin/${id}/status", {
+    invalidateKeys: [["admin", "tickets"]],
+  });
+  const assignTicket = useApiMutation<any, any>("put", "/api/support/admin/${id}/assign", {
+    invalidateKeys: [["admin", "tickets"]],
+  });
+  const addMessage = useApiMutation<any, any>("post", "/api/support/${id}/messages", {
+    invalidateKeys: [["ticket-messages"], ["admin", "tickets"]],
+  });
 
   const [selectedTicket, setSelectedTicket] = useState<any>(null);
   const [showDetail, setShowDetail] = useState(false);
