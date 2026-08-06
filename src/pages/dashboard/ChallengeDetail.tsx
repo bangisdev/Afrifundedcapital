@@ -62,8 +62,15 @@ export default function ChallengeDetail() {
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard/challenges")}><ArrowLeft className="h-3 w-3" /></Button>
           <div>
-            <h1 className="text-lg font-medium tracking-tight">${challenge.accountSize?.toLocaleString()} Challenge</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">Target: {challenge.profitTarget}% · Max DD: {challenge.maxDrawdown}% · Leverage: 1:{challenge.maxLeverage}</p>
+            <h1 className="text-lg font-medium tracking-tight">
+              {challenge.templateName
+                ? `${challenge.templateName} · $${Number(challenge.accountSize || 0).toLocaleString()}`
+                : `$${challenge.accountSize?.toLocaleString()} Challenge`}
+            </h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {challenge.templateName ? `Challenge #${challenge.id} · ` : ""}
+              Target: {challenge.profitTarget}% · Max DD: {challenge.maxDrawdown}% · Leverage: 1:{challenge.maxLeverage}
+            </p>
           </div>
         </div>
         <Badge variant={challenge.status === "active" ? "default" : "secondary"} className="text-[10px]">{challenge.status}</Badge>

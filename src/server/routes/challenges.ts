@@ -267,7 +267,15 @@ app.get("/my/:id", requireAuth, (c) => {
       and(eq(userChallenges.id, id), eq(userChallenges.userId, userId))
     )
     .get();
-  return c.json(challenge || null);
+  if (!challenge) return c.json(null);
+
+  // Stamp the template name for the detail header (e.g. "Two-Step Evaluation · $50,000").
+  const template = db
+    .select()
+    .from(challengeTemplates)
+    .where(eq(challengeTemplates.id, challenge.templateId))
+    .get();
+  return c.json({ ...challenge, templateName: template?.name || null });
 });
 
 // Get dashboard metrics (aggregated)
