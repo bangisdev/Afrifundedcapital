@@ -566,4 +566,105 @@ test.describe("Admin Dashboard E2E Flow", () => {
       await expect(accountRow).not.toContainText("Balance: $0", { timeout: 20_000 });
     });
   });
+
+  // ─── 11. Purchase label & audit trail ────────────────
+  //
+  // Asserts the purchase label ("Two-Step Evaluation · $50,000") surfaces in
+  // the admin payments table (server-side join of template + account size)
+  // and that the audit-log quick filters + lifecycle entries render with the
+  // same label stamped on them. Data is seeded deterministically through the
+  // admin demo-purchase API so assertions don't depend on seed ordering.
+  test.describe("11. Purchase label & audit trail", () => {
+    test.beforeEach(async ({ page }) => {
+      await signInAsAdmin(page);
+    });
+
+    test("shows the purchase label on the admin payments table", async ({ page }) => {
+      // Deterministic purchase: Two-Step Evaluation + $50,000 size, so the
+      // payment row carries templateId/accountSizeId (→ challengeLabel join).
+      const templatesRes = await page.request.get("/api/challenges/templates");
+      const templates = (await templatesRes.json()) as Array<{ id: number; name: string }>;
+      const twoStep = templates.find((t) => t.name.includes("Two-Step"));
+      if (!twoStep) throw new Error("Two-Step template not found");
+      const sizesRes = await page.request.get(`/api/challenges/templates/${twoStep.id}/sizes`);
+      const sizes = (await sizesRes.json()) as Array<{ id: number; label: string }>;
+      const size50k = sizes.find((s) => s.label === "$50,000");
+      if (!size50k) throw new Error("$50,000 size not found");
+      const buyRes = await page.request.post("/api/challenges/demo-purchase", {
+        data: { templateId: twoStep.id, accountSizeId: size50k.id },
+      });
+      expect(buyRes.ok()).toBeTruthy();
+
+      await warmUp(page, "/admin/payments");
+      await waitForAppReady(page);
+      await expect(page.getByRole("heading", { name: /Payments/i })).toBeVisible({ timeout: 20_000 });
+      // Newest payment first — the freshly created row shows the joined label.
+      await expect(page.locator("tbody").first()).toContainText("Two-Step Evaluation · $50,000", {
+        timeout: 20_000,
+      });
+    });
+
+    test("renders the challenge & payment lifecycle filter chips", async ({ page }) => {
+      await warmUp(page, "/admin/audit-logs");
+      await waitForAppReady(page);
+
+      // exact: true — getByRole name matching is substring by default, so
+      // "Funded" would otherwise also match the "Refunded" chip.
+      for (const label of ["Phase Passed", "Funded", "Violated", "Expired"]) {
+        await expect(page.getByRole("button", { name: label, exact: true })).toBeVisible({ timeout: 20_000 });
+      }
+      for (const label of ["Completed", "Refunded", "Resumed"]) {
+        await expect(page.getByRole("button", { name: label, exact: true })).toBeVisible({ timeout: 20_000 });
+      }
+
+      // Toggle behavior: one click activates the chip, a second clears it.
+      const chip = page.getByRole("button", { name: "Phase Passed", exact: true });
+      await chip.click();
+      await expect(chip).toHaveAttribute("aria-pressed", "true");
+      await chip.click();
+      await expect(chip).toHaveAttribute("aria-pressed", "false");
+    });
+
+    test("stamps challenge lifecycle audit entries with the purchase label", async ({ page }) => {
+      // Seed a known challenge, then advance it through the admin status API —
+      // the route writes a challenge.phase_passed entry with the label.
+      const templatesRes = await page.request.get("/api/challenges/templates");
+      const templates = (await templatesRes.json()) as Array<{ id: number; name: string }>;
+      const twoStep = templates.find((t) => t.name.includes("Two-Step"));
+      if (!twoStep) throw new Error("Two-Step template not found");
+      const sizesRes = await page.request.get(`/api/challenges/templates/${twoStep.id}/sizes`);
+      const sizes = (await sizesRes.json()) as Array<{ id: number; label: string }>;
+      const size50k = sizes.find((s) => s.label === "$50,000") || sizes[0];
+      const buyRes = await page.request.post("/api/challenges/demo-purchase", {
+        data: { templateId: twoStep.id, accountSizeId: size50k!.id },
+      });
+      expect(buyRes.ok()).toBeTruthy();
+      const { challengeId } = (await buyRes.json()) as { challengeId: number };
+      expect(challengeId).toBeTruthy();
+
+      const statusRes = await page.request.put(`/api/challenges/admin/${challengeId}/status`, {
+        data: { status: "phase_1_passed" },
+      });
+      expect(statusRes.ok()).toBeTruthy();
+
+      // Server-side: the audit trail entry exists and carries the label.
+      const logsRes = await page.request.get(
+        "/api/users/audit-logs?action=challenge.phase_passed&pageSize=25",
+      );
+      const logs = (await logsRes.json()) as {
+        logs: Array<{ id: number; entityId: string; details: string }>;
+      };
+      const entry = logs.logs?.find((l) => String(l.entityId) === String(challengeId));
+      expect(entry).toBeTruthy();
+      expect(entry!.details).toContain("Two-Step Evaluation · $50,000");
+
+      // UI reflection: the entry renders with the action and the label.
+      await warmUp(page, "/admin/audit-logs");
+      await waitForAppReady(page);
+      await expect(page.locator("body")).toContainText("challenge.phase_passed", { timeout: 20_000 });
+      await expect(page.locator("body")).toContainText("Two-Step Evaluation · $50,000", {
+        timeout: 20_000,
+      });
+    });
+  });
 });
