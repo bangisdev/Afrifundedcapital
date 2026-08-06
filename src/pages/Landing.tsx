@@ -32,6 +32,9 @@ import {
   MoveRight,
   Sparkles,
   MousePointer2,
+  CheckCircle,
+  XCircle,
+  Loader2,
 } from "lucide-react";
 import { LogoDropdown } from "@/components/LogoDropdown";
 
@@ -178,6 +181,115 @@ const features = [
   },
 ];
 
+// ─── Challenge Selection Data & Helpers ───
+
+interface ChallengeTemplate {
+  id: number | string;
+  name: string;
+  description?: string;
+  type: string;
+  profitTarget?: number;
+  dailyDrawdown?: number;
+  maxDrawdown?: number;
+  maxLeverage?: number;
+  minTradingDays?: number;
+  durationDays?: number;
+  allowWeekendHolding?: boolean;
+  allowNewsTrading?: boolean;
+  allowEATrading?: boolean;
+  allowCopyTrading?: boolean;
+}
+
+interface AccountSizeRow {
+  id?: number | string;
+  label: string;
+  price: number | string;
+}
+
+const FALLBACK_TYPES: ChallengeTemplate[] = [
+  {
+    id: "one-step",
+    name: "One-Step Challenge",
+    type: "one_step",
+    description: "Single-phase challenge with a 10% profit target. Fast track to funding with a 4% daily drawdown limit.",
+    profitTarget: 10,
+    dailyDrawdown: 4,
+    maxDrawdown: 8,
+    maxLeverage: 50,
+    minTradingDays: 3,
+    durationDays: 30,
+    allowWeekendHolding: false,
+    allowNewsTrading: true,
+    allowEATrading: true,
+    allowCopyTrading: false,
+  },
+  {
+    id: "two-step",
+    name: "Two-Step Evaluation",
+    type: "two_step",
+    description: "Classic two-phase evaluation with 8% profit target, 5% daily and 10% max drawdown. Prove your skills in two steps.",
+    profitTarget: 8,
+    dailyDrawdown: 5,
+    maxDrawdown: 10,
+    maxLeverage: 100,
+    minTradingDays: 5,
+    durationDays: 30,
+    allowWeekendHolding: false,
+    allowNewsTrading: true,
+    allowEATrading: true,
+    allowCopyTrading: false,
+  },
+  {
+    id: "instant-funding",
+    name: "Instant Funding",
+    type: "instant_funding",
+    description: "Get funded immediately with no evaluation. Higher leverage and flexible rules for experienced traders.",
+    profitTarget: 10,
+    dailyDrawdown: 5,
+    maxDrawdown: 10,
+    maxLeverage: 100,
+    minTradingDays: 0,
+    durationDays: 30,
+    allowWeekendHolding: false,
+    allowNewsTrading: true,
+    allowEATrading: true,
+    allowCopyTrading: false,
+  },
+];
+
+const FALLBACK_SIZES: AccountSizeRow[] = [
+  { label: "$5,000", price: "₦55,000" },
+  { label: "$10,000", price: "₦99,000" },
+  { label: "$25,000", price: "₦199,000" },
+  { label: "$50,000", price: "₦349,000" },
+  { label: "$100,000", price: "₦549,000" },
+  { label: "$200,000", price: "₦999,000" },
+];
+
+const TYPE_LABELS: Record<string, string> = {
+  one_step: "One-Step",
+  two_step: "Two-Step",
+  instant_funding: "Instant",
+};
+
+const PHASE_LABELS: Record<string, string> = {
+  one_step: "1 Phase",
+  two_step: "2 Phases",
+  instant_funding: "No Evaluation",
+};
+
+function challengeTypeLabel(type?: string) {
+  return TYPE_LABELS[type || ""] || "Challenge";
+}
+
+function challengePhaseLabel(type?: string) {
+  return PHASE_LABELS[type || ""] || "—";
+}
+
+function formatPrice(price: number | string) {
+  return typeof price === "number" ? `₦${price.toLocaleString()}` : price;
+}
+
 export default function Landing() {
   const navigate = useNavigate();
   const { isLoading, isAuthenticated } = useAuth();
@@ -203,6 +315,55 @@ export default function Landing() {
   const heroBgY = useTransform(scrollYProgress, [0, 0.3], [0, 50]);
   const heroScale = useTransform(scrollYProgress, [0, 0.3], [1, 0.98]);
   const heroOpacity = useTransform(scrollYProgress, [0, 0.25], [1, 0]);
+
+  // Live challenge templates (progressive enhancement — static fallback until loaded)
+  const [challengeTypes, setChallengeTypes] = useState<ChallengeTemplate[] | null>(null);
+  const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null);
+  const [sizesByType, setSizesByType] = useState<Record<string, AccountSizeRow[]>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    if (typeof fetch !== "function") return;
+    fetch("/api/challenges/templates", { headers: { Accept: "application/json" } })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("fetch failed"))))
+      .then((data: unknown) => {
+        if (cancelled || !Array.isArray(data) || data.length === 0) return;
+        setChallengeTypes(data as ChallengeTemplate[]);
+        setSelectedTypeId(String((data as ChallengeTemplate[])[0].id));
+      })
+      .catch(() => {
+        /* keep the static fallback */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedTypeId || typeof fetch !== "function") return;
+    let cancelled = false;
+    fetch(`/api/challenges/templates/${selectedTypeId}/sizes`, { headers: { Accept: "application/json" } })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("fetch failed"))))
+      .then((data: unknown) => {
+        if (cancelled || !Array.isArray(data)) return;
+        setSizesByType((prev) => ({ ...prev, [selectedTypeId]: data as AccountSizeRow[] }));
+      })
+      .catch(() => {
+        /* keep the static fallback */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTypeId]);
+
+  const usingLiveData = !!challengeTypes && challengeTypes.length > 0;
+  const displayTypes: ChallengeTemplate[] =
+    usingLiveData && challengeTypes ? challengeTypes : FALLBACK_TYPES;
+  const activeTypeId = selectedTypeId ?? (displayTypes.length > 0 ? String(displayTypes[0].id) : null);
+  const activeType = displayTypes.find((t) => String(t.id) === activeTypeId) || displayTypes[0];
+  const displaySizes: AccountSizeRow[] | null = usingLiveData
+    ? (activeType && sizesByType[String(activeType.id)]) || null
+    : FALLBACK_SIZES;
 
   // Auto-play carousel
   const [carouselApi, setCarouselApi] = useState<CarouselApi | null>(null);
@@ -320,7 +481,7 @@ export default function Landing() {
               variant="outline"
               className="rounded-full px-5 py-1.5 text-xs font-normal border-border/60 bg-background/50 backdrop-blur-sm"
             >
-              <Sparkles className="h-3 w-3 mr-1.5 inline-block" />
+              <Sparkles className="h-3 w-3 mr-1.5 inline-block text-brand" />
               Africa's Premier Prop Trading Firm
             </Badge>
           </motion.div>
@@ -344,7 +505,7 @@ export default function Landing() {
             <br />
             <span className="relative">
               Keep{" "}
-              <span className="font-medium">90%</span>
+              <span className="font-medium text-brand">90%</span>
               <span className="font-medium"> of Profits</span>
             </span>
           </motion.h1>
@@ -632,14 +793,14 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ─── PRICING ─── */}
+      {/* ─── PRICING / CHALLENGE SELECTION ─── */}
       <section id="pricing" className="py-28 px-4 bg-secondary/30">
-        <div className="container-page max-w-5xl">
+        <div className="container-page max-w-6xl">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-center mb-16"
+            className="text-center mb-12"
           >
             <Badge variant="outline" className="rounded-full px-4 py-1 text-xs font-normal mb-6 border-border/60">
               Pricing
@@ -652,37 +813,165 @@ export default function Landing() {
             </p>
           </motion.div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            {[
-              { size: "$5,000", price: "₦55,000" },
-              { size: "$10,000", price: "₦99,000" },
-              { size: "$25,000", price: "₦199,000" },
-              { size: "$50,000", price: "₦349,000" },
-              { size: "$100,000", price: "₦549,000" },
-              { size: "$200,000", price: "₦999,000" },
-            ].map((acct, i) => (
-              <motion.div
-                key={acct.size}
-                variants={scaleIn}
-                initial="hidden"
-                whileInView="visible"
-                custom={i}
-                viewport={{ once: true, margin: "-30px" }}
-                className="group p-5 border border-border/60 rounded-lg text-center bg-background hover:border-foreground/20 transition-all duration-300"
-              >
-                <div className="text-lg font-light tracking-tight mb-1">{acct.size}</div>
-                <div className="text-xs text-muted-foreground mb-5">{acct.price}</div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full text-xs group-hover:bg-foreground group-hover:text-background transition-all duration-300"
-                  onClick={() => navigate("/auth")}
+          {/* Challenge type selector */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            className="flex flex-wrap items-center justify-center gap-2 mb-8"
+          >
+            {displayTypes.map((t) => {
+              const active = String(t.id) === activeTypeId;
+              return (
+                <button
+                  key={String(t.id)}
+                  type="button"
+                  onClick={() => setSelectedTypeId(String(t.id))}
+                  aria-pressed={active}
+                  className={`relative px-5 py-2 text-xs rounded-full border transition-all duration-300 ${
+                    active
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-border/60 bg-background text-muted-foreground hover:border-foreground/40 hover:text-foreground"
+                  }`}
                 >
-                  Select
-                </Button>
-              </motion.div>
-            ))}
-          </div>
+                  {challengeTypeLabel(t.type)}
+                  {active && <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-brand" />}
+                </button>
+              );
+            })}
+          </motion.div>
+
+          {/* Rules panel for the selected challenge */}
+          {activeType && (
+            <motion.div
+              key={String(activeType.id)}
+              initial={{ opacity: 0, y: 12 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.4 }}
+              className="card-subtle p-6 md:p-8 mb-10 max-w-3xl mx-auto"
+            >
+              <div className="flex items-start justify-between gap-4 mb-6">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-medium">{activeType.name}</h3>
+                    <span className="hidden sm:inline-flex h-1.5 w-1.5 rounded-full bg-brand" />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                    {activeType.description}
+                  </p>
+                </div>
+                <span className="badge-subtle shrink-0">{challengePhaseLabel(activeType.type)}</span>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-x-6 gap-y-4">
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Profit Target</div>
+                  <div className="text-sm font-medium tabular-nums">{activeType.profitTarget}%</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Daily Drawdown</div>
+                  <div className="text-sm font-medium tabular-nums">{activeType.dailyDrawdown}%</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Max Drawdown</div>
+                  <div className="text-sm font-medium tabular-nums">{activeType.maxDrawdown}%</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Leverage</div>
+                  <div className="text-sm font-medium tabular-nums">1:{activeType.maxLeverage}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Min. Trading Days</div>
+                  <div className="text-sm font-medium tabular-nums">
+                    {activeType.minTradingDays ? activeType.minTradingDays : "None"}
+                  </div>
+                </div>
+              </div>
+
+              <div className="divider-subtle my-5" />
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3">
+                <div className="flex items-center gap-2 text-xs">
+                  {activeType.allowWeekendHolding ? (
+                    <CheckCircle className="h-3.5 w-3.5 text-brand shrink-0" />
+                  ) : (
+                    <XCircle className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                  )}
+                  <span className="text-muted-foreground">Weekend Holding</span>
+                  <span className="ml-auto font-medium tabular-nums">
+                    {activeType.allowWeekendHolding ? "Allowed" : "Restricted"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  {activeType.allowNewsTrading !== false ? (
+                    <CheckCircle className="h-3.5 w-3.5 text-brand shrink-0" />
+                  ) : (
+                    <XCircle className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                  )}
+                  <span className="text-muted-foreground">News Trading</span>
+                  <span className="ml-auto font-medium tabular-nums">
+                    {activeType.allowNewsTrading !== false ? "Allowed" : "Restricted"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  {activeType.allowEATrading !== false ? (
+                    <CheckCircle className="h-3.5 w-3.5 text-brand shrink-0" />
+                  ) : (
+                    <XCircle className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                  )}
+                  <span className="text-muted-foreground">Expert Advisors</span>
+                  <span className="ml-auto font-medium tabular-nums">
+                    {activeType.allowEATrading !== false ? "Allowed" : "Blocked"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  {activeType.allowCopyTrading ? (
+                    <CheckCircle className="h-3.5 w-3.5 text-brand shrink-0" />
+                  ) : (
+                    <XCircle className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                  )}
+                  <span className="text-muted-foreground">Copy Trading</span>
+                  <span className="ml-auto font-medium tabular-nums">
+                    {activeType.allowCopyTrading ? "Allowed" : "Blocked"}
+                  </span>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Account sizes */}
+          {displaySizes === null ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              {displaySizes.map((acct, i) => (
+                <motion.div
+                  key={acct.label}
+                  variants={scaleIn}
+                  initial="hidden"
+                  whileInView="visible"
+                  custom={i}
+                  viewport={{ once: true, margin: "-30px" }}
+                  className="group p-5 border border-border/60 rounded-lg text-center bg-background hover:border-foreground/20 transition-all duration-300"
+                >
+                  <div className="text-lg font-light tracking-tight mb-1">{acct.label}</div>
+                  <div className="text-xs text-muted-foreground mb-5">{formatPrice(acct.price)}</div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-xs group-hover:bg-foreground group-hover:text-background transition-all duration-300"
+                    onClick={() => navigate(isAuthenticated ? "/dashboard/challenges" : "/auth")}
+                  >
+                    Select
+                  </Button>
+                </motion.div>
+              ))}
+            </div>
+          )}
 
           <motion.div
             initial={{ opacity: 0 }}

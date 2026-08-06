@@ -20,7 +20,7 @@ import {
   TabsContent,
 } from "@/components/ui/tabs";
 import { useNavigate } from "react-router";
-import { Loader2, CheckCircle, XCircle, ChevronRight, ChevronLeft, ArrowUp, ArrowDown, ArrowUpDown, Gift } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, ChevronRight, ChevronLeft, ArrowUp, ArrowDown, ArrowUpDown, Gift, Check, X } from "lucide-react";
 import { toast } from "sonner";
 
 type Doc = Record<string, any>;
@@ -44,6 +44,12 @@ interface MyCouponsResponse {
 }
 
 const PAGE_SIZES = [5, 10, 25];
+
+const TEMPLATE_TYPE_LABELS: Record<string, string> = {
+  one_step: "One-Step",
+  two_step: "Two-Step",
+  instant_funding: "Instant Funding",
+};
 
 export default function Challenges() {
   const { user } = useAuth();
@@ -199,6 +205,20 @@ export default function Challenges() {
     );
   }
 
+  const ruleFlag = (label: string, allowed: boolean) => (
+    <div className="flex items-center gap-1.5 text-xs">
+      {allowed ? (
+        <Check className="h-3 w-3 text-brand shrink-0" />
+      ) : (
+        <X className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+      )}
+      <span className="text-muted-foreground">{label}</span>
+      <span className={`ml-auto font-medium tabular-nums ${allowed ? "text-foreground" : "text-muted-foreground"}`}>
+        {allowed ? "Yes" : "No"}
+      </span>
+    </div>
+  );
+
   const statusBadge = (status: string) => {
     const variants: Record<string, { label: string; className: string }> = {
       active: { label: "Active", className: "bg-foreground text-background" },
@@ -331,7 +351,12 @@ export default function Challenges() {
                 }`}
                 onClick={() => { setSelectedTemplate(String(template.id)); setSelectedSize(null); }}
               >
-                <h3 className="text-sm font-medium mb-1">{template.name}</h3>
+                <div className="flex items-start justify-between gap-2 mb-1">
+                  <h3 className="text-sm font-medium">{template.name}</h3>
+                  {TEMPLATE_TYPE_LABELS[template.type] && (
+                    <span className="badge-subtle shrink-0">{TEMPLATE_TYPE_LABELS[template.type]}</span>
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground mb-4">{template.description}</p>
                 <div className="space-y-1.5 text-xs text-muted-foreground">
                   <div className="flex justify-between"><span>Profit Target</span><span className="text-foreground">{template.profitTarget}%</span></div>
@@ -339,6 +364,16 @@ export default function Challenges() {
                   <div className="flex justify-between"><span>Daily Drawdown</span><span className="text-foreground">{template.dailyDrawdown}%</span></div>
                   <div className="flex justify-between"><span>Min Trading Days</span><span className="text-foreground">{template.minTradingDays}</span></div>
                   <div className="flex justify-between"><span>Duration</span><span className="text-foreground">{template.durationDays ? `${template.durationDays} days` : "Unlimited"}</span></div>
+                  <div className="flex justify-between"><span>Leverage</span><span className="text-foreground">1:{template.maxLeverage}</span></div>
+                </div>
+                <div className="mt-4 pt-4 border-t border-border">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Trading Rules</div>
+                  <div className="space-y-1.5">
+                    {ruleFlag("Weekend Holding", template.allowWeekendHolding ?? false)}
+                    {ruleFlag("News Trading", template.allowNewsTrading !== false)}
+                    {ruleFlag("Expert Advisors", template.allowEATrading !== false)}
+                    {ruleFlag("Copy Trading", !!template.allowCopyTrading)}
+                  </div>
                 </div>
                 <Button variant="outline" size="sm" className="w-full mt-4 text-xs"
                   disabled={paymentState.status === "initiating" || paymentState.status === "verifying"}
@@ -497,6 +532,18 @@ export default function Challenges() {
                 ? "Your challenge has been created. Happy trading!"
                 : "Select your account size and apply any coupon codes"}
             </DialogDescription>
+            {paymentState.status !== "success" && selectedTemplate && (
+              (() => {
+                const tpl = templates?.find((t: Doc) => String(t.id) === selectedTemplate);
+                if (!tpl) return null;
+                return (
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    {tpl.profitTarget}% profit target · {tpl.maxDrawdown}% max drawdown · 1:{tpl.maxLeverage} leverage ·{" "}
+                    {tpl.minTradingDays} min trading days{tpl.durationDays ? ` · ${tpl.durationDays} days` : ""}
+                  </p>
+                );
+              })()
+            )}
           </DialogHeader>
 
           {paymentState.status === "success" ? (

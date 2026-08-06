@@ -62,6 +62,7 @@ vi.mock("lucide-react", () => {
     ChevronRight: createIcon("ChevronRight"),
     TrendingUp: createIcon("TrendingUp"),
     CheckCircle: createIcon("CheckCircle"),
+    XCircle: createIcon("XCircle"),
     Quote: createIcon("Quote"),
     Star: createIcon("Star"),
     MoveRight: createIcon("MoveRight"),
