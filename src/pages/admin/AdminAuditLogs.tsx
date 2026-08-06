@@ -15,6 +15,9 @@ import {
   Trophy,
   ShieldAlert,
   Clock,
+  BadgeCheck,
+  RotateCcw,
+  Play,
   type LucideIcon,
 } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -40,6 +43,43 @@ const CHALLENGE_LIFECYCLE_CHIPS: Array<{ action: string; label: string; icon: Lu
   { action: "challenge.violated", label: "Violated", icon: ShieldAlert },
   { action: "challenge.expired", label: "Expired", icon: Clock },
 ];
+
+// Payment lifecycle quick filters — same one-tap toggle behavior.
+const PAYMENT_LIFECYCLE_CHIPS: Array<{ action: string; label: string; icon: LucideIcon }> = [
+  { action: "payment.completed", label: "Completed", icon: BadgeCheck },
+  { action: "payment.refunded", label: "Refunded", icon: RotateCcw },
+  { action: "payment.resumed", label: "Resumed", icon: Play },
+];
+
+function FilterChip({
+  action,
+  label,
+  icon: Icon,
+  active,
+  onToggle,
+}: {
+  action: string;
+  label: string;
+  icon: LucideIcon;
+  active: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={active}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium transition-colors ${
+        active
+          ? "border-foreground bg-foreground text-background"
+          : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40"
+      }`}
+    >
+      <Icon className="h-3 w-3" />
+      {label}
+    </button>
+  );
+}
 
 function formatDateTime(ts: number | null) {
   if (!ts) return "—";
@@ -240,28 +280,28 @@ export default function AdminAuditLogs() {
         )}
       </div>
 
-      {/* Challenge lifecycle quick filters */}
+      {/* Quick filter chips — challenge + payment lifecycle */}
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-[10px] font-medium text-muted-foreground mr-1">Challenge lifecycle:</span>
-        {CHALLENGE_LIFECYCLE_CHIPS.map((chip) => {
-          const active = actionFilter === chip.action;
-          return (
-            <button
-              key={chip.action}
-              type="button"
-              onClick={() => setActionFilter(active ? "all" : chip.action)}
-              aria-pressed={active}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium transition-colors ${
-                active
-                  ? "border-foreground bg-foreground text-background"
-                  : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40"
-              }`}
-            >
-              <chip.icon className="h-3 w-3" />
-              {chip.label}
-            </button>
-          );
-        })}
+        {CHALLENGE_LIFECYCLE_CHIPS.map((chip) => (
+          <FilterChip
+            key={chip.action}
+            {...chip}
+            active={actionFilter === chip.action}
+            onToggle={() => setActionFilter(actionFilter === chip.action ? "all" : chip.action)}
+          />
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[10px] font-medium text-muted-foreground mr-1">Payment lifecycle:</span>
+        {PAYMENT_LIFECYCLE_CHIPS.map((chip) => (
+          <FilterChip
+            key={chip.action}
+            {...chip}
+            active={actionFilter === chip.action}
+            onToggle={() => setActionFilter(actionFilter === chip.action ? "all" : chip.action)}
+          />
+        ))}
       </div>
 
       {/* Entity scope chip (from deep links) */}
