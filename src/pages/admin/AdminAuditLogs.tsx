@@ -11,6 +11,11 @@ import {
   ChevronRight,
   X,
   UserRound,
+  Award,
+  Trophy,
+  ShieldAlert,
+  Clock,
+  type LucideIcon,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
@@ -26,6 +31,15 @@ interface AuditLogsResponse {
 }
 
 const PAGE_SIZES = [10, 25, 50];
+
+// Quick-filter chips for challenge lifecycle events — one tap filters the
+// action dropdown to exactly that transition (clicking again clears it).
+const CHALLENGE_LIFECYCLE_CHIPS: Array<{ action: string; label: string; icon: LucideIcon }> = [
+  { action: "challenge.phase_passed", label: "Phase Passed", icon: Award },
+  { action: "challenge.funded", label: "Funded", icon: Trophy },
+  { action: "challenge.violated", label: "Violated", icon: ShieldAlert },
+  { action: "challenge.expired", label: "Expired", icon: Clock },
+];
 
 function formatDateTime(ts: number | null) {
   if (!ts) return "—";
@@ -224,6 +238,30 @@ export default function AdminAuditLogs() {
             <X className="h-3 w-3 mr-1" /> Clear
           </Button>
         )}
+      </div>
+
+      {/* Challenge lifecycle quick filters */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[10px] font-medium text-muted-foreground mr-1">Challenge lifecycle:</span>
+        {CHALLENGE_LIFECYCLE_CHIPS.map((chip) => {
+          const active = actionFilter === chip.action;
+          return (
+            <button
+              key={chip.action}
+              type="button"
+              onClick={() => setActionFilter(active ? "all" : chip.action)}
+              aria-pressed={active}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium transition-colors ${
+                active
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40"
+              }`}
+            >
+              <chip.icon className="h-3 w-3" />
+              {chip.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Entity scope chip (from deep links) */}
