@@ -22,6 +22,9 @@
  *                         section (auth, overview, users, challenges, payments,
  *                         nav, responsive, mt5, trading, scheduler, audit), so
  *                         CI can run each chunk under its own shorter timeout.
+ * CI:                     .github/workflows/e2e-matrix.yml runs the 11 presets
+ *                         as a parallel GitHub Actions matrix, one job per
+ *                         chunk, each with its own timeout-minutes budget.
  */
 import { test, expect, type Page } from "@playwright/test";
 

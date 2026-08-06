@@ -1,0 +1,110 @@
+name: E2E Matrix (per-section chunks)
+
+on:
+  pull_request:
+    branches: [main]
+  # Allow manual triggering (e.g. to re-run a full sweep without a PR)
+  workflow_dispatch:
+
+# Cancel in-progress runs for the same PR/ref — a fresh push supersedes the
+# whole matrix sweep.
+concurrency:
+  group: e2e-matrix-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: E2E · ${{ matrix.chunk }}
+    runs-on: ubuntu-latest
+    # Each chunk gets its own wall-clock budget. The values are tuned to the
+    # chunk's runtime (install + boot + tests) and are intentionally generous —
+    # a chunk that exceeds its budget is hung, not merely slow.
+    timeout-minutes: ${{ matrix.timeout }}
+    strategy:
+      # A failure in one chunk must not cancel the other 10 — each section
+      # reports independently.
+      fail-fast: false
+      matrix:
+        include:
+          # Lighter sections (few tests, quick pages)
+          - chunk: auth
+            timeout: 10
+          - chunk: overview
+            timeout: 10
+          - chunk: nav
+            timeout: 10
+          - chunk: responsive
+            timeout: 10
+          # Medium sections (management CRUD + tables)
+          - chunk: users
+            timeout: 12
+          - chunk: challenges
+            timeout: 12
+          - chunk: payments
+            timeout: 12
+          - chunk: trading
+            timeout: 12
+          # Heavier sections (connector/reconciliation, scheduler waits,
+          # API-driven purchase + lifecycle audit)
+          - chunk: mt5
+            timeout: 15
+          - chunk: scheduler
+            timeout: 15
+          - chunk: audit
+            timeout: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # All 11 jobs run in parallel and every one would otherwise re-download
+      # Chromium (~150 MB each). Cache the shared browser install keyed on the
+      # lockfile so version bumps invalidate it automatically.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      # Each job runs its own chunk via the package.json preset. Playwright
+      # boots its own `bun run dev` with E2E_TESTING=1 (the port is free on
+      # the isolated runner) and tears it down after — no cross-job port or
+      # data contention because every job gets a fresh runner + SQLite file.
+      - name: Run E2E chunk — ${{ matrix.chunk }}
+        run: bun run test:e2e:${{ matrix.chunk }}
+        env:
+          CI: true
+          E2E_ADMIN_EMAIL: admin@afrifundedcapital.com
+          E2E_ADMIN_PASSWORD: Admin@123456
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.chunk }}
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.chunk }}
+          path: test-results/
+          retention-days: 7
+
+      - name: Upload trace files
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traces-${{ matrix.chunk }}
+          path: test-results/**/trace.zip
+          retention-days: 7
