@@ -376,9 +376,13 @@ export default function AdminPayments() {
                         <tr key={p.id} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
                           <td className="p-3">
                             <div className="font-medium font-mono text-[11px]">{p.reference}</div>
-                            {p.description && (
+                            {p.challengeLabel ? (
+                              <div className="mt-0.5 truncate max-w-[200px] text-[10px] font-medium text-emerald-600 dark:text-emerald-500">
+                                {p.challengeLabel}
+                              </div>
+                            ) : p.description ? (
                               <div className="text-muted-foreground mt-0.5 truncate max-w-[200px]">{p.description}</div>
-                            )}
+                            ) : null}
                           </td>
                           <td className="p-3 hidden md:table-cell text-muted-foreground">
                             {p.userName ? (

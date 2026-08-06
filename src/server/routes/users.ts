@@ -388,6 +388,7 @@ app.get("/audit-logs", requireAuth, requireAdmin, (c) => {
       or(
         like(auditLogs.action, pattern),
         like(auditLogs.entity, pattern),
+        like(auditLogs.details, pattern),
         sql`cast(${auditLogs.entityId} as text) like ${pattern}`,
         like(users.name, pattern),
         like(users.email, pattern),

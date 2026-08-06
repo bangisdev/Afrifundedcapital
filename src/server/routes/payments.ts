@@ -26,6 +26,28 @@ interface FlutterwaveVerifyResponse {
   } | null;
 }
 
+/**
+ * Resolve the purchase label ("Two-Step Evaluation · $50,000") from a
+ * payment's template + account size. Authoritative regardless of what the
+ * client supplied as the description — older payments and webhook
+ * confirmations often carry a generic "Challenge Purchase" description.
+ */
+function resolveChallengeLabel(
+  db: any,
+  templateId: number | null,
+  accountSizeId: number | null,
+): string | null {
+  if (!templateId || !accountSizeId) return null;
+  try {
+    const template = db.select().from(challengeTemplates).where(eq(challengeTemplates.id, templateId)).get();
+    const size = db.select().from(accountSizes).where(eq(accountSizes.id, accountSizeId)).get();
+    if (template && size && template.name && size.size != null) {
+      return `${template.name} · $${size.size.toLocaleString("en-US")}`;
+    }
+  } catch { /* non-critical */ }
+  return null;
+}
+
 // ─── Flutterwave Config ────────────────────────────────
 app.get("/flutterwave-config", requireAuth, (c) => {
   const db = getDb();
@@ -348,6 +370,26 @@ app.post("/verify", requireAuth, async (c) => {
 
         // Link MT5 account to challenge
         db.update(userChallenges).set({ mt5AccountId: mt5Account.id, updatedAt: now }).where(eq(userChallenges.id, challenge.id)).run();
+
+        // Stamp the purchase in the audit trail — what was bought, for how
+        // much, under which reference.
+        try {
+          writeAuditLog(db, {
+            userId: payment.userId,
+            action: "payment.completed",
+            entity: "payment",
+            entityId: payment.id,
+            details: {
+              reference: payment.reference,
+              amount: payment.amount,
+              currency: payment.currency,
+              challengeLabel: resolveChallengeLabel(db, payment.templateId, payment.accountSizeId),
+              templateId: payment.templateId,
+              accountSizeId: payment.accountSizeId,
+            },
+            ipAddress: c.req.header("x-forwarded-for") || undefined,
+          });
+        } catch { /* non-critical */ }
       }
     }
 
@@ -544,6 +586,27 @@ app.post("/webhook/flutterwave", async (c) => {
 
         db.update(userChallenges).set({ mt5AccountId: mt5Account.id, updatedAt: now }).where(eq(userChallenges.id, challenge.id)).run();
 
+        // Stamp the purchase in the audit trail (webhook path — the actor is
+        // the payer; the entry is written once thanks to the completed-status
+        // guard above).
+        try {
+          writeAuditLog(db, {
+            userId: payment.userId,
+            action: "payment.completed",
+            entity: "payment",
+            entityId: payment.id,
+            details: {
+              reference: payment.reference,
+              amount: payment.amount,
+              currency: payment.currency,
+              challengeLabel: resolveChallengeLabel(db, payment.templateId, payment.accountSizeId),
+              templateId: payment.templateId,
+              accountSizeId: payment.accountSizeId,
+            },
+            ipAddress: c.req.header("x-forwarded-for") || "unknown",
+          });
+        } catch { /* non-critical */ }
+
         // Notify user of successful payment via webhook
         const webhookPayer = db.select().from(users).where(eq(users.id, payment.userId)).get();
         const webhookPayerName = webhookPayer?.name || "Trader";
@@ -729,11 +792,20 @@ app.get("/admin/all", requireAuth, requireAdmin, (c) => {
     .get();
   const total = totalRow?.count || 0;
 
-  // Page of payments with user info joined
+  // Page of payments with user + challenge info joined — the challenge name
+  // and account size let admins see exactly what was purchased at a glance.
   const rows = db
-    .select({ payment: payments, userName: users.name, userEmail: users.email })
+    .select({
+      payment: payments,
+      userName: users.name,
+      userEmail: users.email,
+      challengeName: challengeTemplates.name,
+      accountSize: accountSizes.size,
+    })
     .from(payments)
     .leftJoin(users, eq(users.id, payments.userId))
+    .leftJoin(challengeTemplates, eq(challengeTemplates.id, payments.templateId))
+    .leftJoin(accountSizes, eq(accountSizes.id, payments.accountSizeId))
     .where(whereClause)
     .orderBy(sortOrder)
     .limit(pageSize)
@@ -744,6 +816,14 @@ app.get("/admin/all", requireAuth, requireAdmin, (c) => {
     ...r.payment,
     userName: r.userName || null,
     userEmail: r.userEmail || null,
+    challengeName: r.challengeName || null,
+    accountSize: r.accountSize != null ? r.accountSize : null,
+    // Purchase label resolved from the template + size (not the client
+    // description), so it's correct even for legacy/generic descriptions.
+    challengeLabel:
+      r.challengeName && r.accountSize != null
+        ? `${r.challengeName} · $${r.accountSize.toLocaleString("en-US")}`
+        : null,
   }));
 
   // Platform-wide stats (unfiltered) so the stat cards stay accurate when filtered/paginated
@@ -1045,6 +1125,7 @@ app.post("/admin/:id/refund", requireAuth, requireAdmin, async (c) => {
         reference: payment.reference,
         amount: payment.amount,
         currency: payment.currency,
+        challengeLabel: resolveChallengeLabel(db, payment.templateId, payment.accountSizeId),
         challengeDeactivated,
         mt5Suspended,
         fundedAccountTerminated,
@@ -1165,6 +1246,7 @@ app.post("/admin/:id/resume", requireAuth, requireAdmin, async (c) => {
         reference: payment.reference,
         amount: payment.amount,
         currency: payment.currency,
+        challengeLabel: resolveChallengeLabel(db, payment.templateId, payment.accountSizeId),
         challengeResumed,
         mt5Reactivated,
         fundedAccountReactivated,

@@ -44,6 +44,43 @@ function getInitials(name: string | null | undefined): string {
     .join("");
 }
 
+// Renders an audit entry's details. When the details carry a challengeLabel
+// (e.g. payment.completed / payment.refunded entries), the purchase label is
+// surfaced prominently instead of being buried in the raw JSON dump.
+function DetailsLine({ details }: { details: string | object | null | undefined }) {
+  if (!details) return null;
+
+  let parsed: any = null;
+  let raw: string;
+  if (typeof details === "string") {
+    raw = details;
+    try {
+      parsed = JSON.parse(details);
+    } catch {
+      parsed = null;
+    }
+  } else {
+    raw = JSON.stringify(details);
+    parsed = details;
+  }
+
+  if (parsed && typeof parsed === "object" && parsed.challengeLabel) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- omit pattern
+    const { challengeLabel, ...rest } = parsed;
+    const restRaw = Object.keys(rest).length > 0 ? JSON.stringify(rest) : "";
+    return (
+      <div className="mt-0.5 space-y-0.5">
+        <div className="text-[10px] font-medium text-emerald-600 dark:text-emerald-500 truncate">
+          {challengeLabel}
+        </div>
+        {restRaw && <div className="text-[10px] text-muted-foreground/80 font-mono truncate">{restRaw}</div>}
+      </div>
+    );
+  }
+
+  return <div className="text-[10px] text-muted-foreground/80 mt-0.5 font-mono truncate">{raw}</div>;
+}
+
 function ActorCell({ log }: { log: any }) {
   const name = log.userName;
   const email = log.userEmail;
@@ -222,11 +259,7 @@ export default function AdminAuditLogs() {
                     <span className="text-muted-foreground">on {log.entity}</span>
                     {log.entityId && <span className="text-muted-foreground"> #{log.entityId}</span>}
                   </div>
-                  {log.details && (
-                    <div className="text-[10px] text-muted-foreground/80 mt-0.5 font-mono truncate">
-                      {typeof log.details === "string" ? log.details : JSON.stringify(log.details)}
-                    </div>
-                  )}
+                  {log.details && <DetailsLine details={log.details} />}
                 </div>
               </div>
               <span className="text-muted-foreground text-xs shrink-0 ml-3">
