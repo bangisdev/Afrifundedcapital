@@ -625,6 +625,31 @@ export default function Challenges() {
             </div>
           ) : selectedTemplate && sizes ? (
             <div className="space-y-4">
+              {/* Confirmation strip — names the exact challenge + account size being purchased */}
+              {(() => {
+                const tpl = templates?.find((t: Doc) => String(t.id) === selectedTemplate);
+                const acct = sizes?.find((s: Doc) => String(s.id) === selectedSize);
+                if (!tpl && !acct) return null;
+                return (
+                  <div className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-secondary/30 px-3 py-2.5">
+                    <div className="min-w-0">
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                        You're purchasing
+                      </div>
+                      <div className="text-sm font-medium truncate">
+                        {tpl?.name || "Challenge"}
+                        {acct ? ` · ${acct.label}` : ""}
+                      </div>
+                    </div>
+                    {acct?.price != null && (
+                      <span className="text-sm font-medium tabular-nums shrink-0">
+                        {acct.currency || "NGN"} {Number(acct.price).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+
               <div className="grid grid-cols-2 gap-2">
                 {sizes.map((size: Doc) => (
                   <button key={size.id}
