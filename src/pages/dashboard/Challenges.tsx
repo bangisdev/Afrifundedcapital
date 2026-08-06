@@ -51,6 +51,13 @@ const TEMPLATE_TYPE_LABELS: Record<string, string> = {
   instant_funding: "Instant Funding",
 };
 
+function formatNgn(price: number | string | null | undefined) {
+  if (price === null || price === undefined || price === "") return "N/A";
+  const n = typeof price === "number" ? price : parseFloat(String(price));
+  if (Number.isNaN(n) || n <= 0) return "N/A";
+  return `₦${n.toLocaleString()}`;
+}
+
 export default function Challenges() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -365,6 +372,10 @@ export default function Challenges() {
                   <div className="flex justify-between"><span>Min Trading Days</span><span className="text-foreground">{template.minTradingDays}</span></div>
                   <div className="flex justify-between"><span>Duration</span><span className="text-foreground">{template.durationDays ? `${template.durationDays} days` : "Unlimited"}</span></div>
                   <div className="flex justify-between"><span>Leverage</span><span className="text-foreground">1:{template.maxLeverage}</span></div>
+                  <div className="flex justify-between"><span>Reset Fee</span><span className="text-foreground">{formatNgn(template.resetFee)}</span></div>
+                  <div className="flex justify-between"><span>Extension Fee</span><span className="text-foreground">{formatNgn(template.extensionFee)}</span></div>
+                  <div className="flex justify-between"><span>Consistency Rule</span><span className="text-foreground">{template.consistencyTarget ? `Max ${template.consistencyTarget}% daily` : "No restriction"}</span></div>
+                  <div className="flex justify-between"><span>Profit Share</span><span className="text-foreground text-brand">90%</span></div>
                 </div>
                 <div className="mt-4 pt-4 border-t border-border">
                   <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Trading Rules</div>

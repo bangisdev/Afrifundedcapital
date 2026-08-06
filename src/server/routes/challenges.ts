@@ -16,7 +16,88 @@ import { writeAuditLog } from "../lib/audit";
 
 let seeded = false;
 
+/**
+ * Full rule set per challenge type. Applied both to freshly seeded templates
+ * and backfilled onto older templates (which were seeded with only the core
+ * numbers). Backfill runs on every seed check and is a no-op once a template
+ * already has its reset fee set.
+ */
+function templateRuleDefaults(type: string) {
+  const common = {
+    allowNewsTrading: true,
+    allowEATrading: true,
+    scalingPlan:
+      "Grow up to $1M — 20% account increase after 3 consecutive profitable months.",
+    maxAccountSize: 1000000,
+  };
+  switch (type) {
+    case "one_step":
+      return {
+        ...common,
+        allowWeekendHolding: false,
+        allowCopyTrading: false,
+        consistencyTarget: 20,
+        maxPositionSize: 25,
+      };
+    case "two_step":
+      return {
+        ...common,
+        allowWeekendHolding: false,
+        allowCopyTrading: false,
+        consistencyTarget: 20,
+        maxPositionSize: 30,
+      };
+    case "instant_funding":
+      return {
+        ...common,
+        allowWeekendHolding: true,
+        allowCopyTrading: true,
+        consistencyTarget: null,
+        maxPositionSize: 50,
+      };
+    default:
+      return {
+        ...common,
+        allowWeekendHolding: false,
+        allowCopyTrading: false,
+        consistencyTarget: 20,
+        maxPositionSize: 30,
+      };
+  }
+}
+
+function backfillTemplateRules(db: Db) {
+  const templates = db.select().from(challengeTemplates).all();
+  let updated = 0;
+  for (const t of templates) {
+    if (t.resetFee != null) continue; // already enriched
+    const rules = templateRuleDefaults(t.type);
+    const price = t.price || 0;
+    db.update(challengeTemplates)
+      .set({
+        resetFee: Math.round(price * 0.2),
+        extensionFee: Math.round(price * 0.1),
+        consistencyTarget: rules.consistencyTarget,
+        maxPositionSize: rules.maxPositionSize,
+        scalingPlan: rules.scalingPlan,
+        maxAccountSize: rules.maxAccountSize,
+        allowWeekendHolding: rules.allowWeekendHolding,
+        allowNewsTrading: rules.allowNewsTrading,
+        allowEATrading: rules.allowEATrading,
+        allowCopyTrading: rules.allowCopyTrading,
+        updatedAt: Date.now(),
+      })
+      .where(eq(challengeTemplates.id, t.id))
+      .run();
+    updated++;
+  }
+  if (updated > 0) {
+    console.log(`[Seed] Backfilled trading rules for ${updated} challenge template(s)`);
+  }
+}
+
 function autoSeed(db: Db) {
+  backfillTemplateRules(db);
   if (seeded) return;
   const existing = db.select({ cnt: count() }).from(challengeTemplates).get();
   if (existing && (existing.cnt ?? 0) > 0) { seeded = true; return; }
@@ -29,8 +110,13 @@ function autoSeed(db: Db) {
   ];
 
   for (const t of templates) {
+    const rules = templateRuleDefaults(t.type);
     const result = db.insert(challengeTemplates).values({
-      ...t, currency: "NGN", isActive: true, createdBy: 1, createdAt: now, updatedAt: now,
+      ...t,
+      ...rules,
+      resetFee: Math.round(t.price * 0.2),
+      extensionFee: Math.round(t.price * 0.1),
+      currency: "NGN", isActive: true, createdBy: 1, createdAt: now, updatedAt: now,
     }).returning().get();
 
     const sizes = [

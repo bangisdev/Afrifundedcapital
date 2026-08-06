@@ -35,6 +35,9 @@ import {
   CheckCircle,
   XCircle,
   Loader2,
+  CreditCard,
+  ShieldCheck,
+  Headphones,
 } from "lucide-react";
 import { LogoDropdown } from "@/components/LogoDropdown";
 
@@ -198,6 +201,12 @@ interface ChallengeTemplate {
   allowNewsTrading?: boolean;
   allowEATrading?: boolean;
   allowCopyTrading?: boolean;
+  resetFee?: number | null;
+  extensionFee?: number | null;
+  consistencyTarget?: number | null;
+  maxPositionSize?: number | null;
+  scalingPlan?: string | null;
+  maxAccountSize?: number | null;
 }
 
 interface AccountSizeRow {
@@ -222,6 +231,12 @@ const FALLBACK_TYPES: ChallengeTemplate[] = [
     allowNewsTrading: true,
     allowEATrading: true,
     allowCopyTrading: false,
+    resetFee: 8000,
+    extensionFee: 4000,
+    consistencyTarget: 20,
+    maxPositionSize: 25,
+    scalingPlan:
+      "Grow up to $1M — 20% account increase after 3 consecutive profitable months.",
   },
   {
     id: "two-step",
@@ -238,6 +253,12 @@ const FALLBACK_TYPES: ChallengeTemplate[] = [
     allowNewsTrading: true,
     allowEATrading: true,
     allowCopyTrading: false,
+    resetFee: 10000,
+    extensionFee: 5000,
+    consistencyTarget: 20,
+    maxPositionSize: 30,
+    scalingPlan:
+      "Grow up to $1M — 20% account increase after 3 consecutive profitable months.",
   },
   {
     id: "instant-funding",
@@ -250,10 +271,16 @@ const FALLBACK_TYPES: ChallengeTemplate[] = [
     maxLeverage: 100,
     minTradingDays: 0,
     durationDays: 30,
-    allowWeekendHolding: false,
+    allowWeekendHolding: true,
     allowNewsTrading: true,
     allowEATrading: true,
-    allowCopyTrading: false,
+    allowCopyTrading: true,
+    resetFee: 16000,
+    extensionFee: 8000,
+    consistencyTarget: null,
+    maxPositionSize: 50,
+    scalingPlan:
+      "Grow up to $1M — 20% account increase after 3 consecutive profitable months.",
   },
 ];
 
@@ -288,6 +315,27 @@ function challengePhaseLabel(type?: string) {
 
 function formatPrice(price: number | string) {
   return typeof price === "number" ? `₦${price.toLocaleString()}` : price;
+}
+
+function formatNgn(price: number | string | null | undefined) {
+  if (price === null || price === undefined || price === "") return "N/A";
+  const n = typeof price === "number" ? price : parseFloat(String(price));
+  if (Number.isNaN(n) || n <= 0) return "N/A";
+  return `₦${n.toLocaleString()}`;
+}
+
+function ruleRow(ok: boolean, label: string, value: string) {
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      {ok ? (
+        <CheckCircle className="h-3.5 w-3.5 text-brand shrink-0" />
+      ) : (
+        <XCircle className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+      )}
+      <span className="text-muted-foreground">{label}</span>
+      <span className={`ml-auto font-medium tabular-nums ${ok ? "" : "text-muted-foreground"}`}>{value}</span>
+    </div>
+  );
 }
 
 export default function Landing() {
@@ -364,6 +412,30 @@ export default function Landing() {
   const displaySizes: AccountSizeRow[] | null = usingLiveData
     ? (activeType && sizesByType[String(activeType.id)]) || null
     : FALLBACK_SIZES;
+
+  // Comparison table — columns sorted into the canonical challenge order
+  const orderedTypes: ChallengeTemplate[] = [...displayTypes].sort((a, b) => {
+    const order = ["one_step", "two_step", "instant_funding", "evaluation"];
+    const ai = order.indexOf(a.type);
+    const bi = order.indexOf(b.type);
+    return (ai === -1 ? order.length : ai) - (bi === -1 ? order.length : bi);
+  });
+  const comparisonRows: Array<{ label: string; values: string[] }> = [
+    { label: "Evaluation Phases", values: orderedTypes.map((t) => challengePhaseLabel(t.type)) },
+    { label: "Profit Target", values: orderedTypes.map((t) => `${t.profitTarget}%`) },
+    { label: "Daily Drawdown", values: orderedTypes.map((t) => `${t.dailyDrawdown}%`) },
+    { label: "Max Drawdown", values: orderedTypes.map((t) => `${t.maxDrawdown}%`) },
+    { label: "Leverage", values: orderedTypes.map((t) => `1:${t.maxLeverage}`) },
+    { label: "Min. Trading Days", values: orderedTypes.map((t) => (t.minTradingDays ? String(t.minTradingDays) : "None")) },
+    { label: "Duration", values: orderedTypes.map((t) => (t.durationDays ? `${t.durationDays} days` : "Unlimited")) },
+    { label: "Reset Fee", values: orderedTypes.map((t) => formatNgn(t.resetFee)) },
+    { label: "Consistency Rule", values: orderedTypes.map((t) => (t.consistencyTarget ? `Max ${t.consistencyTarget}% daily` : "No restriction")) },
+    { label: "Weekend Holding", values: orderedTypes.map((t) => (t.allowWeekendHolding ? "Allowed" : "Restricted")) },
+    { label: "News Trading", values: orderedTypes.map((t) => (t.allowNewsTrading !== false ? "Allowed" : "Restricted")) },
+    { label: "Expert Advisors", values: orderedTypes.map((t) => (t.allowEATrading !== false ? "Allowed" : "Blocked")) },
+    { label: "Copy Trading", values: orderedTypes.map((t) => (t.allowCopyTrading ? "Allowed" : "Blocked")) },
+    { label: "Profit Share", values: orderedTypes.map(() => "90%") },
+  ];
 
   // Auto-play carousel
   const [carouselApi, setCarouselApi] = useState<CarouselApi | null>(null);
@@ -850,7 +922,7 @@ export default function Landing() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.4 }}
-              className="card-subtle p-6 md:p-8 mb-10 max-w-3xl mx-auto"
+              className="card-subtle p-6 md:p-8 mb-10 max-w-4xl mx-auto"
             >
               <div className="flex items-start justify-between gap-4 mb-6">
                 <div>
@@ -865,7 +937,8 @@ export default function Landing() {
                 <span className="badge-subtle shrink-0">{challengePhaseLabel(activeType.type)}</span>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-x-6 gap-y-4">
+              {/* Core trading parameters */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-x-6 gap-y-5">
                 <div>
                   <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Profit Target</div>
                   <div className="text-sm font-medium tabular-nums">{activeType.profitTarget}%</div>
@@ -888,56 +961,61 @@ export default function Landing() {
                     {activeType.minTradingDays ? activeType.minTradingDays : "None"}
                   </div>
                 </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Duration</div>
+                  <div className="text-sm font-medium tabular-nums">
+                    {activeType.durationDays ? `${activeType.durationDays} days` : "Unlimited"}
+                  </div>
+                </div>
+              </div>
+
+              <div className="divider-subtle my-5" />
+
+              {/* Costs & consistency */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-x-6 gap-y-5">
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Profit Share</div>
+                  <div className="text-sm font-medium tabular-nums text-brand">90%</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Reset Fee</div>
+                  <div className="text-sm font-medium tabular-nums">{formatNgn(activeType.resetFee)}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Extension Fee</div>
+                  <div className="text-sm font-medium tabular-nums">{formatNgn(activeType.extensionFee)}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Consistency Rule</div>
+                  <div className="text-sm font-medium tabular-nums">
+                    {activeType.consistencyTarget ? `Max ${activeType.consistencyTarget}% daily` : "No restriction"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Max Position Size</div>
+                  <div className="text-sm font-medium tabular-nums">
+                    {activeType.maxPositionSize ? `${activeType.maxPositionSize}% of balance` : "Flexible"}
+                  </div>
+                </div>
               </div>
 
               <div className="divider-subtle my-5" />
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3">
-                <div className="flex items-center gap-2 text-xs">
-                  {activeType.allowWeekendHolding ? (
-                    <CheckCircle className="h-3.5 w-3.5 text-brand shrink-0" />
-                  ) : (
-                    <XCircle className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
-                  )}
-                  <span className="text-muted-foreground">Weekend Holding</span>
-                  <span className="ml-auto font-medium tabular-nums">
-                    {activeType.allowWeekendHolding ? "Allowed" : "Restricted"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 text-xs">
-                  {activeType.allowNewsTrading !== false ? (
-                    <CheckCircle className="h-3.5 w-3.5 text-brand shrink-0" />
-                  ) : (
-                    <XCircle className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
-                  )}
-                  <span className="text-muted-foreground">News Trading</span>
-                  <span className="ml-auto font-medium tabular-nums">
-                    {activeType.allowNewsTrading !== false ? "Allowed" : "Restricted"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 text-xs">
-                  {activeType.allowEATrading !== false ? (
-                    <CheckCircle className="h-3.5 w-3.5 text-brand shrink-0" />
-                  ) : (
-                    <XCircle className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
-                  )}
-                  <span className="text-muted-foreground">Expert Advisors</span>
-                  <span className="ml-auto font-medium tabular-nums">
-                    {activeType.allowEATrading !== false ? "Allowed" : "Blocked"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 text-xs">
-                  {activeType.allowCopyTrading ? (
-                    <CheckCircle className="h-3.5 w-3.5 text-brand shrink-0" />
-                  ) : (
-                    <XCircle className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
-                  )}
-                  <span className="text-muted-foreground">Copy Trading</span>
-                  <span className="ml-auto font-medium tabular-nums">
-                    {activeType.allowCopyTrading ? "Allowed" : "Blocked"}
-                  </span>
-                </div>
+                {ruleRow(!!activeType.allowWeekendHolding, "Weekend Holding", activeType.allowWeekendHolding ? "Allowed" : "Restricted")}
+                {ruleRow(activeType.allowNewsTrading !== false, "News Trading", activeType.allowNewsTrading !== false ? "Allowed" : "Restricted")}
+                {ruleRow(activeType.allowEATrading !== false, "Expert Advisors", activeType.allowEATrading !== false ? "Allowed" : "Blocked")}
+                {ruleRow(!!activeType.allowCopyTrading, "Copy Trading", activeType.allowCopyTrading ? "Allowed" : "Blocked")}
               </div>
+
+              {activeType.scalingPlan && (
+                <div className="mt-5 pt-4 border-t border-border flex items-start gap-2.5 text-xs">
+                  <TrendingUp className="h-3.5 w-3.5 text-brand shrink-0 mt-0.5" />
+                  <p className="text-muted-foreground leading-relaxed">
+                    <span className="font-medium text-foreground">Scaling Plan:</span> {activeType.scalingPlan}
+                  </p>
+                </div>
+              )}
             </motion.div>
           )}
 
@@ -947,41 +1025,157 @@ export default function Landing() {
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              {displaySizes.map((acct, i) => (
-                <motion.div
-                  key={acct.label}
-                  variants={scaleIn}
-                  initial="hidden"
-                  whileInView="visible"
-                  custom={i}
-                  viewport={{ once: true, margin: "-30px" }}
-                  className="group p-5 border border-border/60 rounded-lg text-center bg-background hover:border-foreground/20 transition-all duration-300"
-                >
-                  <div className="text-lg font-light tracking-tight mb-1">{acct.label}</div>
-                  <div className="text-xs text-muted-foreground mb-5">{formatPrice(acct.price)}</div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full text-xs group-hover:bg-foreground group-hover:text-background transition-all duration-300"
-                    onClick={() => navigate(isAuthenticated ? "/dashboard/challenges" : "/auth")}
-                  >
-                    Select
-                  </Button>
-                </motion.div>
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                {displaySizes.map((acct, i) => {
+                  const isPopular = i === Math.floor((displaySizes.length - 1) / 2);
+                  const sizeNum = parseFloat((acct.label || "").replace(/[^0-9.]/g, ""));
+                  const profitUsd =
+                    sizeNum && activeType?.profitTarget ? sizeNum * (activeType.profitTarget / 100) : null;
+                  return (
+                    <motion.div
+                      key={acct.label}
+                      variants={scaleIn}
+                      initial="hidden"
+                      whileInView="visible"
+                      custom={i}
+                      viewport={{ once: true, margin: "-30px" }}
+                      className={`group relative p-5 border rounded-lg text-center bg-background transition-all duration-300 ${
+                        isPopular
+                          ? "border-foreground/30 hover:border-foreground/60"
+                          : "border-border/60 hover:border-foreground/20"
+                      }`}
+                    >
+                      {isPopular && (
+                        <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 inline-flex items-center px-2 py-0.5 text-[9px] font-medium uppercase tracking-wider bg-secondary text-secondary-foreground rounded">
+                          Most Popular
+                        </span>
+                      )}
+                      <div className="text-lg font-light tracking-tight mb-1 pt-1">{acct.label}</div>
+                      <div className="text-[11px] text-muted-foreground mb-1 tabular-nums">
+                        {(activeType?.profitTarget ?? 0)}% target
+                        {profitUsd ? ` · $${profitUsd.toLocaleString()}` : ""}
+                      </div>
+                      <div className="text-xs text-muted-foreground mb-5">{formatPrice(acct.price)}</div>
+                      <Button
+                        variant={isPopular ? "default" : "outline"}
+                        size="sm"
+                        className="w-full text-xs"
+                        onClick={() => navigate(isAuthenticated ? "/dashboard/challenges" : "/auth")}
+                      >
+                        Select
+                      </Button>
+                    </motion.div>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-muted-foreground text-center mt-3">
+                Profit target shown per account size. All prices in NGN (₦).
+              </p>
+            </>
           )}
 
+          {/* Challenge comparison table */}
+          {displayTypes.length > 1 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="mt-16"
+            >
+              <div className="text-center mb-8">
+                <Badge variant="outline" className="rounded-full px-4 py-1 text-xs font-normal mb-6 border-border/60">
+                  Comparison
+                </Badge>
+                <h2 className="text-xl sm:text-2xl font-light tracking-tight mb-3">
+                  Choose the Right Challenge
+                </h2>
+                <p className="text-sm text-muted-foreground max-w-lg mx-auto">
+                  Every detail side-by-side, so you can pick the structure that fits your trading style
+                </p>
+              </div>
+
+              <div className="card-subtle overflow-x-auto">
+                <table className="w-full text-xs min-w-[560px]">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left font-medium text-muted-foreground text-[10px] uppercase tracking-wider px-5 py-4">
+                        Compare
+                      </th>
+                      {orderedTypes.map((t) => (
+                        <th key={String(t.id)} className="text-left font-medium px-5 py-4">
+                          <span className="block text-sm">{t.name}</span>
+                          <span className="block text-[10px] text-muted-foreground font-normal mt-0.5">
+                            {challengePhaseLabel(t.type)}
+                          </span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {comparisonRows.map((row) => (
+                      <tr key={row.label} className="border-b border-border/60 last:border-0">
+                        <td className="px-5 py-3 text-muted-foreground whitespace-nowrap">{row.label}</td>
+                        {row.values.map((v, i) => (
+                          <td
+                            key={i}
+                            className={`px-5 py-3 font-medium tabular-nums whitespace-nowrap ${
+                              row.label === "Profit Share" ? "text-brand" : ""
+                            }`}
+                          >
+                            {v}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Trust strip */}
           <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="mt-10 text-center"
+            className="mt-14 grid grid-cols-2 lg:grid-cols-4 gap-3 max-w-3xl mx-auto"
           >
-            <p className="text-xs text-muted-foreground">
-              All account sizes available for One Step, Two Step, and Instant Funding challenges
-            </p>
+            {[
+              {
+                icon: <CreditCard className="h-4 w-4" />,
+                title: "Secure Payments",
+                text: "Flutterwave · Paystack · Cards · Bank transfer",
+              },
+              {
+                icon: <ShieldCheck className="h-4 w-4" />,
+                title: "No Hidden Fees",
+                text: "Transparent pricing, instant activation",
+              },
+              {
+                icon: <Headphones className="h-4 w-4" />,
+                title: "24/7 Support",
+                text: "Real humans ready when you need them",
+              },
+              {
+                icon: <Zap className="h-4 w-4" />,
+                title: "Fast Payouts",
+                text: "90% profit share within 2–5 business days",
+              },
+            ].map((item) => (
+              <div
+                key={item.title}
+                className="p-4 border border-border/60 rounded-lg bg-background flex items-start gap-3"
+              >
+                <div className="h-8 w-8 rounded-full border border-border/60 flex items-center justify-center shrink-0 text-brand">
+                  {item.icon}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-medium mb-0.5">{item.title}</div>
+                  <div className="text-[10px] text-muted-foreground leading-relaxed">{item.text}</div>
+                </div>
+              </div>
+            ))}
           </motion.div>
         </div>
       </section>
