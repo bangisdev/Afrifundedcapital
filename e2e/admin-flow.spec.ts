@@ -18,6 +18,10 @@
  * Run locally:            bun test:e2e
  * Point at a server:      PLAYWRIGHT_BASE_URL=http://localhost:5173 bun test:e2e
  * Single section:         bun test:e2e -- --grep "3. User Management"
+ * Per-section presets:    bun run test:e2e:<section> — one preset per numbered
+ *                         section (auth, overview, users, challenges, payments,
+ *                         nav, responsive, mt5, trading, scheduler, audit), so
+ *                         CI can run each chunk under its own shorter timeout.
  */
 import { test, expect, type Page } from "@playwright/test";
 

@@ -15,7 +15,18 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:debug": "playwright test --debug"
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:auth": "playwright test --grep \"1\\. Authentication\"",
+    "test:e2e:overview": "playwright test --grep \"2\\. Admin Overview\"",
+    "test:e2e:users": "playwright test --grep \"3\\. User Management\"",
+    "test:e2e:challenges": "playwright test --grep \"4\\. Challenges\"",
+    "test:e2e:payments": "playwright test --grep \"5\\. Payments\"",
+    "test:e2e:nav": "playwright test --grep \"6\\. Cross-page navigation\"",
+    "test:e2e:responsive": "playwright test --grep \"7\\. Responsive viewports\"",
+    "test:e2e:mt5": "playwright test --grep \"8\\. MT5 Manager\"",
+    "test:e2e:trading": "playwright test --grep \"9\\. Trading metrics\"",
+    "test:e2e:scheduler": "playwright test --grep \"10\\. MT5 Background Scheduler\"",
+    "test:e2e:audit": "playwright test --grep \"11\\. Purchase label & audit trail\""
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
