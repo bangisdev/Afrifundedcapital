@@ -18,8 +18,11 @@ vi.mock("sonner", () => ({
 
 // ─── Mock: react-router ────────────────────────────────────
 const mockNavigate = vi.fn();
+const mockSetSearchParams = vi.fn();
+let mockSearchParams = new URLSearchParams();
 vi.mock("react-router", () => ({
   useNavigate: () => mockNavigate,
+  useSearchParams: () => [mockSearchParams, mockSetSearchParams],
 }));
 
 // ─── Mock: useAuth ─────────────────────────────────────────
@@ -252,6 +255,7 @@ function setQueryData(updates: Record<string, any>) {
 describe("Challenges Page", () => {
   beforeEach(() => {
     mockPaymentState = { status: "idle" };
+    mockSearchParams = new URLSearchParams();
     setQueryData({});
     vi.clearAllMocks();
     vi.mocked(useAuth).mockReturnValue({
@@ -385,6 +389,38 @@ describe("Challenges Page", () => {
       await user.click(card);
 
       expect(card.className).toContain("ring-1");
+    });
+  });
+
+  // ─── Deep link preselection ───────────────────────────
+  describe("Deep Link Preselection", () => {
+    it("preselects template + size from URL and opens the purchase dialog", async () => {
+      mockSearchParams = new URLSearchParams({ template: "1", size: "5" });
+      setQueryData({
+        templates: [makeTemplate({ id: 1 })],
+        "sizes/1": [makeSize({ id: 5, label: "$50,000", price: 500000, accountSize: 50000 })],
+      });
+      render(<Challenges />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("dialog")).toBeTruthy();
+      });
+      expect(screen.getByText(/You're purchasing/)).toBeTruthy();
+      expect(screen.getByText("$50,000")).toBeTruthy();
+    });
+
+    it("cleans the deep-link params from the URL after consuming", async () => {
+      mockSearchParams = new URLSearchParams({ template: "1", size: "5" });
+      setQueryData({
+        templates: [makeTemplate({ id: 1 })],
+        "sizes/1": [makeSize({ id: 5, label: "$50,000", price: 500000, accountSize: 50000 })],
+      });
+      render(<Challenges />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("dialog")).toBeTruthy();
+      });
+      expect(mockSetSearchParams).toHaveBeenCalledWith({}, { replace: true });
     });
   });
 
