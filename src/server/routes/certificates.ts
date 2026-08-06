@@ -7,7 +7,7 @@ import {
   users,
   challengeTemplates,
 } from "../schema";
-import { eq, desc, asc, and, sql, like, or, count, type SQL, type SQLWrapper } from "drizzle-orm";
+import { eq, desc, asc, and, sql, like, or, count, inArray, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { randomBytes } from "crypto";
 import QRCode from "qrcode";
@@ -222,6 +222,26 @@ app.get("/my", requireAuth, (c) => {
     .offset((page - 1) * pageSize)
     .all();
 
+  // Stamp each certificate with its challenge name + account size for display.
+  const challengeIds = [...new Set(certs.map((cert) => cert.challengeId))];
+  const challengeRows = challengeIds.length > 0
+    ? db.select().from(userChallenges).where(inArray(userChallenges.id, challengeIds)).all()
+    : [];
+  const challengeById = new Map(challengeRows.map((ch) => [ch.id, ch]));
+  const tplIds = [...new Set(challengeRows.map((ch) => ch.templateId))];
+  const tplRows = tplIds.length > 0
+    ? db.select().from(challengeTemplates).where(inArray(challengeTemplates.id, tplIds)).all()
+    : [];
+  const templateNameById = new Map(tplRows.map((t) => [t.id, t.name]));
+  const enriched = certs.map((cert) => {
+    const challenge = challengeById.get(cert.challengeId);
+    return {
+      ...cert,
+      challengeName: challenge ? templateNameById.get(challenge.templateId) || null : null,
+      accountSize: challenge?.accountSize ?? null,
+    };
+  });
+
   // User-wide stats (unfiltered)
   const allCerts = db
     .select({ type: certificates.type })
@@ -234,7 +254,7 @@ app.get("/my", requireAuth, (c) => {
   }, {});
 
   return c.json({
-    certificates: certs,
+    certificates: enriched,
     total,
     page,
     pageSize,

@@ -8,7 +8,7 @@ import {
   payments,
   mt5Accounts,
 } from "../schema";
-import { eq, desc, asc, count, and, type SQLWrapper } from "drizzle-orm";
+import { eq, desc, asc, count, and, inArray, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification } from "../lib/notifications";
 import { maybeGenerateCertificate } from "../lib/certificates";
@@ -223,6 +223,17 @@ app.get("/my", requireAuth, (c) => {
     .offset((page - 1) * pageSize)
     .all();
 
+  // Attach the template name so the UI can stamp e.g. "Two-Step Evaluation · $50,000".
+  const templateIds = [...new Set(challenges.map((ch) => ch.templateId))];
+  const templates = templateIds.length > 0
+    ? db.select().from(challengeTemplates).where(inArray(challengeTemplates.id, templateIds)).all()
+    : [];
+  const templateNameById = new Map(templates.map((t) => [t.id, t.name]));
+  const enriched = challenges.map((ch) => ({
+    ...ch,
+    templateName: templateNameById.get(ch.templateId) || null,
+  }));
+
   // User-wide stats (unfiltered)
   const allChallenges = db
     .select({ status: userChallenges.status })
@@ -235,7 +246,7 @@ app.get("/my", requireAuth, (c) => {
   }, {});
 
   return c.json({
-    challenges,
+    challenges: enriched,
     total,
     page,
     pageSize,

@@ -458,13 +458,18 @@ export default function Challenges() {
                   className="w-full card-subtle p-4 text-left hover:bg-secondary/30 transition-colors"
                 >
                   <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-sm font-medium">Challenge #{ch.id}</div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">
+                        {ch.templateName
+                          ? `${ch.templateName} · $${Number(ch.accountSize || 0).toLocaleString()}`
+                          : `Challenge #${ch.id}`}
+                      </div>
                       <div className="text-xs text-muted-foreground mt-0.5">
-                        ${ch.accountSize?.toLocaleString()} — Started {ch.createdAt ? new Date(ch.createdAt).toLocaleDateString() : "N/A"}
+                        {ch.templateName ? `Challenge #${ch.id} · ` : ""}
+                        Started {ch.createdAt ? new Date(ch.createdAt).toLocaleDateString() : "N/A"}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                       {statusBadge(ch.status)}
                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </div>

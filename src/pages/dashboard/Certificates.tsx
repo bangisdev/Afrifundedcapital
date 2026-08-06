@@ -173,6 +173,14 @@ export default function Certificates() {
                         .replace(/\b\w/g, (l: string) => l.toUpperCase())}{" "}
                       Certificate
                     </div>
+                    {cert.challengeName && (
+                      <div className="text-xs font-medium mt-1 text-brand">
+                        {cert.challengeName}
+                        {cert.accountSize != null
+                          ? ` · $${Number(cert.accountSize).toLocaleString()}`
+                          : ""}
+                      </div>
+                    )}
                     <div className="text-xs text-muted-foreground mt-0.5">
                       #{cert.certificateNumber} · Issued{" "}
                       {cert.issuedAt
