@@ -330,6 +330,8 @@ export default function Challenges() {
       return;
     }
 
+    const selectedTemplateObj = templates?.find((t: Doc) => String(t.id) === selectedTemplate);
+    const purchaseLabel = `${selectedTemplateObj?.name || "Challenge"} - ${selectedAccountSize.label}`;
     const finalAmount = couponResult?.finalAmount ?? selectedAccountSize.price;
 
     await startCheckout({
@@ -343,7 +345,7 @@ export default function Challenges() {
       accountSizeId: selectedSize as any,
       couponCode: couponResult?.valid ? couponCode.trim() : undefined,
       couponId: couponResult?.couponId,
-      description: `${selectedAccountSize.label} Challenge`,
+      description: purchaseLabel,
     });
   };
 
@@ -601,6 +603,15 @@ export default function Challenges() {
                 </div>
                 <div>
                   <p className="text-sm font-medium">Challenge Created</p>
+                  {(() => {
+                    const tpl = templates?.find((t: Doc) => String(t.id) === selectedTemplate);
+                    const acct = sizes?.find((s: Doc) => String(s.id) === selectedSize);
+                    return tpl && acct ? (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {tpl.name} - {acct.label}
+                      </p>
+                    ) : null;
+                  })()}
                   <p className="text-xs text-muted-foreground mt-1">
                     Reference: {paymentState.reference?.slice(0, 16)}...
                   </p>
