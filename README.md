@@ -315,13 +315,15 @@ Configure the gateway in **Admin → Settings → MT5** (persisted as the `mt5_c
 
 The project has 48 test files: server tests (`src/server/__tests__/*.test.ts`, node environment — routes, auth, KYC, payments, MT5 connector, retry-queue backoff, reconciliation drift, scheduler) and frontend tests (`src/__tests__/*.test.tsx`, jsdom environment — pages and the full user journey).
 
-The `test` script runs the two environments as **two separate phases** (`src/server/__tests__` first, then `src/__tests__`). Bun's runtime cannot switch vitest's environment (node → jsdom) inside a single fork (`pool: "forks"` + `singleFork: true`), which corrupted shared global state when all 48 files ran in one command. Splitting keeps every file in one homogeneous environment, so `bun test` is green under Bun and Node alike.
+The `test` script runs the two environments as **two separate phases** (`src/server/__tests__` first, then `src/__tests__`). Bun's runtime cannot switch vitest's environment (node → jsdom) inside a single fork (`pool: "forks"` + `singleFork: true`), which corrupted shared global state when all 48 files ran in one command. Splitting keeps every file in one homogeneous environment, so `bun run test` is green under Bun and Node alike.
 
 ```bash
-bun test            # run once (server tests, then frontend tests)
-bun test:watch      # watch mode
-bun test:coverage   # with coverage report
+bun run test       # run once (server tests, then frontend tests)
+bun run test:watch # watch mode
+bun run test:coverage  # with coverage report
 ```
+
+> ⚠️ **Use `bun run test`, not bare `bun test`.** `bun test` invokes Bun's **native** test runner instead of the npm script: it auto-discovers the Playwright spec (`e2e/admin-flow.spec.ts`), chokes on its `test.describe()`, and exposes an incomplete `vi` object (no `vi.mocked` / `vi.stubGlobal`), producing cascade of false failures across `src/__tests__`. Always run unit tests via `bun run test`.
 
 ## End-to-end tests (Playwright)
 
