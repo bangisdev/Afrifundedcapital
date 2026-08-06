@@ -24,7 +24,12 @@
  *                         CI can run each chunk under its own shorter timeout.
  * CI:                     .github/workflows/e2e-matrix.yml runs the 11 presets
  *                         as a parallel GitHub Actions matrix, one job per
- *                         chunk, each with its own timeout-minutes budget.
+ *                         chunk, each with its own timeout-minutes budget. The
+ *                         heavy chunks (mt5, scheduler, audit) are sharded x 2
+ *                         (--shard=1/2, 2/2) so each half runs on its own
+ *                         runner — the config needs fullyParallel: true for
+ *                         per-test sharding; workers stays 1, so every
+ *                         single-shard run is still deterministic.
  */
 import { test, expect, type Page } from "@playwright/test";
 
@@ -132,10 +137,14 @@ async function signInAsAdmin(page: Page) {
 
 // ─── Suite ────────────────────────────────────────────────
 test.describe("Admin Dashboard E2E Flow", () => {
-  test.describe.configure({ mode: "serial" });
+  // NOT globally serial: the heavy sections (8. MT5 Manager, 10. Scheduler,
+  // 11. Purchase label & audit trail) are left non-serial so their tests can
+  // be split across parallel CI shards. Every test is self-contained (each
+  // signs in fresh via beforeEach), so sections stay deterministic either way.
 
   // ─── 1. Authentication ────────────────────────────────
   test.describe("1. Authentication", () => {
+    test.describe.configure({ mode: "serial" });
     test("loads the landing page", async ({ page }) => {
       const ready = await warmUp(page, "/");
       expect(ready).toBeTruthy();
@@ -174,6 +183,7 @@ test.describe("Admin Dashboard E2E Flow", () => {
 
   // ─── 2. Admin Overview ────────────────────────────────
   test.describe("2. Admin Overview", () => {
+    test.describe.configure({ mode: "serial" });
     test.beforeEach(async ({ page }) => {
       await signInAsAdmin(page);
     });
@@ -206,6 +216,7 @@ test.describe("Admin Dashboard E2E Flow", () => {
 
   // ─── 3. User Management ───────────────────────────────
   test.describe("3. User Management", () => {
+    test.describe.configure({ mode: "serial" });
     test.beforeEach(async ({ page }) => {
       await signInAsAdmin(page);
     });
@@ -241,6 +252,7 @@ test.describe("Admin Dashboard E2E Flow", () => {
 
   // ─── 4. Challenges ────────────────────────────────────
   test.describe("4. Challenges", () => {
+    test.describe.configure({ mode: "serial" });
     test.beforeEach(async ({ page }) => {
       await signInAsAdmin(page);
     });
@@ -265,6 +277,7 @@ test.describe("Admin Dashboard E2E Flow", () => {
 
   // ─── 5. Payments ──────────────────────────────────────
   test.describe("5. Payments", () => {
+    test.describe.configure({ mode: "serial" });
     test.beforeEach(async ({ page }) => {
       await signInAsAdmin(page);
     });
@@ -287,6 +300,7 @@ test.describe("Admin Dashboard E2E Flow", () => {
 
   // ─── 6. Cross-page navigation ─────────────────────────
   test.describe("6. Cross-page navigation", () => {
+    test.describe.configure({ mode: "serial" });
     test.beforeEach(async ({ page }) => {
       await signInAsAdmin(page);
     });
@@ -315,6 +329,7 @@ test.describe("Admin Dashboard E2E Flow", () => {
 
   // ─── 7. Responsive viewports ──────────────────────────
   test.describe("7. Responsive viewports", () => {
+    test.describe.configure({ mode: "serial" });
     test.use({ viewport: { width: 390, height: 844 } });
 
     test("renders landing page on a mobile viewport", async ({ page }) => {
@@ -432,6 +447,7 @@ test.describe("Admin Dashboard E2E Flow", () => {
 
   // ─── 9. Trading metrics (client dashboard) ───────────
   test.describe("9. Trading metrics", () => {
+    test.describe.configure({ mode: "serial" });
     test.beforeEach(async ({ page }) => {
       await signInAsAdmin(page);
     });

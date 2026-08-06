@@ -14,44 +14,82 @@ concurrency:
 
 jobs:
   e2e:
-    name: E2E · ${{ matrix.chunk }}
+    # Heavy chunks (mt5, scheduler, audit) appear twice — once per shard — so
+    # the name includes "· n/N" to tell them apart.
+    name: E2E · ${{ matrix.chunk }}${{ matrix.shard_total > 1 && format(' · {0}/{1}', matrix.shard, matrix.shard_total) || '' }}
     runs-on: ubuntu-latest
-    # Each chunk gets its own wall-clock budget. The values are tuned to the
-    # chunk's runtime (install + boot + tests) and are intentionally generous —
-    # a chunk that exceeds its budget is hung, not merely slow.
+    # Each job gets its own wall-clock budget, tuned to its chunk/shard size
+    # (install + boot + tests). A chunk that exceeds its budget is hung, not
+    # merely slow.
     timeout-minutes: ${{ matrix.timeout }}
     strategy:
-      # A failure in one chunk must not cancel the other 10 — each section
+      # A failure in one chunk/shard must not cancel the others — each section
       # reports independently.
       fail-fast: false
       matrix:
         include:
-          # Lighter sections (few tests, quick pages)
+          # Lighter sections (few tests, quick pages) — 1 shard each
           - chunk: auth
             timeout: 10
+            shard: 1
+            shard_total: 1
           - chunk: overview
             timeout: 10
+            shard: 1
+            shard_total: 1
           - chunk: nav
             timeout: 10
+            shard: 1
+            shard_total: 1
           - chunk: responsive
             timeout: 10
-          # Medium sections (management CRUD + tables)
+            shard: 1
+            shard_total: 1
+          # Medium sections (management CRUD + tables) — 1 shard each
           - chunk: users
             timeout: 12
+            shard: 1
+            shard_total: 1
           - chunk: challenges
             timeout: 12
+            shard: 1
+            shard_total: 1
           - chunk: payments
             timeout: 12
+            shard: 1
+            shard_total: 1
           - chunk: trading
             timeout: 12
-          # Heavier sections (connector/reconciliation, scheduler waits,
-          # API-driven purchase + lifecycle audit)
+            shard: 1
+            shard_total: 1
+          # Heavy sections — sharded x 2 so each half runs on its own runner.
+          # Playwright's --shard splits per test because the config sets
+          # fullyParallel: true (per-file sharding would silently skip shards
+          # on this single-spec suite); grep narrows to the section first.
           - chunk: mt5
             timeout: 15
+            shard: 1
+            shard_total: 2
+          - chunk: mt5
+            timeout: 15
+            shard: 2
+            shard_total: 2
           - chunk: scheduler
             timeout: 15
+            shard: 1
+            shard_total: 2
+          - chunk: scheduler
+            timeout: 15
+            shard: 2
+            shard_total: 2
           - chunk: audit
             timeout: 15
+            shard: 1
+            shard_total: 2
+          - chunk: audit
+            timeout: 15
+            shard: 2
+            shard_total: 2
     steps:
       - uses: actions/checkout@v4
 
@@ -62,7 +100,7 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # All 11 jobs run in parallel and every one would otherwise re-download
+      # All jobs run in parallel and every one would otherwise re-download
       # Chromium (~150 MB each). Cache the shared browser install keyed on the
       # lockfile so version bumps invalidate it automatically.
       - name: Cache Playwright browsers
@@ -74,12 +112,13 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      # Each job runs its own chunk via the package.json preset. Playwright
+      # Each job runs its chunk/shard via the package.json preset plus
+      # --shard=n/N (1/1 is a no-op for the non-sharded chunks). Playwright
       # boots its own `bun run dev` with E2E_TESTING=1 (the port is free on
       # the isolated runner) and tears it down after — no cross-job port or
       # data contention because every job gets a fresh runner + SQLite file.
-      - name: Run E2E chunk — ${{ matrix.chunk }}
-        run: bun run test:e2e:${{ matrix.chunk }}
+      - name: Run E2E chunk — ${{ matrix.chunk }} (shard ${{ matrix.shard }}/${{ matrix.shard_total }})
+        run: bun run test:e2e:${{ matrix.chunk }} -- --shard=${{ matrix.shard }}/${{ matrix.shard_total }}
         env:
           CI: true
           E2E_ADMIN_EMAIL: admin@afrifundedcapital.com
@@ -89,7 +128,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-${{ matrix.chunk }}
+          name: playwright-report-${{ matrix.chunk }}-shard${{ matrix.shard }}
           path: playwright-report/
           retention-days: 14
 
@@ -97,7 +136,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ matrix.chunk }}
+          name: test-results-${{ matrix.chunk }}-shard${{ matrix.shard }}
           path: test-results/
           retention-days: 7
 
@@ -105,6 +144,6 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: traces-${{ matrix.chunk }}
+          name: traces-${{ matrix.chunk }}-shard${{ matrix.shard }}
           path: test-results/**/trace.zip
           retention-days: 7

@@ -7,8 +7,12 @@ const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:5173";
 
 export default defineConfig({
   testDir: "./e2e",
-  // The suite is a serial admin journey sharing one seeded admin account.
-  fullyParallel: false,
+  // fullyParallel: true enables per-test sharding (Playwright otherwise shards
+  // by FILE, which is a silent no-op for this single-file suite — every shard
+  // beyond 1 would run zero tests and exit 0). workers stays at 1, so local
+  // and single-shard runs are still fully sequential and deterministic;
+  // sharded CI jobs split the heavy sections' tests across parallel runners.
+  fullyParallel: true,
   workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
