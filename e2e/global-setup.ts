@@ -44,7 +44,35 @@ export default async function globalSetup(_config: FullConfig) {
   const setCookie = signInRes.headers.get("set-cookie");
   const cookie = setCookie ? setCookie.split(";")[0] : "";
 
-  // 3. Warm the app's route chunks in a real browser. Vite's first-load
+  // 3. Verify the server is actually running with E2E_TESTING=1 before the
+  //    suite starts. Playwright reuses an already-listening server on the port
+  //    (`reuseExistingServer`), which may not have the flag — without it the
+  //    auth rate limiter is active and the MT5 scheduler e2e hook 404s, which
+  //    turns into confusing mid-suite failures. Fail fast with an actionable
+  //    message instead.
+  try {
+    const probe = await fetch(`${baseURL}/api/trading/admin/scheduler/e2e-setup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ enqueue: false }),
+    });
+    if (!probe.ok) {
+      throw new Error(
+        `server answered ${probe.status} (expected 200) — it is not running with E2E_TESTING=1. ` +
+          `Stop any dev server on the port and let Playwright boot its own, or point ` +
+          `PLAYWRIGHT_BASE_URL at a server started with E2E_TESTING=1.`,
+      );
+    }
+    console.log("[e2e/global-setup] E2E server verified (E2E_TESTING active)");
+  } catch (err) {
+    throw new Error(
+      `[e2e/global-setup] MT5 scheduler e2e hook unavailable: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
+
+  // 4. Warm the app's route chunks in a real browser. Vite's first-load
   // dependency optimization triggers full-page reloads that abort in-flight
   // navigations; doing it once here (pre-suite) keeps the tests from hitting
   // that reload storm on heavy lazy routes like /admin.
@@ -56,7 +84,7 @@ export default async function globalSetup(_config: FullConfig) {
     }
   }
 
-  // 4. Best-effort demo data seed. Failures are warnings, not fatal.
+  // 5. Best-effort demo data seed. Failures are warnings, not fatal.
   try {
     const bulkRes = await fetch(`${baseURL}/api/seed/bulk`, {
       method: "POST",
@@ -73,7 +101,7 @@ export default async function globalSetup(_config: FullConfig) {
     console.warn(`[e2e/global-setup] Bulk seed error: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  // 5. Create an ACTIVE demo challenge with an MT5 account for the admin.
+  // 6. Create an ACTIVE demo challenge with an MT5 account for the admin.
   // The bulk seed creates funded accounts, but the MT5 reconciliation engine
   // and the trading sync only process status === "active" challenges — so this
   // guarantees the admin MT5 page (retry queue, reconciliation history) and
