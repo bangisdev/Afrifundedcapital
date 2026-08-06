@@ -13,6 +13,7 @@ import { requireAuth, requireAdmin } from "../middleware";
 import { createNotification } from "../lib/notifications";
 import { maybeGenerateCertificate } from "../lib/certificates";
 import { writeAuditLog } from "../lib/audit";
+import { resolveChallengeLabel } from "../lib/mt5/sync-service";
 
 let seeded = false;
 
@@ -738,6 +739,35 @@ app.put("/admin/:id/status", requireAuth, requireAdmin, async (c) => {
 
   // Auto-generate certificate if status warrants one
   const cert = maybeGenerateCertificate(db, id, newStatus);
+
+  // Audit the status change — lifecycle events get their own action so the
+  // trail reads like the challenge's actual journey, and every entry is
+  // stamped with the challenge label (template · account size).
+  try {
+    const lifecycleActions: Record<string, string> = {
+      phase_1_passed: "challenge.phase_passed",
+      phase_2_passed: "challenge.phase_passed",
+      funded: "challenge.funded",
+      violated: "challenge.violated",
+      expired: "challenge.expired",
+    };
+    const action = lifecycleActions[newStatus] || "challenge.status_updated";
+    writeAuditLog(db, {
+      userId: c.get("userId"),
+      action,
+      entity: "challenge",
+      entityId: id,
+      details: {
+        challengeLabel: resolveChallengeLabel(db, challenge),
+        fromStatus: challenge.status,
+        toStatus: newStatus,
+        ...(newStatus === "phase_1_passed" || newStatus === "phase_2_passed" ? { phase: newStatus } : {}),
+      },
+      ipAddress: c.req.header("x-forwarded-for") || undefined,
+    });
+  } catch (e) {
+    console.warn("[Audit] Failed to log challenge status change:", e);
+  }
 
   return c.json({
     success: true,

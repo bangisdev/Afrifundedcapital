@@ -4,17 +4,63 @@ import {
   drawdownHistory,
   mt5Accounts,
   userChallenges,
+  challengeTemplates,
 } from "../../schema";
 import { eq, desc, and } from "drizzle-orm";
 import type { MT5Provider, ChallengeRow } from "./types";
 import { maybeGenerateCertificate } from "../certificates";
 import { createNotification } from "../notifications";
+import { writeAuditLog } from "../audit";
 
 export interface SyncOutcome {
   synced: boolean;
   reason?: "already_synced" | "skipped";
   source?: "gateway" | "simulated";
   error?: string;
+}
+
+/**
+ * Resolve the purchase label ("Two-Step Evaluation · $50,000") for a
+ * challenge row, for stamping audit entries.
+ */
+export function resolveChallengeLabel(db: Db, challenge: ChallengeRow): string | null {
+  try {
+    const template = db
+      .select()
+      .from(challengeTemplates)
+      .where(eq(challengeTemplates.id, challenge.templateId))
+      .get();
+    if (template?.name && challenge.accountSize != null) {
+      return `${template.name} · $${challenge.accountSize.toLocaleString("en-US")}`;
+    }
+  } catch { /* non-critical */ }
+  return null;
+}
+
+/**
+ * Audit a system-driven lifecycle transition (phase pass, funding, violation,
+ * expiry). The actor is the challenge owner — like payment.completed, the
+ * event belongs to the trader's journey rather than an admin action.
+ */
+function writeLifecycleAudit(
+  db: Db,
+  challenge: ChallengeRow,
+  action: string,
+  extra: Record<string, unknown> = {},
+): void {
+  try {
+    writeAuditLog(db, {
+      userId: challenge.userId,
+      action,
+      entity: "challenge",
+      entityId: challenge.id,
+      details: {
+        challengeLabel: resolveChallengeLabel(db, challenge),
+        accountSize: challenge.accountSize,
+        ...extra,
+      },
+    });
+  } catch { /* audit is non-critical */ }
 }
 
 /**
@@ -125,6 +171,20 @@ export async function syncChallenge(
 
     // Auto-generate certificate for the completed phase
     maybeGenerateCertificate(db, challenge.id, nextStatus);
+
+    // Audit the lifecycle transition — which phase was passed (or funded),
+    // stamped with the challenge label.
+    writeLifecycleAudit(
+      db,
+      challenge,
+      nextStatus === "funded" ? "challenge.funded" : "challenge.phase_passed",
+      {
+        phase: nextStatus,
+        profitTargetAmount,
+        totalProfit: metrics.totalProfit ?? 0,
+        tradingDays: metrics.tradingDaysCount ?? 0,
+      },
+    );
   }
 
   // ─── Check for challenge violation (max drawdown exceeded) ──
@@ -142,6 +202,13 @@ export async function syncChallenge(
       message: `Your challenge has been violated due to exceeding the maximum drawdown limit (${challenge.maxDrawdown}%). Your account has been suspended.`,
       link: "/dashboard/challenges",
     });
+
+    // Audit the violation with the challenge label.
+    writeLifecycleAudit(db, challenge, "challenge.violated", {
+      violationType: "max_drawdown",
+      drawdown: metrics.currentDrawdown ?? 0,
+      maxDrawdownPct: challenge.maxDrawdown,
+    });
   }
 
   // ─── Check for challenge expiry ──────────────────────────
@@ -156,6 +223,11 @@ export async function syncChallenge(
       title: "Challenge Expired",
       message: `Your challenge (Account Size: $${challenge.accountSize.toLocaleString()}) has expired. You can purchase a new challenge from the dashboard.`,
       link: "/dashboard/challenges",
+    });
+
+    // Audit the expiry with the challenge label.
+    writeLifecycleAudit(db, challenge, "challenge.expired", {
+      expiresAt: challenge.expiresAt,
     });
   }
 
