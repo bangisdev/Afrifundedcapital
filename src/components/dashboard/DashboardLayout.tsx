@@ -20,9 +20,12 @@ export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boole
   useEffect(() => {
     if (location.pathname.startsWith("/auth")) return;
     if (!isLoading && !isAuthenticated && !hasSeenAuth.current) {
-      navigate("/auth", { replace: true });
+      // Preserve the intended destination (including query params) so the
+      // sign-in page can return the user exactly where they were headed.
+      const returnTo = encodeURIComponent(location.pathname + location.search);
+      navigate(`/auth?returnTo=${returnTo}`, { replace: true });
     }
-  }, [isLoading, isAuthenticated, navigate, location.pathname]);
+  }, [isLoading, isAuthenticated, navigate, location.pathname, location.search]);
 
   // Onboarding redirect
   useEffect(() => {

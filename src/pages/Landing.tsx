@@ -1061,7 +1061,19 @@ export default function Landing() {
                         variant={isPopular ? "default" : "outline"}
                         size="sm"
                         className="w-full text-xs"
-                        onClick={() => navigate(isAuthenticated ? "/dashboard/challenges" : "/auth")}
+                        onClick={() => {
+                          // Deep-link into the real checkout with this template + size preselected.
+                          const sizeId = acct.id;
+                          if (sizeId === undefined || sizeId === null || sizeId === "") {
+                            navigate(isAuthenticated ? "/dashboard/challenges" : "/auth");
+                            return;
+                          }
+                          const deep = `/dashboard/challenges?template=${encodeURIComponent(
+                            String(activeType.id),
+                          )}&size=${encodeURIComponent(String(sizeId))}`;
+                          if (isAuthenticated) navigate(deep);
+                          else navigate(`/auth?returnTo=${encodeURIComponent(deep)}`);
+                        }}
                       >
                         Select
                       </Button>

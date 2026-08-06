@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useAuth } from "@/hooks/use-auth";
 import { useFlutterwavePayment } from "@/hooks/use-flutterwave";
@@ -19,7 +19,7 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@/components/ui/tabs";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { Loader2, CheckCircle, XCircle, ChevronRight, ChevronLeft, ArrowUp, ArrowDown, ArrowUpDown, Gift, Check, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -201,6 +201,42 @@ export default function Challenges() {
     `/api/challenges/templates/${selectedTemplate || 0}/sizes`,
     { enabled: !!selectedTemplate },
   );
+
+  // Deep link support: ?template=<id>&size=<id> preselects the challenge and
+  // account size and opens the purchase dialog (e.g. from the landing page cards).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTemplate = searchParams.get("template");
+  const urlSize = searchParams.get("size");
+  const deepLinkConsumed = useRef(false);
+
+  useEffect(() => {
+    if (deepLinkConsumed.current) return;
+    if (!urlTemplate) return;
+    deepLinkConsumed.current = true;
+    setSelectedTemplate(urlTemplate);
+    if (urlSize) {
+      setSelectedSize(urlSize);
+      setShowPurchase(true);
+    }
+    // Clean the URL so refreshing (or closing the dialog) doesn't re-trigger it.
+    setSearchParams({}, { replace: true });
+  }, [urlTemplate, urlSize, setSearchParams]);
+
+  // Clear a deep-linked selection if it doesn't match the loaded templates.
+  useEffect(() => {
+    if (!templates || !selectedTemplate) return;
+    if (!templates.some((t: Doc) => String(t.id) === selectedTemplate)) {
+      setSelectedTemplate(null);
+    }
+  }, [templates, selectedTemplate]);
+
+  // Clear a deep-linked size if it doesn't belong to the selected template.
+  useEffect(() => {
+    if (!sizes || !selectedSize) return;
+    if (!sizes.some((s: Doc) => String(s.id) === selectedSize)) {
+      setSelectedSize(null);
+    }
+  }, [sizes, selectedSize]);
 
   const isLoading = templatesLoading || myLoading;
 

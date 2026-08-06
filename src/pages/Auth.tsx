@@ -28,6 +28,16 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const refCode = useMemo(() => searchParams.get("ref") || null, [searchParams]);
+
+  // Optional ?returnTo= deep link — only accept same-origin relative paths
+  // (reject protocol-relative and backslash-prefixed values to avoid open redirects).
+  const returnTo = useMemo(() => {
+    const raw = searchParams.get("returnTo");
+    if (!raw) return null;
+    if (!raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/\\")) return null;
+    return raw;
+  }, [searchParams]);
+  const redirectPath = returnTo || redirectAfterAuth || "/dashboard";
   const [mode, setMode] = useState<"sign-in" | "sign-up">(refCode ? "sign-up" : "sign-in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -41,10 +51,9 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   // Mount-side: if already authenticated, redirect immediately
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      const redirect = redirectAfterAuth || "/dashboard";
-      navigate(redirect, { replace: true });
+      navigate(redirectPath, { replace: true });
     }
-  }, [authLoading, isAuthenticated, navigate, redirectAfterAuth]);
+  }, [authLoading, isAuthenticated, navigate, redirectPath]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,8 +65,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       formData.set("password", password);
       await signIn("email", formData);
 
-      const redirect = redirectAfterAuth || "/dashboard";
-      navigate(redirect, { replace: true });
+      navigate(redirectPath, { replace: true });
     } catch (err) {
       console.error("Sign in error:", err);
       setError(err instanceof Error ? err.message : "Invalid email or password.");
@@ -89,8 +97,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       formData.set("password", password);
       await signIn("email", formData);
 
-      const redirect = redirectAfterAuth || "/dashboard";
-      navigate(redirect, { replace: true });
+      navigate(redirectPath, { replace: true });
     } catch (err) {
       console.error("Sign up error:", err);
       setError(err instanceof Error ? err.message : "Registration failed. Please try again.");
