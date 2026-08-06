@@ -4,7 +4,8 @@
  * Drives the real UI in Chromium: landing → auth → admin overview → user
  * management → challenges → payments → cross-page navigation → responsive
  * viewports → MT5 manager (accounts, connector, retry queue, reconciliation)
- * → client trading metrics.
+ * → client trading metrics → MT5 background scheduler (retry-queue drain +
+ * daily sync pass firing on their own).
  *
  * How it runs:
  *   - `playwright.config.ts` auto-boots `bun run dev` (with `E2E_TESTING=1`,
@@ -468,6 +469,101 @@ test.describe("Admin Dashboard E2E Flow", () => {
           timeout: 25_000,
         });
       }
+    });
+  });
+
+  // ─── 10. MT5 Background Scheduler ────────────────────
+  //
+  // Proves the background loop in `src/server/lib/mt5/scheduler.ts` fires on
+  // its own in dev/e2e mode (E2E_TESTING=1 shortens the timers to seconds and
+  // lets the simulated provider drive the loop). The tests seed the exact
+  // conditions via the E2E-only `POST /api/trading/admin/scheduler/e2e-setup`
+  // hook, then assert the queue drains and stale challenges get synced WITHOUT
+  // clicking "Process Queue Now", "Sync Now", or "Run Reconciliation".
+  test.describe("10. MT5 Background Scheduler", () => {
+    test.beforeEach(async ({ page }) => {
+      await signInAsAdmin(page);
+    });
+
+    test("retry-queue drain: the background loop processes pending sync jobs", async ({ page }) => {
+      // Seed: enqueue a pending "sync" job for an active challenge. Only the
+      // scheduler's queue pass (every ~4s in e2e mode) can drain it.
+      const setupRes = await page.request.post("/api/trading/admin/scheduler/e2e-setup", {
+        data: { enqueue: true },
+      });
+      expect(setupRes.ok()).toBeTruthy();
+      const setup = await setupRes.json();
+      expect(setup.enqueued).toBe(true);
+      const jobId = setup.queueJobId as number;
+      expect(jobId).toBeTruthy();
+
+      // Poll the server until the background loop drains the job to "done".
+      await expect
+        .poll(
+          async () => {
+            const res = await page.request.get("/api/trading/admin/queue");
+            const data = (await res.json()) as { items: Array<{ id: number; status: string }> };
+            const job = data.items?.find((j) => j.id === jobId);
+            return job ? job.status : "missing";
+          },
+          { timeout: 60_000, message: "background queue pass should drain the enqueued job" },
+        )
+        .toBe("done");
+
+      // UI reflection: the Retry Queue tab renders the drained job with the
+      // `done` badge (fresh fetch on tab mount).
+      await warmUp(page, "/admin/mt5");
+      await waitForAppReady(page);
+      await page.getByRole("tab", { name: /Retry Queue/ }).click();
+      const jobRow = page
+        .locator(".card-subtle", { hasText: `MT5 #${setup.mt5AccountId}` })
+        .first();
+      await expect(jobRow).toBeVisible({ timeout: 20_000 });
+      await expect(jobRow).toContainText(/done/i, { timeout: 20_000 });
+      await expect(page.locator("body")).toContainText(/Pending|Done|Failed|Total Jobs/, {
+        timeout: 20_000,
+      });
+    });
+
+    test("daily sync pass: the background loop syncs stale active challenges", async ({ page }) => {
+      // Seed: re-stale an active challenge and zero its account balance, with
+      // NO queue job — only the interval sync pass (every ~8s in e2e mode)
+      // can write fresh data for it.
+      const setupRes = await page.request.post("/api/trading/admin/scheduler/e2e-setup", {
+        data: { enqueue: false },
+      });
+      expect(setupRes.ok()).toBeTruthy();
+      const setup = await setupRes.json();
+      expect(setup.enqueued).toBe(false);
+      const login = setup.login as string;
+      expect(login).toBeTruthy();
+
+      // Poll the server until the sync pass writes a fresh balance and a
+      // lastSyncAt for the previously-stale account.
+      await expect
+        .poll(
+          async () => {
+            const res = await page.request.get("/api/trading/admin/mt5?page=1&pageSize=100");
+            const data = (await res.json()) as {
+              items: Array<{ login: string; balance: number; lastSyncAt: number | null }>;
+            };
+            const acc = data.items?.find((a) => a.login === login);
+            if (!acc) return false;
+            return acc.balance > 0 && !!acc.lastSyncAt;
+          },
+          { timeout: 60_000, message: "background sync pass should sync the stale challenge" },
+        )
+        .toBe(true);
+
+      // UI reflection: the Accounts tab row for the login shows the synced
+      // balance (no longer $0) — the fresh data the scheduler wrote.
+      await warmUp(page, "/admin/mt5");
+      await waitForAppReady(page);
+      const accountRow = page
+        .locator(".card-subtle", { hasText: `#${login}` })
+        .first();
+      await expect(accountRow).toBeVisible({ timeout: 20_000 });
+      await expect(accountRow).not.toContainText("Balance: $0", { timeout: 20_000 });
     });
   });
 });

@@ -15,13 +15,21 @@ import { processSyncQueue } from "./retry-queue";
  * mode it is a no-op so demo data only moves when a user/admin explicitly
  * triggers a sync.
  *
+ * E2E mode (`E2E_TESTING=1`, set by the Playwright web server): the timers are
+ * shortened to a few seconds and the simulated provider is allowed to drive
+ * the loop, so the e2e suite can observe the queue drain and the sync pass
+ * firing on their own — see `e2e/admin-flow.spec.ts` section 10 and the
+ * `POST /api/trading/admin/scheduler/e2e-setup` test hook. Production and
+ * normal dev traffic keep the production cadence and simulated no-op.
+ *
  * Started once per process by the entrypoints (dev Vite plugin and the
  * production `server.ts`). The module-level flag keeps it idempotent.
  */
 
-const INITIAL_DELAY_MS = 20_000; // first pass shortly after boot
-const QUEUE_INTERVAL_MS = 5 * 60 * 1000; // retry queue: every 5 minutes
-const SYNC_INTERVAL_MS = 60 * 60 * 1000; // daily sync check: every hour
+const E2E_TESTING = process.env.E2E_TESTING === "1";
+const INITIAL_DELAY_MS = E2E_TESTING ? 3_000 : 20_000; // first pass shortly after boot
+const QUEUE_INTERVAL_MS = E2E_TESTING ? 4_000 : 5 * 60 * 1000; // retry queue: 4s in e2e, 5 min in prod
+const SYNC_INTERVAL_MS = E2E_TESTING ? 8_000 : 60 * 60 * 1000; // sync check: 8s in e2e, hourly in prod
 
 let started = false;
 
@@ -32,7 +40,9 @@ export function startMT5Scheduler(db: Db): void {
   const runQueuePass = async (): Promise<void> => {
     try {
       const provider = getMT5Provider(db);
-      if (!provider.configured) return;
+      // Prod: no-op without a live gateway. E2E: let the simulated provider
+      // drive the loop so the drain is observable in the Playwright suite.
+      if (!provider.configured && !E2E_TESTING) return;
       const result = await processSyncQueue(db, provider, { limit: 50 });
       if (result.failed > 0 || result.remaining > 0) {
         console.warn(
@@ -48,7 +58,7 @@ export function startMT5Scheduler(db: Db): void {
   const runSyncPass = async (): Promise<void> => {
     try {
       const provider = getMT5Provider(db);
-      if (!provider.configured) return;
+      if (!provider.configured && !E2E_TESTING) return;
       const challenges = getActiveChallenges(db);
       let synced = 0;
       for (const challenge of challenges) {

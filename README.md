@@ -371,6 +371,8 @@ The spec signs in through the real `/auth` page, so it exercises the app's actua
 
 The app rate-limits sign-in (5/15 min per IP) and locks accounts after 5 failed attempts. A serial suite that signs in dozens of times from one IP would trip that — so `playwright.config.ts` boots the web server with `E2E_TESTING=1`, which bypasses the in-memory limiter and lockout for that process only (see `src/server/middleware.ts`). Production and normal dev traffic are unaffected.
 
+The same flag accelerates the MT5 background scheduler (`src/server/lib/mt5/scheduler.ts`) so section 10 of the e2e suite can observe it firing on its own: the retry-queue pass runs every ~4s (vs 5 min) and the sync pass every ~8s (vs hourly), and the simulated provider is allowed to drive the loop (normally a no-op without a live gateway). Tests seed the exact conditions through the E2E-only hook `POST /api/trading/admin/scheduler/e2e-setup` (404 outside `E2E_TESTING`), then assert the queue drains and stale challenges get synced without any manual button click.
+
 ### CI
 
 `CI=true bun test:e2e` runs with retries and forbids `test.only`. In headless environments the Freebuff platform cold-start overlay can delay first paint, so the suite's `warmUp` helper retries page loads; when running against a raw local dev server this isn't an issue.

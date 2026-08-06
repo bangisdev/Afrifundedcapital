@@ -662,6 +662,112 @@ app.get("/admin/reconcile/history", requireAuth, requireAdmin, (c) => {
   return c.json({ items: getReconciliationHistory(db, { limit }) });
 });
 
+// ─── Admin: MT5 Background Scheduler (E2E test hook) ─────
+//
+// Test-only. Serves 404 unless the server runs with E2E_TESTING=1 (the
+// Playwright web server always sets it). It deterministically sets up the
+// conditions the background scheduler (`src/server/lib/mt5/scheduler.ts`)
+// acts on, so the e2e suite can observe the retry-queue drain and the daily
+// sync pass firing WITHOUT clicking any manual control:
+//   1. finds (or creates) an active challenge bound to an MT5 account,
+//   2. deletes its metrics/drawdown history and zeroes the account balance +
+//      lastSyncAt, so `syncChallenge` sees a stale, syncable challenge,
+//   3. optionally enqueues a pending "sync" retry-queue job for it.
+app.post("/admin/scheduler/e2e-setup", requireAuth, requireAdmin, async (c) => {
+  if (process.env.E2E_TESTING !== "1") {
+    return c.json({ error: "E2E scheduler test hook is disabled" }, 404);
+  }
+  const db = getDb();
+  const body = await c.req.json().catch(() => ({}));
+  const enqueue = body.enqueue !== false;
+  const userId = c.get("userId");
+  const now = Date.now();
+
+  // 1. Reuse the caller's most recent active challenge bound to an MT5
+  //    account (the global-setup demo challenge); create one otherwise.
+  let challenge = db.select().from(userChallenges)
+    .where(and(
+      eq(userChallenges.userId, userId),
+      eq(userChallenges.status, "active"),
+      sql`${userChallenges.mt5AccountId} IS NOT NULL`,
+    ))
+    .orderBy(desc(userChallenges.createdAt))
+    .limit(1)
+    .get();
+
+  if (!challenge) {
+    const account = db.insert(mt5Accounts).values({
+      userId,
+      login: "AFC" + Math.floor(100000 + Math.random() * 900000),
+      password: "E2E@Demo123",
+      investorPassword: "E2E@Demo123",
+      server: "AfriFundedCapital-Demo",
+      group: "DEMO\\AFC",
+      leverage: 100,
+      balance: 10000,
+      equity: 10000,
+      currency: "NGN",
+      createdAt: now,
+    }).returning().get();
+    challenge = db.insert(userChallenges).values({
+      userId,
+      templateId: 0,
+      accountSizeId: 0,
+      status: "active",
+      accountSize: 10000,
+      currency: "NGN",
+      profitTarget: 10,
+      dailyDrawdown: 5,
+      maxDrawdown: 10,
+      maxLeverage: 100,
+      minTradingDays: 5,
+      maxTradingDays: 30,
+      startedAt: now,
+      expiresAt: now + 30 * 86400000,
+      amountPaid: 0,
+      currentPhase: 1,
+      mt5AccountId: account.id,
+      createdAt: now,
+      updatedAt: now,
+    }).returning().get();
+  }
+
+  const mt5AccountId = challenge.mt5AccountId;
+  const account = mt5AccountId
+    ? db.select().from(mt5Accounts).where(eq(mt5Accounts.id, mt5AccountId)).get()
+    : undefined;
+
+  // 2. Make the challenge stale so the next scheduler sync pass actually syncs
+  //    it, and zero the account so a fresh sync is observable (balance + $0).
+  db.delete(tradingMetrics).where(eq(tradingMetrics.challengeId, challenge.id)).run();
+  db.delete(drawdownHistory).where(eq(drawdownHistory.challengeId, challenge.id)).run();
+  if (mt5AccountId) {
+    db.update(mt5Accounts).set({ balance: 0, equity: 0, lastSyncAt: null })
+      .where(eq(mt5Accounts.id, mt5AccountId)).run();
+  }
+
+  // 3. Optionally enqueue a pending retry-queue job for the drain test.
+  let queueJobId: number | null = null;
+  if (enqueue && mt5AccountId) {
+    queueJobId = enqueueSyncJob(db, {
+      mt5AccountId,
+      action: "sync",
+      payload: { challengeId: challenge.id, source: "e2e-setup" },
+    });
+  }
+
+  return c.json({
+    success: true,
+    challengeId: challenge.id,
+    mt5AccountId,
+    login: account?.login ?? null,
+    accountSize: challenge.accountSize,
+    queueJobId,
+    enqueued: enqueue && !!mt5AccountId,
+    stats: getQueueStats(db),
+  });
+});
+
 // ─── Admin: Sync Queue Status (legacy) ──────────────────
 
 app.get("/admin/sync-queue", requireAuth, requireAdmin, (c) => {
