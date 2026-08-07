@@ -75,13 +75,18 @@ test.describe("11. Purchase label & audit trail — audit log chips & lifecycle"
     // The purchase label is surfaced on the entries (DetailsLine rendering).
     await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
 
-    // Tapping a chip filters the list to exactly that lifecycle action.
+    // Tapping a chip filters the list to exactly that lifecycle action. Rows
+    // render "<action> on <entity>", so assertions are scoped to row
+    // containers — page-wide text would otherwise also match the top-actions
+    // summary card and the action-filter dropdown's hidden <option>s.
+    const rowsWithAction = (action: string) =>
+      page.locator(".card-subtle", { hasText: new RegExp(`${action} on`) });
     await page.getByRole("button", { name: "Violated", exact: true }).click();
-    await expect(page.getByText("challenge.violated").first()).toBeVisible();
-    await expect(page.getByText("challenge.funded", { exact: true })).toHaveCount(0, { timeout: 15_000 });
+    await expect(rowsWithAction("challenge.violated").first()).toBeVisible({ timeout: 15_000 });
+    await expect(rowsWithAction("challenge.funded")).toHaveCount(0, { timeout: 15_000 });
 
     await page.getByRole("button", { name: "Phase Passed", exact: true }).click();
-    await expect(page.getByText("challenge.phase_passed").first()).toBeVisible();
-    await expect(page.getByText("challenge.violated", { exact: true })).toHaveCount(0, { timeout: 15_000 });
+    await expect(rowsWithAction("challenge.phase_passed").first()).toBeVisible({ timeout: 15_000 });
+    await expect(rowsWithAction("challenge.violated")).toHaveCount(0, { timeout: 15_000 });
   });
 });
