@@ -73,6 +73,9 @@ vi.mock("lucide-react", () => {
     Lock: createIcon("Lock"),
     UserIcon: createIcon("UserIcon"),
     AlertCircle: createIcon("AlertCircle"),
+    CreditCard: createIcon("CreditCard"),
+    ShieldCheck: createIcon("ShieldCheck"),
+    Headphones: createIcon("Headphones"),
   };
 });
 
@@ -218,7 +221,9 @@ describe("Landing Page", () => {
     it("renders the 90% profit headline", () => {
       render(<Landing />);
       expect(screen.getByText("Keep")).toBeTruthy();
-      expect(screen.getByText("90%")).toBeTruthy();
+      // "90%" appears in the hero and the comparison table — any of them proves
+      // the profit-share messaging renders.
+      expect(screen.getAllByText("90%").length).toBeGreaterThanOrEqual(1);
       // "of Profits" is a separate text node; verify it exists somewhere
       const allText = document.body.textContent || "";
       expect(allText).toContain("of Profits");
@@ -307,7 +312,8 @@ describe("Landing Page", () => {
       render(<Landing />);
       expect(screen.getByText("Challenge-Based Funding")).toBeTruthy();
       expect(screen.getByText("90% Profit Share")).toBeTruthy();
-      expect(screen.getByText("Instant Funding")).toBeTruthy();
+      // "Instant Funding" also appears as a challenge type — assert it renders.
+      expect(screen.getAllByText("Instant Funding").length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText("Scaling Plan")).toBeTruthy();
       expect(screen.getByText("Multi-Phase Evaluation")).toBeTruthy();
       expect(screen.getByText("MT5 Integration")).toBeTruthy();
@@ -407,10 +413,10 @@ describe("Landing Page", () => {
       expect(mockNavigate).toHaveBeenCalledWith("/auth");
     });
 
-    it("renders the challenge types note", () => {
+    it("renders the pricing section subtitle", () => {
       render(<Landing />);
       expect(
-        screen.getByText(/All account sizes available for One Step, Two Step, and Instant Funding challenges/)
+        screen.getByText(/Affordable entry prices designed for every level of trader/)
       ).toBeTruthy();
     });
   });

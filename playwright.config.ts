@@ -1,54 +1,58 @@
-import { defineConfig, devices } from "@playwright/test";
+import { defineConfig } from "@playwright/test";
 
-// ─── Config ───────────────────────────────────────────────
-// Defaults to the local Vite dev server. Override with PLAYWRIGHT_BASE_URL
-// to point the suite at any running instance (e.g. the Freebuff preview).
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:5173";
+/**
+ * Playwright config for the AfriFundedCapital e2e suite.
+ *
+ * The suite boots its OWN Vite dev server on port 5174 (never touching the
+ * platform/preview server on 5173) with:
+ *   - E2E_TESTING=1  → rate limiters + account lockout disabled, MT5 scheduler
+ *                      timers shortened (first pass ~3s, queue 4s, sync 8s),
+ *                      and the test-only scheduler/e2e hooks enabled.
+ *   - DB_PATH        → an isolated SQLite file under .e2e/, wiped on every
+ *                      run, so tests are deterministic and never mutate the
+ *                      real ./afrifundedcapital.db.
+ *
+ * Chunks are selected with `--grep "N. Section"` (see package.json scripts).
+ * The heaviest chunks (MT5, scheduler, audit) are split across multiple spec
+ * files so `--workers=2` actually parallelizes them (one file per worker).
+ */
+
+const PORT = 5174;
+const BASE_URL = `http://localhost:${PORT}`;
+const E2E_DB = ".e2e/afrifundedcapital.e2e.db";
 
 export default defineConfig({
   testDir: "./e2e",
-  // fullyParallel: true enables per-test sharding (Playwright otherwise shards
-  // by FILE, which is a silent no-op for this single-file suite — every shard
-  // beyond 1 would run zero tests and exit 0). workers stays at 1, so local
-  // and single-shard runs are still fully sequential and deterministic;
-  // sharded CI jobs split the heavy sections' tests across parallel runners.
-  fullyParallel: true,
-  workers: 1,
+  // Spec files are independent; a file's tests run serially. Workers fan out
+  // across files — that's what lets the sharded chunks use --workers=2.
+  fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  retries: process.env.CI ? 1 : 0,
+  workers: process.env.CI ? 1 : undefined,
   timeout: 90_000,
   expect: { timeout: 15_000 },
-  reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
-
+  reporter: [
+    ["list"],
+    ["html", { open: "never", outputFolder: "playwright-report" }],
+  ],
   use: {
     baseURL: BASE_URL,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
-    video: "off",
+    video: "retain-on-failure",
   },
-
-  projects: [
-    {
-      name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
-    },
-  ],
-
-  globalSetup: "./e2e/global-setup.ts",
-
-  // Auto-boot the app for the run. With reuseExistingServer: true an
-  // already-listening server on the port (e.g. the Freebuff preview) is
-  // reused instead, so the suite works in both setups.
   webServer: {
-    command: "bun run dev",
-    url: BASE_URL,
-    reuseExistingServer: true,
-    timeout: 180_000,
-    env: {
-      ...(process.env as Record<string, string>),
-      // Opt into the e2e escape hatch: disables the auth rate limiter and
-      // account lockout so the serial suite's many sign-ins stay deterministic.
-      E2E_TESTING: "1",
-    },
+    // Fresh DB per run: wipe any previous e2e sqlite files, then boot the
+    // app server in E2E mode. Playwright manages this process's lifecycle.
+    command: [
+      "mkdir -p .e2e",
+      `rm -f ${E2E_DB} ${E2E_DB}-wal ${E2E_DB}-shm`,
+      `E2E_TESTING=1 DB_PATH=${E2E_DB} vite --port ${PORT} --strictPort`,
+    ].join(" && "),
+    url: `${BASE_URL}/api/health`,
+    reuseExistingServer: false,
+    timeout: 120_000,
+    stdout: "ignore",
+    stderr: "pipe",
   },
 });
