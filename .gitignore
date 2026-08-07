@@ -2,3 +2,16 @@
 node_modules
 dist
 src/convex/_generated
+
+# SQLite databases — contain plaintext secrets (resend_config, flutterwave_config) + user data
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+.e2e/
+
+# Test artifacts
+playwright-report/
+test-results/
+test-*.db
