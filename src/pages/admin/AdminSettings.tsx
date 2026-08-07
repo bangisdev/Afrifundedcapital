@@ -3,12 +3,13 @@ import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
-  Loader2, Save, CreditCard, Shield, Webhook, Eye, EyeOff,
+  Loader2, Save, CreditCard, Shield, Webhook,
   CheckCircle, AlertTriangle, Copy, Database, Zap, Globe, Mail, Users, Settings2, History, ArrowUpRight
 } from "lucide-react";
 import { toast } from "sonner";
@@ -16,8 +17,6 @@ import { Link } from "react-router";
 
 interface ProviderConfig {
   publicKey: string;
-  secretKey: string;
-  secretHash?: string;
   webhookUrl?: string;
   isEnabled: boolean;
   mode?: "test" | "live";
@@ -92,6 +91,40 @@ function ViewHistoryLink({ settingKey }: { settingKey: string }) {
   );
 }
 
+/**
+ * Badge showing whether a gateway secret is configured via environment
+ * variables — the only place secrets are allowed to live. Shows the masked
+ * value when configured so admins can confirm which key the runtime is using.
+ */
+function EnvSecretBadge({
+  envVar,
+  configured,
+  masked,
+}: {
+  envVar: string;
+  configured: boolean;
+  masked?: string;
+}) {
+  if (configured) {
+    return (
+      <Badge className="border-transparent bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+        <CheckCircle className="h-3 w-3" />
+        {masked ? `From env · ${masked}` : "From env · configured"}
+      </Badge>
+    );
+  }
+  return (
+    <Badge
+      variant="outline"
+      className="border-amber-500/30 bg-amber-500/5 text-amber-600 dark:text-amber-400"
+      title={`Set the ${envVar} environment variable in the platform Keys/API keys tab`}
+    >
+      <AlertTriangle className="h-3 w-3" />
+      Not configured — set {envVar}
+    </Badge>
+  );
+}
+
 export default function AdminSettings() {
   const { data: settings, isLoading, refetch } = useApiQuery<any[]>(
     ["admin", "settings"],
@@ -102,48 +135,51 @@ export default function AdminSettings() {
     invalidateKeys: [["admin", "settings"]],
   });
 
+  // Env-var credential status — secrets live in environment variables, never
+  // the database. These tell the admin whether the runtime actually has them.
+  const { data: flwEnvStatus } = useApiQuery<any>(
+    ["admin", "flutterwave-config"],
+    "/api/payments/admin/flutterwave-config"
+  );
+  const { data: resendEnvStatus } = useApiQuery<any>(
+    ["admin", "resend-status"],
+    "/api/test-email/status"
+  );
+
   // Mode state
   const [liveMode, setLiveMode] = useState(false);
 
   // Flutterwave state - stores both test and live keys
   const [flwTestConfig, setFlwTestConfig] = useState<ProviderConfig>({
     publicKey: "",
-    secretKey: "",
-    secretHash: "",
     webhookUrl: "",
     isEnabled: true,
     mode: "test",
   });
   const [flwLiveConfig, setFlwLiveConfig] = useState<ProviderConfig>({
     publicKey: "",
-    secretKey: "",
-    secretHash: "",
     webhookUrl: "",
     isEnabled: false,
     mode: "live",
   });
-  const [showFlwSecret, setShowFlwSecret] = useState(false);
-  const [showFlwHash, setShowFlwHash] = useState(false);
   const [savingFlw, setSavingFlw] = useState(false);
   const [confirmLiveSwitch, setConfirmLiveSwitch] = useState(false);
 
   // Paystack state (future-ready)
   const [pskConfig, setPskConfig] = useState<ProviderConfig>({
     publicKey: "",
-    secretKey: "",
     isEnabled: false,
   });
-  const [showPskSecret, setShowPskSecret] = useState(false);
   const [savingPsk, setSavingPsk] = useState(false);
 
-  // Resend email state
+  // Resend email state — the API key is NOT part of it (env-managed).
   const [resendConfig, setResendConfig] = useState({
-    apiKey: "",
     fromEmail: "AfriFundedCapital <noreply@afrifundedcapital.com>",
     isEnabled: false,
   });
-  const [showResendKey, setShowResendKey] = useState(false);
   const [savingResend, setSavingResend] = useState(false);
+  // Optional transient key for a one-off test send (never persisted).
+  const [testApiKey, setTestApiKey] = useState("");
   const [testEmail, setTestEmail] = useState("");
   const [sendingTest, setSendingTest] = useState(false);
 
@@ -167,14 +203,12 @@ export default function AdminSettings() {
     if (flwSetting?.value) {
       const val = flwSetting.value;
       // Detect mode from keys
-      const isTest = (val.publicKey || "").includes("TEST") || (val.secretKey || "").includes("TEST");
+      const isTest = (val.publicKey || "").includes("TEST");
       const mode = isTest ? "test" : "live";
 
       if (mode === "test") {
         setFlwTestConfig({
           publicKey: val.publicKey || "",
-          secretKey: val.secretKey || "",
-          secretHash: val.secretHash || "",
           webhookUrl: val.webhookUrl || "",
           isEnabled: val.isEnabled !== false,
           mode: "test",
@@ -182,8 +216,6 @@ export default function AdminSettings() {
       } else {
         setFlwLiveConfig({
           publicKey: val.publicKey || "",
-          secretKey: val.secretKey || "",
-          secretHash: val.secretHash || "",
           webhookUrl: val.webhookUrl || "",
           isEnabled: val.isEnabled !== false,
           mode: "live",
@@ -197,8 +229,6 @@ export default function AdminSettings() {
     if (flwLiveSetting?.value) {
       setFlwLiveConfig({
         publicKey: flwLiveSetting.value.publicKey || "",
-        secretKey: flwLiveSetting.value.secretKey || "",
-        secretHash: flwLiveSetting.value.secretHash || "",
         webhookUrl: flwLiveSetting.value.webhookUrl || "",
         isEnabled: flwLiveSetting.value.isEnabled !== false,
         mode: "live",
@@ -210,8 +240,6 @@ export default function AdminSettings() {
     if (flwTestSetting?.value) {
       setFlwTestConfig({
         publicKey: flwTestSetting.value.publicKey || "",
-        secretKey: flwTestSetting.value.secretKey || "",
-        secretHash: flwTestSetting.value.secretHash || "",
         webhookUrl: flwTestSetting.value.webhookUrl || "",
         isEnabled: flwTestSetting.value.isEnabled !== false,
         mode: "test",
@@ -222,7 +250,6 @@ export default function AdminSettings() {
     const resendSetting = settings.find((s: any) => s.key === "resend_config");
     if (resendSetting?.value) {
       setResendConfig({
-        apiKey: resendSetting.value.apiKey || "",
         fromEmail: resendSetting.value.fromEmail || "AfriFundedCapital <noreply@afrifundedcapital.com>",
         isEnabled: resendSetting.value.isEnabled === true,
       });
@@ -233,7 +260,6 @@ export default function AdminSettings() {
     if (pskSetting?.value) {
       setPskConfig({
         publicKey: pskSetting.value.publicKey || "",
-        secretKey: pskSetting.value.secretKey || "",
         isEnabled: pskSetting.value.isEnabled === true,
       });
     }
@@ -276,8 +302,6 @@ export default function AdminSettings() {
         body: JSON.stringify({
           value: {
             publicKey: activeFlwConfig.publicKey,
-            secretKey: activeFlwConfig.secretKey,
-            secretHash: activeFlwConfig.secretHash,
             webhookUrl: activeFlwConfig.webhookUrl,
             isEnabled: activeFlwConfig.isEnabled,
             mode: liveMode ? "live" : "test",
@@ -290,8 +314,6 @@ export default function AdminSettings() {
       await updateSetting.mutateAsync({
         value: {
           publicKey: activeFlwConfig.publicKey,
-          secretKey: activeFlwConfig.secretKey,
-          secretHash: activeFlwConfig.secretHash,
           webhookUrl: activeFlwConfig.webhookUrl,
           isEnabled: activeFlwConfig.isEnabled,
           mode: liveMode ? "live" : "test",
@@ -317,7 +339,7 @@ export default function AdminSettings() {
         credentials: "include",
         body: JSON.stringify({
           value: {
-            apiKey: resendConfig.apiKey,
+            // apiKey intentionally omitted — secrets come from env vars only.
             fromEmail: resendConfig.fromEmail,
             isEnabled: resendConfig.isEnabled,
           },
@@ -343,7 +365,7 @@ export default function AdminSettings() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ to: testEmail }),
+        body: JSON.stringify({ to: testEmail, ...(testApiKey ? { apiKey: testApiKey } : {}) }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -367,7 +389,6 @@ export default function AdminSettings() {
         body: JSON.stringify({
           value: {
             publicKey: pskConfig.publicKey,
-            secretKey: pskConfig.secretKey,
             isEnabled: pskConfig.isEnabled,
           },
           group: "payments",
@@ -475,7 +496,7 @@ export default function AdminSettings() {
         <div>
           <h1 className="text-lg font-medium tracking-tight">Payment Settings</h1>
           <p className="text-xs text-muted-foreground mt-1">
-            Configure payment providers, API keys, and environment mode
+            Configure payment providers and environment mode — gateway secrets live in environment variables
           </p>
         </div>
         <Button size="sm" className="text-xs" onClick={handleBulkSeed} disabled={bulkSeeding}>
@@ -711,65 +732,27 @@ export default function AdminSettings() {
 
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Secret Key</Label>
-              <div className="relative">
-                <Input
-                  type={showFlwSecret ? "text" : "password"}
-                  placeholder={liveMode ? "FLWSECK_live-..." : "FLWSECK_TEST-..."}
-                  value={activeFlwConfig.secretKey}
-                  onChange={(e) => setActiveFlwConfig({ ...activeFlwConfig, secretKey: e.target.value })}
-                  className="text-xs font-mono pr-20"
-                />
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
-                  <button
-                    onClick={() => setShowFlwSecret(!showFlwSecret)}
-                    className="p-1 hover:bg-secondary rounded"
-                  >
-                    {showFlwSecret ? <EyeOff className="h-3 w-3 text-muted-foreground" /> : <Eye className="h-3 w-3 text-muted-foreground" />}
-                  </button>
-                  {activeFlwConfig.secretKey && (
-                    <button
-                      onClick={() => copyToClipboard(activeFlwConfig.secretKey)}
-                      className="p-1 hover:bg-secondary rounded"
-                    >
-                      <Copy className="h-3 w-3 text-muted-foreground" />
-                    </button>
-                  )}
-                </div>
-              </div>
+              <EnvSecretBadge
+                envVar="FLW_SECRET_KEY"
+                configured={!!flwEnvStatus?.secretKeyConfigured}
+                masked={flwEnvStatus?.secretKey || undefined}
+              />
               <p className="text-[10px] text-muted-foreground">
-                Server-side only. Used for payment verification.
+                Server-side only, used for payment verification and refunds. Secrets are never stored — set{" "}
+                <code className="bg-muted px-1 rounded">FLW_SECRET_KEY</code> in the platform Keys/API keys tab.
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Verif Hash (Secret Hash)</Label>
-              <div className="relative">
-                <Input
-                  type={showFlwHash ? "text" : "password"}
-                  placeholder={liveMode ? "Production verif-hash" : "Test verif-hash"}
-                  value={activeFlwConfig.secretHash || ""}
-                  onChange={(e) => setActiveFlwConfig({ ...activeFlwConfig, secretHash: e.target.value })}
-                  className="text-xs font-mono pr-20"
-                />
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
-                  <button
-                    onClick={() => setShowFlwHash(!showFlwHash)}
-                    className="p-1 hover:bg-secondary rounded"
-                  >
-                    {showFlwHash ? <EyeOff className="h-3 w-3 text-muted-foreground" /> : <Eye className="h-3 w-3 text-muted-foreground" />}
-                  </button>
-                  {activeFlwConfig.secretHash && (
-                    <button
-                      onClick={() => copyToClipboard(activeFlwConfig.secretHash || "")}
-                      className="p-1 hover:bg-secondary rounded"
-                    >
-                      <Copy className="h-3 w-3 text-muted-foreground" />
-                    </button>
-                  )}
-                </div>
-              </div>
+              <Label className="text-xs text-muted-foreground">Verif Hash (Webhook Signature)</Label>
+              <EnvSecretBadge
+                envVar="FLW_SECRET_HASH"
+                configured={!!flwEnvStatus?.secretHashConfigured}
+                masked={flwEnvStatus?.secretHash || undefined}
+              />
               <p className="text-[10px] text-muted-foreground">
-                Found in Flutterwave Dashboard → Settings → Webhooks.
+                Found in Flutterwave Dashboard → Settings → Webhooks. Set it as{" "}
+                <code className="bg-muted px-1 rounded">FLW_SECRET_HASH</code> in the platform Keys/API keys tab.
               </p>
             </div>
 
@@ -778,7 +761,7 @@ export default function AdminSettings() {
                 size="sm"
                 className="text-xs"
                 onClick={saveFlutterwave}
-                disabled={savingFlw || !activeFlwConfig.publicKey || !activeFlwConfig.secretKey}
+                disabled={savingFlw || !activeFlwConfig.publicKey}
               >
                 {savingFlw ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
                 Save {liveMode ? "Live" : "Test"} Config
@@ -828,7 +811,7 @@ export default function AdminSettings() {
             </div>
           )}
 
-          {activeFlwConfig.publicKey && activeFlwConfig.secretKey && activeFlwConfig.isEnabled && (
+          {activeFlwConfig.publicKey && flwEnvStatus?.secretKeyConfigured && activeFlwConfig.isEnabled && (
             <div className={`card-subtle p-4 flex items-start gap-3 ${liveMode ? "border-red-500/20" : "border-emerald-500/20"}`}>
               <CheckCircle className={`h-4 w-4 mt-0.5 shrink-0 ${liveMode ? "text-red-500" : "text-emerald-500"}`} />
               <div>
@@ -849,20 +832,24 @@ export default function AdminSettings() {
             <div className="text-xs font-medium mb-3">Key Status Summary</div>
             <div className="grid grid-cols-2 gap-3">
               <div className="flex items-center gap-2">
-                <div className={`h-2 w-2 rounded-full ${flwTestConfig.publicKey && flwTestConfig.secretKey ? "bg-emerald-500" : "bg-muted"}`} />
+                <div className={`h-2 w-2 rounded-full ${flwTestConfig.publicKey ? "bg-emerald-500" : "bg-muted"}`} />
                 <span className="text-[11px] text-muted-foreground">Test Keys</span>
                 <span className="text-[10px] text-muted-foreground">
-                  {flwTestConfig.publicKey && flwTestConfig.secretKey ? "Configured" : "Not set"}
+                  {flwTestConfig.publicKey ? "Public key set" : "Not set"}
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <div className={`h-2 w-2 rounded-full ${flwLiveConfig.publicKey && flwLiveConfig.secretKey ? "bg-emerald-500" : "bg-muted"}`} />
+                <div className={`h-2 w-2 rounded-full ${flwLiveConfig.publicKey ? "bg-emerald-500" : "bg-muted"}`} />
                 <span className="text-[11px] text-muted-foreground">Live Keys</span>
                 <span className="text-[10px] text-muted-foreground">
-                  {flwLiveConfig.publicKey && flwLiveConfig.secretKey ? "Configured" : "Not set"}
+                  {flwLiveConfig.publicKey ? "Public key set" : "Not set"}
                 </span>
               </div>
             </div>
+            <p className="text-[10px] text-muted-foreground mt-2">
+              Secrets (FLW_SECRET_KEY / FLW_SECRET_HASH) are shared across modes and come from the environment —
+              see the badges above.
+            </p>
           </div>
         </TabsContent>
 
@@ -913,20 +900,12 @@ export default function AdminSettings() {
 
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Secret Key</Label>
-              <div className="relative">
-                <Input
-                  type={showPskSecret ? "text" : "password"}
-                  placeholder="sk_test_..."
-                  value={pskConfig.secretKey}
-                  onChange={(e) => setPskConfig({ ...pskConfig, secretKey: e.target.value })}
-                  className="text-xs font-mono pr-10"
-                />
-                <button
-                  onClick={() => setShowPskSecret(!showPskSecret)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-secondary rounded"
-                >
-                  {showPskSecret ? <EyeOff className="h-3 w-3 text-muted-foreground" /> : <Eye className="h-3 w-3 text-muted-foreground" />}
-                </button>
+              <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2">
+                <Shield className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span className="text-[11px] text-muted-foreground">
+                  Secrets are never stored in the database — provide{" "}
+                  <code className="bg-muted px-1 rounded">PAYSTACK_SECRET_KEY</code> via the platform Keys/API keys tab when the integration ships.
+                </span>
               </div>
             </div>
 
@@ -959,14 +938,14 @@ export default function AdminSettings() {
           {/* Status indicator */}
           <div className="card-subtle p-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className={`h-2 w-2 rounded-full ${resendConfig.isEnabled && resendConfig.apiKey ? "bg-emerald-500" : "bg-yellow-500"}`} />
+              <div className={`h-2 w-2 rounded-full ${resendConfig.isEnabled && resendEnvStatus?.apiKeyConfigured ? "bg-emerald-500" : "bg-yellow-500"}`} />
               <div>
                 <div className="text-sm font-medium">Resend Email Service</div>
                 <div className="text-xs text-muted-foreground">
-                  {resendConfig.isEnabled && resendConfig.apiKey
+                  {resendConfig.isEnabled && resendEnvStatus?.apiKeyConfigured
                     ? "Active — emails are being sent"
                     : resendConfig.isEnabled
-                      ? "Enabled — API key not yet configured"
+                      ? "Enabled — RESEND_API_KEY not yet configured"
                       : "Disabled"}
                 </div>
               </div>
@@ -992,33 +971,15 @@ export default function AdminSettings() {
 
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Resend API Key</Label>
-              <div className="relative">
-                <Input
-                  type={showResendKey ? "text" : "password"}
-                  placeholder="re_..."
-                  value={resendConfig.apiKey}
-                  onChange={(e) => setResendConfig({ ...resendConfig, apiKey: e.target.value })}
-                  className="text-xs font-mono pr-20"
-                />
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
-                  <button
-                    onClick={() => setShowResendKey(!showResendKey)}
-                    className="p-1 hover:bg-secondary rounded"
-                  >
-                    {showResendKey ? <EyeOff className="h-3 w-3 text-muted-foreground" /> : <Eye className="h-3 w-3 text-muted-foreground" />}
-                  </button>
-                  {resendConfig.apiKey && (
-                    <button
-                      onClick={() => copyToClipboard(resendConfig.apiKey)}
-                      className="p-1 hover:bg-secondary rounded"
-                    >
-                      <Copy className="h-3 w-3 text-muted-foreground" />
-                    </button>
-                  )}
-                </div>
-              </div>
+              <EnvSecretBadge
+                envVar="RESEND_API_KEY"
+                configured={!!resendEnvStatus?.apiKeyConfigured}
+                masked={resendEnvStatus?.maskedKey || undefined}
+              />
               <p className="text-[10px] text-muted-foreground">
-                Get your API key from <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer" className="underline">resend.com/api-keys</a>. Server-side only — never exposed to clients.
+                The API key is never stored in the database. Get one from{" "}
+                <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer" className="underline">resend.com/api-keys</a>{" "}
+                and set <code className="bg-muted px-1 rounded">RESEND_API_KEY</code> in the platform Keys/API keys tab.
               </p>
             </div>
 
@@ -1072,16 +1033,26 @@ export default function AdminSettings() {
                 size="sm"
                 className="text-xs shrink-0"
                 onClick={sendTestEmail}
-                disabled={sendingTest || !resendConfig.apiKey || !testEmail}
+                disabled={sendingTest || !testEmail || (!resendEnvStatus?.apiKeyConfigured && !testApiKey)}
               >
                 {sendingTest ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Mail className="h-3 w-3 mr-1" />}
                 Send Test
               </Button>
             </div>
+            <Input
+              type="password"
+              placeholder="Optional: paste a key just for this test (never saved)"
+              value={testApiKey}
+              onChange={(e) => setTestApiKey(e.target.value)}
+              className="text-xs font-mono"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Uses RESEND_API_KEY from the environment, or a key pasted above for this single send. Test keys are never persisted.
+            </p>
           </div>
 
           {/* Status */}
-          {resendConfig.isEnabled && resendConfig.apiKey && (
+          {resendConfig.isEnabled && resendEnvStatus?.apiKeyConfigured && (
             <div className="card-subtle p-4 flex items-start gap-3 border-emerald-500/20">
               <CheckCircle className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
               <div>
@@ -1093,13 +1064,13 @@ export default function AdminSettings() {
             </div>
           )}
 
-          {!resendConfig.apiKey && resendConfig.isEnabled && (
+          {!resendEnvStatus?.apiKeyConfigured && resendConfig.isEnabled && (
             <div className="card-subtle p-4 flex items-start gap-3 border-yellow-500/20">
               <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5 shrink-0" />
               <div>
                 <div className="text-xs font-medium text-yellow-600 dark:text-yellow-400">API Key Required</div>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Enter your Resend API key above and save to enable email delivery.
+                  Set the RESEND_API_KEY environment variable in the platform Keys/API keys tab to enable email delivery.
                 </p>
               </div>
             </div>
@@ -1294,7 +1265,7 @@ export default function AdminSettings() {
                   <div>
                     secret hash: {testWebhookResult.secretHashConfigured
                       ? "configured ✓"
-                      : "NOT configured — set it in the Flutterwave tab"}
+                      : "NOT configured — set FLW_SECRET_HASH env var"}
                   </div>
                   {testWebhookResult.usedPayment && (
                     <div>processed payment #{testWebhookResult.paymentId}</div>
@@ -1308,7 +1279,7 @@ export default function AdminSettings() {
                 <AlertTriangle className="h-3.5 w-3.5 text-yellow-500 mt-0.5 shrink-0" />
                 <p className="text-[10px] text-muted-foreground">
                   No secret hash is configured, so the webhook accepted the payload without signature validation.
-                  Add your verif-hash in the Flutterwave tab and make sure it matches your Flutterwave dashboard.
+                  Set the FLW_SECRET_HASH environment variable (Keys/API keys tab) and make sure it matches your Flutterwave dashboard.
                 </p>
               </div>
             )}
@@ -1332,7 +1303,7 @@ export default function AdminSettings() {
               </div>
               <div className="flex gap-2">
                 <span className="text-foreground font-medium">4.</span>
-                <span>Copy the Hash value and paste it in the Flutterwave tab above as "Verif Hash"</span>
+                <span>Copy the Hash value and set it as the <code className="bg-muted px-1 rounded">FLW_SECRET_HASH</code> environment variable (Keys/API keys tab)</span>
               </div>
             </div>
           </div>

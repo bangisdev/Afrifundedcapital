@@ -166,7 +166,11 @@ app.get("/admin/flutterwave-config", requireAuth, requireAdmin, (c) => {
     publicKey: configPublicKey || process.env.FLW_PUBLIC_KEY || "",
     // Masked for display — the raw secret never leaves the server.
     secretKey: secretKey ? "••••••" + secretKey.slice(-4) : "",
-    secretHash: secretHash || "",
+    secretHash: secretHash ? "••••••" + secretHash.slice(-4) : "",
+    // Whether the runtime actually has these configured. Env vars are the
+    // source of truth; the legacy DB config counts until scrubbed at boot.
+    secretKeyConfigured: !!secretKey,
+    secretHashConfigured: !!secretHash,
     isEnabled: configIsEnabled || !!process.env.FLW_PUBLIC_KEY,
   });
 });

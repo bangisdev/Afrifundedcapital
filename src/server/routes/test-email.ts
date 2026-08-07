@@ -3,8 +3,29 @@ import { sendEmail, resetResendClient } from "../lib/email";
 import { getDb } from "../db";
 import { settings } from "../schema";
 import { eq } from "drizzle-orm";
+import { requireAuth, requireAdmin } from "../middleware";
 
 const app = new Hono();
+
+// GET /api/test-email/status — env-var credential status for the admin UI.
+// The API key itself is never returned, only whether it is configured.
+app.get("/status", requireAuth, requireAdmin, (c) => {
+  const envKey = process.env.RESEND_API_KEY || "";
+  let fromEmail = process.env.RESEND_EMAIL_FROM || "AfriFundedCapital <onboarding@resend.dev>";
+  try {
+    const db = getDb();
+    const setting = db.select().from(settings).where(eq(settings.key, "resend_config")).get();
+    if (setting?.value) {
+      const config = JSON.parse(setting.value);
+      if (config.fromEmail) fromEmail = config.fromEmail;
+    }
+  } catch { /* non-critical */ }
+  return c.json({
+    apiKeyConfigured: !!envKey,
+    maskedKey: envKey ? "••••••" + envKey.slice(-4) : "",
+    fromEmail,
+  });
+});
 
 // POST /api/test-email/send-test — persist only non-secret config (fromEmail),
 // use any supplied API key transiently for the send, and send a test email.
