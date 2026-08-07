@@ -36,6 +36,7 @@ jobs:
           - { name: trading,    grep: "9\\. Trading metrics",                  workers: 1, timeout: 14 }
           - { name: scheduler,  grep: "10\\. MT5 Background Scheduler",        workers: 2, timeout: 18 }
           - { name: audit,      grep: "11\\. Purchase label & audit trail",    workers: 2, timeout: 18 }
+          - { name: settings,   grep: "12\\. Admin Settings",                  workers: 1, timeout: 14 }
 
     steps:
       - name: Checkout

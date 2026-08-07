@@ -24,7 +24,7 @@
  *                         nav, responsive, mt5, trading, scheduler, audit,
  *                         settings), so CI can run each chunk under its own
  *                         shorter timeout.
- * CI:                     .github/workflows/e2e-matrix.yml runs the 11 presets
+ * CI:                     .github/workflows/e2e-matrix.yml runs the 12 presets
  *                         as a parallel GitHub Actions matrix, one job per
  *                         chunk, each with its own timeout-minutes budget. The
  *                         heavy chunks (mt5, scheduler, audit) are sharded x 2

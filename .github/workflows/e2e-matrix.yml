@@ -45,6 +45,10 @@ jobs:
             timeout: 10
             shard: 1
             shard_total: 1
+          - chunk: settings
+            timeout: 10
+            shard: 1
+            shard_total: 1
           # Medium sections (management CRUD + tables) — 1 shard each
           - chunk: users
             timeout: 12
