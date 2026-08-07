@@ -23,12 +23,16 @@ const E2E_DB = ".e2e/afrifundedcapital.e2e.db";
 
 export default defineConfig({
   testDir: "./e2e",
+  globalSetup: "./e2e/global-setup.ts",
   // Spec files are independent; a file's tests run serially. Workers fan out
   // across files — that's what lets the sharded chunks use --workers=2.
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // Pinned locally: auto-detecting too many workers on a shared container can
+  // exhaust memory and crash browser tabs ("Target crashed"). CI jobs use
+  // --workers=1, heavy chunks --workers=2.
+  workers: process.env.CI ? 1 : 3,
   timeout: 90_000,
   expect: { timeout: 15_000 },
   reporter: [

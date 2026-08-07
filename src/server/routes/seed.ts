@@ -84,19 +84,40 @@ app.post("/admin", async (c) => {
   const hashedPassword = await hashPassword(password);
   const now = Date.now();
 
-  const result = db
-    .insert(users)
-    .values({
-      name,
-      email,
-      emailVerified: true,
-      role: "super_admin",
-      onboardingComplete: true,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning()
-    .get();
+  // Check-then-insert is racy: when several bootstrap requests (e.g. parallel
+  // e2e workers) hit this endpoint at once, two of them can both see "no
+  // super_admin exists" and one insert fails with a unique-constraint error.
+  // Treat that as the same 409 "already exists" outcome instead of a 500.
+  const result = (() => {
+    try {
+      return db
+        .insert(users)
+        .values({
+          name,
+          email,
+          emailVerified: true,
+          role: "super_admin",
+          onboardingComplete: true,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning()
+        .get();
+    } catch {
+      return null;
+    }
+  })();
+
+  if (!result) {
+    const nowAdmin = db.select().from(users).where(eq(users.role, "super_admin")).get();
+    if (nowAdmin) {
+      return c.json({
+        error: "Super admin already exists",
+        hint: `Use email: ${nowAdmin.email}. Pass {"force": true} to recreate.`,
+      }, 409);
+    }
+    return c.json({ error: "Failed to create super admin" }, 500);
+  }
 
   // Store the hashed password in the accounts table via raw SQLite
   try {

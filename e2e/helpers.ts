@@ -175,12 +175,28 @@ export async function createDemoPurchase(
   return { paymentId: payment.id, challengeId, label };
 }
 
-/** Audit-log entries for a given action (newest first). */
+/** Best-effort JSON.parse that never throws (audit `details` is stored as text). */
+function safeParse(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+/**
+ * Audit-log entries for a given action (newest first). The `details` column is
+ * stored as a JSON string in the DB and returned raw by the API — parse it so
+ * specs can read nested fields like `details.challengeLabel` directly.
+ */
 export async function getAuditEntries(
   request: APIRequestContext,
   cookie: string,
   action: string,
 ): Promise<any[]> {
   const data = await adminGet(request, cookie, `/api/users/audit-logs?action=${encodeURIComponent(action)}&pageSize=50`);
-  return data.logs || [];
+  return (data.logs || []).map((log: any) => ({
+    ...log,
+    details: typeof log.details === "string" ? safeParse(log.details) : log.details,
+  }));
 }

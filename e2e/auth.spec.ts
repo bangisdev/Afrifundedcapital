@@ -11,7 +11,8 @@ test.describe("1. Authentication", () => {
 
   test("signed-out users are sent to /auth with a returnTo deep link", async ({ page }) => {
     await page.goto("/dashboard/trading");
-    await expect(page).toHaveURL(/\/auth\?returnTo=\/dashboard\/trading/);
+    // The returnTo query value is percent-encoded by the router.
+    await expect(page).toHaveURL(/\/auth\?returnTo=%2Fdashboard%2Ftrading/);
     await expect(page.getByRole("heading", { name: "Welcome Back" })).toBeVisible();
   });
 

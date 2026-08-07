@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { adminGet, adminPost, createDemoPurchase, ensureSeeded, signInAdminFast } from "./helpers";
+import { adminGet, adminPost, createDemoPurchase, ensureSeeded, injectSessionCookie, signInAdminApi } from "./helpers";
 
 // ═══════════════════════════════════════════════════════════════
 // 10. MT5 Background Scheduler (part 1/2) — the retry queue drains on its
@@ -40,9 +40,13 @@ test.describe("10. MT5 Background Scheduler — automatic queue drain", () => {
     expect(metrics).toBeTruthy();
     expect(metrics.balance).toBeGreaterThan(0);
 
-    // The admin MT5 page reflects the drained queue.
-    await signInAdminFast(page, request);
-    await page.goto("/admin/mt5");
+    // The admin MT5 page reflects the drained queue. Navigate in a single
+    // step (a quick double-goto right after sign-in races and can abort with
+    // net::ERR_ABORTED); domcontentloaded is enough for the SPA to boot.
+    const uiCookie = await signInAdminApi(request);
+    await injectSessionCookie(page, uiCookie);
+    await page.goto("/admin/mt5", { waitUntil: "domcontentloaded" }).catch(() => {});
+    await expect(page).toHaveURL(/\/admin\/mt5/, { timeout: 20_000 });
     await expect(page.getByText(/queued/i).first()).toBeVisible({ timeout: 15_000 });
     await page.getByRole("tab", { name: /Retry Queue/ }).click();
     await expect(page.getByText("Done", { exact: true }).first()).toBeVisible({ timeout: 15_000 });

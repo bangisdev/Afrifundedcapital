@@ -26,9 +26,10 @@ test.describe("11. Purchase label & audit trail — payments table", () => {
     await signInAdminFast(page, request);
     await page.goto("/admin/payments");
 
-    await expect(page.getByText(label, { exact: true })).toBeVisible({ timeout: 15_000 });
+    // Several seeded rows share the label (one per purchase) — assert the first.
+    await expect(page.getByText(label, { exact: true }).first()).toBeVisible({ timeout: 15_000 });
     // The label is stamped on the transaction row (not just the raw reference).
-    const row = page.locator("tr", { hasText: /^DEMO-/ }).first();
+    const row = page.locator("tr").filter({ hasText: label }).first();
     await expect(row).toContainText(label);
   });
 
@@ -55,7 +56,7 @@ test.describe("11. Purchase label & audit trail — payments table", () => {
       paymentId: initiated.paymentId,
     });
     expect(webhook.usedPayment).toBe(true);
-    expect(webhook.webhookStatus).toBe("successful");
+    expect(webhook.webhookStatus).toBe("ok");
 
     // 2) Refund it — payment.refunded audit entry.
     await adminPost(request, cookie, `/api/payments/admin/${initiated.paymentId}/refund`);
