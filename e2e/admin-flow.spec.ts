@@ -5,7 +5,8 @@
  * management → challenges → payments → cross-page navigation → responsive
  * viewports → MT5 manager (accounts, connector, retry queue, reconciliation)
  * → client trading metrics → MT5 background scheduler (retry-queue drain +
- * daily sync pass firing on their own).
+ * daily sync pass firing on their own) → Admin Settings (env-var gateway-secret
+ * badges replace the old stored-key inputs).
  *
  * How it runs:
  *   - `playwright.config.ts` auto-boots `bun run dev` (with `E2E_TESTING=1`,
@@ -20,8 +21,9 @@
  * Single section:         bun test:e2e -- --grep "3. User Management"
  * Per-section presets:    bun run test:e2e:<section> — one preset per numbered
  *                         section (auth, overview, users, challenges, payments,
- *                         nav, responsive, mt5, trading, scheduler, audit), so
- *                         CI can run each chunk under its own shorter timeout.
+ *                         nav, responsive, mt5, trading, scheduler, audit,
+ *                         settings), so CI can run each chunk under its own
+ *                         shorter timeout.
  * CI:                     .github/workflows/e2e-matrix.yml runs the 11 presets
  *                         as a parallel GitHub Actions matrix, one job per
  *                         chunk, each with its own timeout-minutes budget. The
@@ -707,6 +709,69 @@ test.describe("Admin Dashboard E2E Flow", () => {
       await expect(page.locator("body")).toContainText("Two-Step Evaluation · $50,000", {
         timeout: 20_000,
       });
+    });
+  });
+
+  // ─── 12. Admin Settings (env-var gateway secrets) ───
+  //
+  // After the secrets-refactor, gateway credentials live in environment
+  // variables only (RESEND_API_KEY, FLW_SECRET_KEY, FLW_SECRET_HASH) and the
+  // settings page surfaces their runtime status via EnvSecretBadge chips — it
+  // no longer renders password inputs that persist keys to the database. In the
+  // e2e env no such env vars exist, so the badges deterministically render the
+  // amber "Not configured — set …" state (regexes below also tolerate the green
+  // "From env · …" state for runs against a server that has the keys set).
+  test.describe("12. Admin Settings", () => {
+    test.beforeEach(async ({ page }) => {
+      await signInAsAdmin(page);
+    });
+
+    test("Flutterwave tab shows env-var status badges and no secret inputs", async ({ page }) => {
+      await warmUp(page, "/admin/settings");
+      await waitForAppReady(page);
+      await expect(page.getByRole("heading", { name: "Payment Settings" })).toBeVisible({
+        timeout: 20_000,
+      });
+
+      // The Flutterwave tab is the default. Both gateway secrets are surfaced
+      // as status badges (green "From env · …abcd" when the runtime has the
+      // key, amber "Not configured — set FLW_SECRET_KEY" otherwise).
+      const flwSecretBadge = page.locator('[data-slot="badge"]', {
+        hasText: "FLW_SECRET_KEY",
+      });
+      await expect(flwSecretBadge).toBeVisible({ timeout: 20_000 });
+      await expect(flwSecretBadge).toContainText(/From env|Not configured/);
+
+      const flwHashBadge = page.locator('[data-slot="badge"]', {
+        hasText: "FLW_SECRET_HASH",
+      });
+      await expect(flwHashBadge).toBeVisible();
+      await expect(flwHashBadge).toContainText(/From env|Not configured/);
+
+      // The old "Secret Key" / "Verif Hash" password inputs are gone: the only
+      // input in the Flutterwave panel is the (client-side, safe) public key.
+      const flwPanel = page.locator('[data-slot="tabs-content"]');
+      await expect(flwPanel.getByRole("textbox")).toHaveCount(1);
+      await expect(flwPanel.locator('input[type="password"]')).toHaveCount(0);
+    });
+
+    test("Resend tab shows the RESEND_API_KEY badge and keeps only the transient test-key input", async ({ page }) => {
+      await warmUp(page, "/admin/settings");
+      await waitForAppReady(page);
+      await page.getByRole("tab", { name: /Resend/ }).click();
+
+      const resendBadge = page.locator('[data-slot="badge"]', {
+        hasText: "RESEND_API_KEY",
+      });
+      await expect(resendBadge).toBeVisible({ timeout: 20_000 });
+      await expect(resendBadge).toContainText(/From env|Not configured/);
+
+      // The stored API-key input was replaced by the badge — the only password
+      // field left on the page is the transient "never saved" test-key input.
+      const resendPanel = page.locator('[data-slot="tabs-content"]');
+      const secretInputs = resendPanel.locator('input[type="password"]');
+      await expect(secretInputs).toHaveCount(1);
+      await expect(secretInputs).toHaveAttribute("placeholder", /never saved/);
     });
   });
 });

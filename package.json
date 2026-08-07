@@ -26,7 +26,8 @@
     "test:e2e:mt5": "playwright test --grep \"8\\. MT5 Manager\"",
     "test:e2e:trading": "playwright test --grep \"9\\. Trading metrics\"",
     "test:e2e:scheduler": "playwright test --grep \"10\\. MT5 Background Scheduler\"",
-    "test:e2e:audit": "playwright test --grep \"11\\. Purchase label & audit trail\""
+    "test:e2e:audit": "playwright test --grep \"11\\. Purchase label & audit trail\"",
+    "test:e2e:settings": "playwright test --grep \"12\\. Admin Settings\""
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
