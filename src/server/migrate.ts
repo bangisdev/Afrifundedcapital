@@ -813,4 +813,55 @@ export function runMigrations(sqlite: Database.Database) {
   `);
 
   console.log("[DB] All tables created/verified successfully.");
+
+  scrubStoredSecrets(sqlite);
+}
+
+// Field names that must never be persisted in the settings table: API keys,
+// payment gateway secrets, webhook hashes, passwords, tokens.
+const SECRET_SETTING_FIELD = /secret|password|token|hash|api[_ -]?key|private/i;
+
+/**
+ * Security scrub: remove secret material from the settings table at boot.
+ *
+ * API keys and gateway secrets must live in environment variables, never in
+ * the database (the DB files previously ended up in git history, which is how
+ * the Resend key was exposed). This deletes any legacy secret fields from
+ * existing rows so the DB can never serve or re-leak them.
+ */
+export function scrubStoredSecrets(sqlite: Database.Database): void {
+  try {
+    const rows = sqlite
+      .prepare("SELECT id, key, value FROM settings")
+      .all() as Array<{ id: number; key: string; value: string }>;
+    let scrubbed = 0;
+    for (const row of rows) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(row.value);
+      } catch {
+        continue; // non-JSON scalar setting — nothing to scrub
+      }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+
+      const cfg = parsed as Record<string, unknown>;
+      let changed = false;
+      for (const field of Object.keys(cfg)) {
+        if (SECRET_SETTING_FIELD.test(field) && typeof cfg[field] === "string" && cfg[field] !== "") {
+          delete cfg[field];
+          changed = true;
+        }
+      }
+      if (changed) {
+        sqlite.prepare("UPDATE settings SET value = ? WHERE id = ?").run(JSON.stringify(cfg), row.id);
+        scrubbed++;
+        console.log(`[DB] Scrubbed secret field(s) from settings key '${row.key}'`);
+      }
+    }
+    if (scrubbed > 0) {
+      console.log(`[DB] Secret scrub complete — ${scrubbed} setting(s) sanitized`);
+    }
+  } catch (e) {
+    console.warn("[DB] Secret scrub skipped:", e);
+  }
 }

@@ -6,31 +6,44 @@ import { eq } from "drizzle-orm";
 
 const app = new Hono();
 
-// POST /api/test-email/send-test — save API key and send test email
+// POST /api/test-email/send-test — persist only non-secret config (fromEmail),
+// use any supplied API key transiently for the send, and send a test email.
+// API keys are never stored in the database — they must come from the
+// RESEND_API_KEY environment variable.
 app.post("/send-test", async (c) => {
   const body = await c.req.json();
   const { to, apiKey, fromEmail } = body;
 
-  // Save API key if provided
-  if (apiKey) {
+  // Persist only the sender address + enabled flag — never the API key.
+  if (fromEmail || apiKey) {
     try {
       const db = getDb();
-      const config = {
-        apiKey,
-        fromEmail: fromEmail || "AfriFundedCapital <onboarding@resend.dev>",
+      const existing = db.select().from(settings).where(eq(settings.key, "resend_config")).get();
+      let config: Record<string, unknown> = {
+        fromEmail: "AfriFundedCapital <onboarding@resend.dev>",
         enabled: true,
       };
-      const existing = db.select().from(settings).where(eq(settings.key, "resend_config")).get();
       if (existing) {
-        db.update(settings).set({ value: JSON.stringify(config) }).where(eq(settings.key, "resend_config")).run();
+        try {
+          config = { ...(JSON.parse(existing.value) as Record<string, unknown>) };
+        } catch { /* non-critical */ }
+      }
+      if (fromEmail) config.fromEmail = fromEmail;
+      config.enabled = true;
+      // Never persist apiKey/secret material even if the client sent it.
+      delete config.apiKey;
+
+      const value = JSON.stringify(config);
+      if (existing) {
+        db.update(settings).set({ value }).where(eq(settings.key, "resend_config")).run();
       } else {
-        db.insert(settings).values({ key: "resend_config", value: JSON.stringify(config), group: "email", description: "Resend email configuration" }).run();
+        db.insert(settings).values({ key: "resend_config", value, group: "email", description: "Resend email configuration" }).run();
       }
       resetResendClient();
-      console.log("[TestEmail] Resend config saved to database");
+      console.log("[TestEmail] Resend sender config saved (API key intentionally not stored)");
     } catch (err) {
       console.error("[TestEmail] Failed to save Resend config:", err);
-      return c.json({ error: "Failed to save API key" }, 500);
+      return c.json({ error: "Failed to save email configuration" }, 500);
     }
   }
 
@@ -80,12 +93,17 @@ app.post("/send-test", async (c) => {
 </html>
     `,
     text: "Test Email — AfriFundedCapital - Email service is operational",
-  });
+  }, apiKey ? { apiKey } : undefined);
 
   if (result) {
-    return c.json({ success: true, message: "Test email sent successfully" });
+    return c.json({
+      success: true,
+      message: apiKey
+        ? "Test email sent using the provided key (not stored). Set RESEND_API_KEY in the environment for production sending."
+        : "Test email sent successfully",
+    });
   } else {
-    return c.json({ error: "Failed to send email. Check your Resend API key configuration." }, 500);
+    return c.json({ error: "Failed to send email. Check your Resend API key configuration (set RESEND_API_KEY)." }, 500);
   }
 });
 

@@ -29,6 +29,12 @@ let userId: number;
 const TEST_USER = { name: "Checkout Trader", email: "checkout@test.com", password: "Secure@123" };
 
 beforeAll(async () => {
+  // Security model: gateway secrets come from the environment ONLY — never
+  // from the DB. Set them here so the sandbox webhook's verif-hash check
+  // behaves like production.
+  process.env.FLW_SECRET_HASH = "test123";
+  process.env.FLW_SECRET_KEY = "FLWSECK_TEST-demo";
+
   app = await buildTestApp();
 
   // Sign up the buyer
@@ -45,6 +51,8 @@ beforeAll(async () => {
 });
 
 afterAll(() => {
+  delete process.env.FLW_SECRET_HASH;
+  delete process.env.FLW_SECRET_KEY;
   cleanupTestDb();
 });
 
@@ -100,15 +108,14 @@ async function seedCatalog(couponCode = "SAVE10K") {
     createdAt: now,
   }).returning().get();
 
-  // Configure Flutterwave test-mode keys + secret hash (as done via admin UI)
+  // Configure Flutterwave test-mode keys + secret hash (as done via admin UI).
+  // Secret fields are intentionally NOT persisted — they come from env vars.
   const existingSetting = db.select().from(settings).where(eq(settings.key, "flutterwave_config")).get();
   if (!existingSetting) {
     db.insert(settings).values({
       key: "flutterwave_config",
       value: JSON.stringify({
         publicKey: "FLWPUBK_TEST-demo",
-        secretKey: "FLWSECK_TEST-demo",
-        secretHash: "test123",
         isEnabled: true,
       }),
       group: "payments",

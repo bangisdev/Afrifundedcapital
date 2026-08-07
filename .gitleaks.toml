@@ -1,0 +1,71 @@
+# gitleaks configuration for AfriFundedCapital
+# Blocks commits containing secrets before they reach GitHub.
+# Extends gitleaks' built-in rule set with the patterns this project uses.
+
+title = "AfriFundedCapital gitleaks config"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "resend-api-key"
+description = "Resend API key (re_...) — the key that was previously exposed"
+regex = '''re_[a-zA-Z0-9]{20,}'''
+secretGroup = 0
+entropy = 3.0
+
+[[rules]]
+id = "flutterwave-secret-key"
+description = "Flutterwave secret key (FLWSECK...)"
+regex = '''FLWSECK[-_][a-zA-Z0-9]{10,}'''
+secretGroup = 0
+
+[[rules]]
+id = "flutterwave-public-key"
+description = "Flutterwave public key (FLWPUBK...)"
+regex = '''FLWPUBK[-_][a-zA-Z0-9]{10,}'''
+secretGroup = 0
+
+[[rules]]
+id = "stripe-live-secret"
+description = "Stripe live secret key"
+regex = '''sk_live_[a-zA-Z0-9]{16,}'''
+secretGroup = 0
+
+[[rules]]
+id = "stripe-live-public"
+description = "Stripe live public key"
+regex = '''pk_live_[a-zA-Z0-9]{16,}'''
+secretGroup = 0
+
+[[rules]]
+id = "paystack-secret"
+description = "Paystack secret key (sk_...) used for server-side calls"
+regex = '''(?i)sk_(test|live)_[a-zA-Z0-9]{20,}'''
+secretGroup = 0
+
+[[rules]]
+id = "generic-api-key"
+description = "Generic API key / secret key assignment"
+regex = '''(?i)(api[_-]?key|secret[_-]?key)\s*[=:]\s*["']?[a-zA-Z0-9+/=_\-]{16,}'''
+secretGroup = 0
+entropy = 3.0
+
+[[rules]]
+id = "private-key-block"
+description = "Private key block"
+regex = '''-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----'''
+secretGroup = 0
+
+[allowlist]
+description = "Files that are allowed to contain matching patterns"
+paths = [
+  '''node_modules/''',
+  '''\.e2e/''',
+  '''bun\.lock''',
+  '''package-lock\.json''',
+  '''yarn\.lock''',
+  '''pnpm-lock\.yaml''',
+  '''test-results/''',
+  '''playwright-report/''',
+]

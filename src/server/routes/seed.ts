@@ -16,6 +16,10 @@ async function hashPassword(password: string): Promise<string> {
   return `${salt}:${derivedKey.toString("hex")}`;
 }
 
+// Field names that must never be persisted in the settings table: API keys,
+// payment gateway secrets, webhook hashes, passwords, tokens.
+const SECRET_SETTING_FIELD = /secret|password|token|hash|api[_ -]?key|private/i;
+
 const app = new Hono();
 
 // ─── Bootstrap super admin (public, one-time) ─────────────
@@ -149,10 +153,22 @@ app.post("/admin", async (c) => {
 // List settings
 // Each entry is enriched with who last changed it (from the audit trail) so the
 // Admin → Settings page can show "Last changed by X · time ago" per config.
+//
+// SECURITY: this endpoint is available to any authenticated user, so secret
+// material (API keys, gateway secrets, webhook hashes) is masked before it
+// leaves the server — never return stored credentials in plaintext.
 app.get("/settings", requireAuth, (c) => {
   const db = getDb();
   const items = db.select().from(settings).all();
-  const parsed = items.map((s) => ({ ...s, value: JSON.parse(s.value) }));
+  const parsed = items.map((s) => {
+    let value: unknown;
+    try {
+      value = JSON.parse(s.value);
+    } catch {
+      value = s.value;
+    }
+    return { ...s, value: redactSetting(s.key, value) };
+  });
   return c.json(attachSettingsLastChanged(db, parsed));
 });
 
@@ -160,11 +176,27 @@ app.get("/settings", requireAuth, (c) => {
 // NOTE: this is the endpoint the Admin → Settings page actually uses to save
 // payment gateway keys (Flutterwave/Resend/Paystack) and payout thresholds,
 // so every change is audited — with secret values redacted from the trail.
+//
+// SECURITY: secret fields (apiKey, secretKey, secretHash, passwords, tokens)
+// are stripped before persisting — API keys must live in environment
+// variables, never in the database.
 app.put("/settings/:key", requireAuth, requireAdmin, async (c) => {
   const key = c.req.param("key");
   const body = await c.req.json();
   const db = getDb();
   const existing = db.select().from(settings).where(eq(settings.key, key)).get();
+
+  // Drop secret material from the value being saved (defense in depth — the
+  // client may send apiKey/secretKey/secretHash from the settings form).
+  let valueToStore: unknown = body.value;
+  if (valueToStore && typeof valueToStore === "object" && !Array.isArray(valueToStore)) {
+    const sanitized: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(valueToStore as Record<string, unknown>)) {
+      if (SECRET_SETTING_FIELD.test(k)) continue;
+      sanitized[k] = v;
+    }
+    valueToStore = sanitized;
+  }
 
   let oldValue: unknown = null;
   if (existing) {
@@ -173,9 +205,9 @@ app.put("/settings/:key", requireAuth, requireAdmin, async (c) => {
     } catch {
       oldValue = existing.value;
     }
-    db.update(settings).set({ value: JSON.stringify(body.value) }).where(eq(settings.key, key)).run();
+    db.update(settings).set({ value: JSON.stringify(valueToStore) }).where(eq(settings.key, key)).run();
   } else {
-    db.insert(settings).values({ key, value: JSON.stringify(body.value), group: body.group || "general" }).run();
+    db.insert(settings).values({ key, value: JSON.stringify(valueToStore), group: body.group || "general" }).run();
   }
 
   // Audit config edits — the most sensitive admin actions on the platform.
@@ -211,7 +243,10 @@ app.put("/settings/:key", requireAuth, requireAdmin, async (c) => {
     console.warn("[Notification] Failed to alert admins of settings change:", e);
   }
 
-  return c.json({ success: true });
+  return c.json({
+    success: true,
+    message: "Setting saved. Secret values (API keys, gateway secrets) are not stored — use environment variables.",
+  });
 });
 
 // Seed initial data

@@ -24,6 +24,12 @@ const TEST_USER = { name: "Pay User", email: "pay@test.com", password: "Secure@1
 const TEST_ADMIN = { name: "Pay Admin", email: "pay-admin@test.com", password: "Admin@123" };
 
 beforeAll(async () => {
+  // Security model: gateway secrets come from the environment ONLY — never
+  // from the DB. Tests set them here so webhook signature checks and gateway
+  // calls behave like production.
+  process.env.FLW_SECRET_KEY = "FLWSECK_TEST-def456";
+  process.env.FLW_SECRET_HASH = "test123";
+
   app = await buildTestApp();
 
   // Create test user
@@ -49,6 +55,8 @@ beforeAll(async () => {
 });
 
 afterAll(() => {
+  delete process.env.FLW_SECRET_KEY;
+  delete process.env.FLW_SECRET_HASH;
   cleanupTestDb();
 });
 
@@ -93,19 +101,31 @@ describe("POST /api/payments/admin/flutterwave-config", () => {
     expect(status).toBe(200);
     expect((body as Record<string, unknown>).success).toBe(true);
 
-    // Saving payment gateway keys is the most sensitive admin action — it must
-    // be audited, with secretKey/secretHash redacted from the trail.
+    // SECURITY: secret keys are never persisted — the DB row keeps only the
+    // non-secret config (publicKey, isEnabled).
     const db = getTestDb();
+    const { settings } = await import("../schema");
+    const { eq } = await import("drizzle-orm");
+    const row = db.select().from(settings).where(eq(settings.key, "flutterwave_config")).get();
+    expect(row).toBeTruthy();
+    const stored = JSON.parse(row!.value) as Record<string, unknown>;
+    expect(stored.publicKey).toBe("FLWPUBK_TEST-abc123");
+    expect(stored.isEnabled).toBe(true);
+    // secretKey / secretHash must never land in the database
+    expect(stored.secretKey).toBeUndefined();
+    expect(stored.secretHash).toBeUndefined();
+    expect(JSON.stringify(stored)).not.toContain("FLWSECK_TEST-def456");
+
+    // The save is still audited (most sensitive admin action), with the
+    // non-secret public key visible for review and the secret absent.
     const audit = db.select().from(auditLogs)
       .where(eq(auditLogs.entity, "setting"))
       .orderBy(desc(auditLogs.timestamp))
       .get();
     expect(audit).toBeTruthy();
     expect(audit?.entityId).toBe("flutterwave_config");
-    // The secret key must never land in the audit trail in plaintext
+    // The secret key must never appear in the audit trail in plaintext
     expect(audit?.details).not.toContain("FLWSECK_TEST-def456");
-    // Masked form + non-secret fields remain visible for review
-    expect(audit?.details).toContain("••••");
     expect(audit?.details).toContain("FLWPUBK_TEST-abc123");
   });
 
@@ -131,11 +151,9 @@ describe("POST /api/payments/admin/flutterwave-config", () => {
       .where(eq(users.id, other.id))
       .run();
 
-    // Preserve secretHash — later tests in this suite rely on it being set
+    // Non-secret fields (publicKey, isEnabled) are persisted; secrets are not.
     await authPost(app, "/api/payments/admin/flutterwave-config", adminCookie, {
       publicKey: "FLWPUBK_TEST-alert",
-      secretKey: "FLWSECK_TEST-alert-3333",
-      secretHash: "test123",
       isEnabled: true,
     });
 

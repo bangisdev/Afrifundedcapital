@@ -14,41 +14,25 @@ import { eq } from "drizzle-orm";
 const FROM_EMAIL_FALLBACK = "AfriFundedCapital <onboarding@resend.dev>";
 const APP_URL = process.env.APP_URL || "https://beige-crews-rescue.freebuff.dev";
 
-// Lazy-init Resend client — reads from DB settings first, falls back to env
+// Lazy-init Resend client — reads the API key from the environment ONLY.
+// API keys are never stored in the database (see migrate.ts scrubStoredSecrets).
 let _resend: Resend | null = null;
 let _resendKey: string = "";
 
 function getResendClient(): Resend | null {
-  // Try DB settings first
-  try {
-    const db = getDb();
-    const setting = db.select().from(settings).where(eq(settings.key, "resend_config")).get();
-    if (setting?.value) {
-      const config = JSON.parse(setting.value);
-      if (config.apiKey && config.apiKey !== _resendKey) {
-        _resendKey = config.apiKey;
-        _resend = new Resend(_resendKey);
-        console.log("[Email] Resend client initialized from DB settings");
-      }
-      if (config.fromEmail) {
-        // Update from email if configured
-        return _resend;
-      }
-    }
-  } catch { /* non-critical */ }
-
-  // Fall back to environment variable
   const envKey = process.env.RESEND_API_KEY || "";
-  if (envKey && envKey !== _resendKey) {
+  if (!envKey) return null;
+  if (envKey !== _resendKey) {
     _resendKey = envKey;
-    _resend = new Resend(_resendKey);
+    _resend = new Resend(envKey);
     console.log("[Email] Resend client initialized from env");
   }
-
   return _resend;
 }
 
 function getFromEmail(): string {
+  // The sender address is non-secret config and may live in the DB settings;
+  // the API key itself never does.
   try {
     const db = getDb();
     const setting = db.select().from(settings).where(eq(settings.key, "resend_config")).get();
@@ -77,9 +61,15 @@ export interface SendEmailParams {
 /**
  * Send a transactional email via Resend.
  * Silently logs and returns false if not configured or on failure.
+ *
+ * `overrides.apiKey` allows a one-off key (e.g. from the test-email form) to
+ * be used for a single send without ever persisting it.
  */
-export async function sendEmail(params: SendEmailParams): Promise<boolean> {
-  const resendClient = getResendClient();
+export async function sendEmail(
+  params: SendEmailParams,
+  overrides?: { apiKey?: string },
+): Promise<boolean> {
+  const resendClient = overrides?.apiKey ? new Resend(overrides.apiKey) : getResendClient();
   if (!resendClient) {
     console.warn("[Email] RESEND_API_KEY not configured — skipping email send to", params.to);
     return false;
