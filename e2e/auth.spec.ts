@@ -13,7 +13,9 @@ test.describe("1. Authentication", () => {
     await page.goto("/dashboard/trading");
     // The returnTo query value is percent-encoded by the router.
     await expect(page).toHaveURL(/\/auth\?returnTo=%2Fdashboard%2Ftrading/);
-    await expect(page.getByRole("heading", { name: "Welcome Back" })).toBeVisible();
+    // The auth form is rendered with its welcome text and sign-in controls.
+    await expect(page.getByText("Welcome Back", { exact: false })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sign In" })).toBeVisible();
   });
 
   test("sign-up creates an account and lands on the dashboard", async ({ page }) => {

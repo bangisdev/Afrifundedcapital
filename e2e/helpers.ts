@@ -108,12 +108,28 @@ export async function injectSessionCookie(page: Page, cookie: string): Promise<v
   ]);
 }
 
-/** Sign in via API and land the page on an authenticated route. */
-export async function signInAdminFast(page: Page, request: APIRequestContext): Promise<void> {
+/**
+ * Sign in via API and land the page directly on an authenticated route.
+ *
+ * A single navigation straight to `path` avoids the double-goto race where a
+ * quick `goto("/admin")` followed by an immediate second `goto(target)` can
+ * abort the second navigation with net::ERR_ABORTED while the first is still
+ * settling. `domcontentloaded` is enough for the SPA shell to boot; callers
+ * assert on real content afterwards.
+ */
+export async function signInAdminFast(
+  page: Page,
+  request: APIRequestContext,
+  path = "/admin",
+): Promise<void> {
   const cookie = await signInAdminApi(request);
   await injectSessionCookie(page, cookie);
-  await page.goto("/admin");
-  await expect(page).toHaveURL(/\/admin/, { timeout: 20_000 });
+  await page.goto(path, { waitUntil: "domcontentloaded" }).catch(() => {});
+  // Accept the exact path or the router's default redirect (e.g. /admin →
+  // /admin/overview); toHaveURL matches against the full URL so a plain
+  // substring regex (no ^ anchor) is what we want.
+  const escaped = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  await expect(page).toHaveURL(new RegExp(escaped), { timeout: 20_000 });
 }
 
 /** Fetch challenge templates, returning [{ id, name, type }...]. */

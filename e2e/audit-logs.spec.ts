@@ -55,8 +55,7 @@ test.describe("11. Purchase label & audit trail — audit log chips & lifecycle"
     await adminPut(request, cookie, `/api/challenges/admin/${challengeId}/status`, { status: "violated" });
     await adminPut(request, cookie, `/api/challenges/admin/${challengeId}/status`, { status: "expired" });
 
-    await signInAdminFast(page, request);
-    await page.goto("/admin/audit-logs");
+    await signInAdminFast(page, request, "/admin/audit-logs");
 
     // All quick-filter chips render. `exact: true` is required — the "Funded"
     // chip is a substring of "Refunded", which Playwright would otherwise treat

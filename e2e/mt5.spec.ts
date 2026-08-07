@@ -10,8 +10,7 @@ test.describe("8. MT5 Manager — manager page & gateway status", () => {
   });
 
   test("the MT5 manager page renders gateway, queue and account sections", async ({ page, request }) => {
-    await signInAdminFast(page, request);
-    await page.goto("/admin/mt5");
+    await signInAdminFast(page, request, "/admin/mt5");
 
     await expect(page.getByRole("heading", { name: "MT5 Manager" })).toBeVisible();
     await expect(

@@ -16,8 +16,7 @@ test.describe("5. Payments", () => {
       sizeLabel: "$25,000",
     });
 
-    await signInAdminFast(page, request);
-    await page.goto("/admin/payments");
+    await signInAdminFast(page, request, "/admin/payments");
 
     // The purchase label (challenge name · account size) is stamped on the row.
     await expect(page.getByText(label, { exact: true })).toBeVisible({ timeout: 15_000 });

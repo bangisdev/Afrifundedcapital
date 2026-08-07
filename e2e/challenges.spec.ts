@@ -37,8 +37,7 @@ test.describe("4. Challenges", () => {
     const mine = body.challenges || body || [];
     expect(mine.some((c: any) => c.id === challengeId)).toBeTruthy();
 
-    await signInAdminFast(page, request);
-    await page.goto("/dashboard/challenges");
+    await signInAdminFast(page, request, "/dashboard/challenges");
     await expect(page.getByText("Two-Step Evaluation").first()).toBeVisible({ timeout: 15_000 });
   });
 });

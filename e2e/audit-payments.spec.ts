@@ -23,8 +23,7 @@ test.describe("11. Purchase label & audit trail — payments table", () => {
       sizeLabel: "$25,000",
     });
 
-    await signInAdminFast(page, request);
-    await page.goto("/admin/payments");
+    await signInAdminFast(page, request, "/admin/payments");
 
     // Several seeded rows share the label (one per purchase) — assert the first.
     await expect(page.getByText(label, { exact: true }).first()).toBeVisible({ timeout: 15_000 });

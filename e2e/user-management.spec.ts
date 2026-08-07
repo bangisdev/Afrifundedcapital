@@ -10,16 +10,14 @@ test.describe("3. User Management", () => {
   });
 
   test("lists the seeded demo users", async ({ page, request }) => {
-    await signInAdminFast(page, request);
-    await page.goto("/admin/users");
+    await signInAdminFast(page, request, "/admin/users");
 
     await expect(page.getByText("Adebayo Okonkwo")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText("adebayo@test.com")).toBeVisible();
   });
 
   test("search narrows the user table", async ({ page, request }) => {
-    await signInAdminFast(page, request);
-    await page.goto("/admin/users");
+    await signInAdminFast(page, request, "/admin/users");
 
     const search = page.getByPlaceholder("Search by name, email, phone, or referral code...");
     await expect(search).toBeVisible();
@@ -30,8 +28,7 @@ test.describe("3. User Management", () => {
   });
 
   test("KYC status badges render for seeded users", async ({ page, request }) => {
-    await signInAdminFast(page, request);
-    await page.goto("/admin/users");
+    await signInAdminFast(page, request, "/admin/users");
 
     await expect(page.getByText("Adebayo Okonkwo")).toBeVisible({ timeout: 15_000 });
     // Approved seed users carry an approved KYC badge somewhere in the row.

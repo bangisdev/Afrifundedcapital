@@ -6,13 +6,20 @@ import { ensureSeeded, signInAdminFast } from "./helpers";
 // ═══════════════════════════════════════════════════════════════
 
 async function assertNoHorizontalOverflow(page: import("@playwright/test").Page) {
-  const overflows = await page.evaluate(() => {
-    const doc = document.documentElement;
-    return doc.scrollWidth - window.innerWidth;
-  });
-  // Allow a tiny tolerance for sub-pixel rounding; anything bigger means a
-  // fixed-width element is forcing a horizontal scrollbar on mobile.
-  expect(overflows).toBeLessThanOrEqual(1);
+  // Poll instead of a single evaluate: the SPA can still be navigating when
+  // the check runs (which destroys the execution context and throws), and
+  // expect.poll retries until the layout settles.
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const doc = document.documentElement;
+        return doc.scrollWidth - window.innerWidth;
+      }),
+      { timeout: 15_000 },
+    )
+    // Allow a tiny tolerance for sub-pixel rounding; anything bigger means a
+    // fixed-width element is forcing a horizontal scrollbar on mobile.
+    .toBeLessThanOrEqual(1);
 }
 
 test.describe("7. Responsive viewports", () => {

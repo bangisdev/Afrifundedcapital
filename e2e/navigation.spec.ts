@@ -7,7 +7,7 @@ import { ensureSeeded, signInAdminFast } from "./helpers";
 
 const ADMIN_SECTIONS: Array<[string, string | null]> = [
   ["/admin", "Admin Overview"],
-  ["/admin/users", "Search by name, email, phone, or referral code..."],
+  ["/admin/users", "User Management"],
   ["/admin/payments", null],
   ["/admin/payouts", null],
   ["/admin/kyc", null],

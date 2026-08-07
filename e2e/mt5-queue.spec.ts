@@ -20,8 +20,7 @@ test.describe("8. MT5 Manager — retry queue & account provisioning", () => {
     expect(account.login).toMatch(/^AFC/);
     expect(account.balance).toBeGreaterThan(0);
 
-    await signInAdminFast(page, request);
-    await page.goto("/admin/mt5");
+    await signInAdminFast(page, request, "/admin/mt5");
     await expect(page.getByText(account.login)).toBeVisible({ timeout: 15_000 });
   });
 

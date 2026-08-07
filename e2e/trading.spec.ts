@@ -46,8 +46,7 @@ test.describe("9. Trading metrics", () => {
       data: { challengeId },
     });
 
-    await signInAdminFast(page, request);
-    await page.goto("/dashboard/trading");
+    await signInAdminFast(page, request, "/dashboard/trading");
 
     await expect(page.getByText("Total Balance").first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText("Total Equity").first()).toBeVisible();
