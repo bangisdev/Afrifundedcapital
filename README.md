@@ -1,4 +1,4 @@
-[![E2E Matrix](https://github.com/afrifundedcapital/AfriFundedCapital/actions/workflows/e2e-matrix.yml/badge.svg)](https://github.com/afrifundedcapital/AfriFundedCapital/actions/workflows/e2e-matrix.yml) [![E2E Tests](https://github.com/afrifundedcapital/AfriFundedCapital/actions/workflows/e2e.yml/badge.svg)](https://github.com/afrifundedcapital/AfriFundedCapital/actions/workflows/e2e.yml)
+[![E2E Matrix](https://github.com/bangisdev/Afrifundedcapital/actions/workflows/e2e-matrix.yml/badge.svg)](https://github.com/bangisdev/Afrifundedcapital/actions/workflows/e2e-matrix.yml) [![E2E Tests](https://github.com/bangisdev/Afrifundedcapital/actions/workflows/e2e.yml/badge.svg)](https://github.com/bangisdev/Afrifundedcapital/actions/workflows/e2e.yml)
 
 ## Overview
 
