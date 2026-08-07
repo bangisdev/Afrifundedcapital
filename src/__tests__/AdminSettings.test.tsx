@@ -285,12 +285,17 @@ describe("AdminSettings Page", () => {
 
   // ─── Flutterwave config ────────────────────────────────
   describe("Flutterwave Config", () => {
-    it("renders API key inputs", () => {
+    it("renders env-var status badges instead of secret inputs", () => {
       setQueryData({});
       render(<AdminSettings />);
       expect(screen.getByText("Public Key")).toBeTruthy();
       expect(screen.getByText("Secret Key")).toBeTruthy();
-      expect(screen.getByText("Verif Hash (Secret Hash)")).toBeTruthy();
+      expect(screen.getByText("Verif Hash (Webhook Signature)")).toBeTruthy();
+      // Secrets are env-managed — status badges surface the runtime state and
+      // no FLWSECK input is rendered.
+      expect(screen.getByText(/Not configured.*FLW_SECRET_KEY/)).toBeTruthy();
+      expect(screen.getByText(/Not configured.*FLW_SECRET_HASH/)).toBeTruthy();
+      expect(screen.queryByPlaceholderText(/FLWSECK/)).toBeNull();
     });
 
     it("renders Save button disabled when keys are empty", () => {
@@ -300,30 +305,30 @@ describe("AdminSettings Page", () => {
       expect(saveBtn).toBeDisabled();
     });
 
-    it("enables Save button when both keys are filled", async () => {
+    it("enables Save button once the public key is filled", async () => {
       const user = userEvent.setup();
       setQueryData({});
       render(<AdminSettings />);
       const publicKeyInput = screen.getByPlaceholderText(/FLWPUBK_TEST/);
-      const secretKeyInput = screen.getByPlaceholderText(/FLWSECK_TEST/);
       await user.type(publicKeyInput, "FLWPUBK_TEST-abc123");
-      await user.type(secretKeyInput, "FLWSECK_TEST-xyz789");
       const saveBtn = screen.getByText("Save Test Config").closest("button");
       expect(saveBtn).not.toBeDisabled();
     });
 
-    it("saves Flutterwave config on Save click", async () => {
+    it("saves Flutterwave config on Save click without persisting secrets", async () => {
       const user = userEvent.setup();
       setQueryData({});
       render(<AdminSettings />);
-      const publicKeyInput = screen.getByPlaceholderText(/FLWPUBK_TEST/);
-      const secretKeyInput = screen.getByPlaceholderText(/FLWSECK_TEST/);
-      await user.type(publicKeyInput, "FLWPUBK_TEST-abc123");
-      await user.type(secretKeyInput, "FLWSECK_TEST-xyz789");
+      await user.type(screen.getByPlaceholderText(/FLWPUBK_TEST/), "FLWPUBK_TEST-abc123");
       await user.click(screen.getByText("Save Test Config").closest("button")!);
       await waitFor(() => {
         expect(toast.success).toHaveBeenCalledWith(expect.stringContaining("Flutterwave"));
       });
+      // The persisted config carries the public key but never a secret key.
+      const saveCall = mockFetch.mock.calls.find((c: any) => String(c[0]).includes("flutterwave_test_config"));
+      const body = JSON.parse(saveCall![1].body);
+      expect(body.value.publicKey).toBe("FLWPUBK_TEST-abc123");
+      expect(body.value.secretKey).toBeUndefined();
     });
 
     it("shows test mode indicator stripe", () => {
@@ -349,15 +354,17 @@ describe("AdminSettings Page", () => {
       expect(screen.getByText(/Switch to live mode above when/)).toBeTruthy();
     });
 
-    it("loads existing test config from settings", () => {
+    it("loads existing test config from settings (secrets are not persisted)", () => {
       setQueryData({
         "admin/settings": [
-          { key: "flutterwave_test_config", value: { publicKey: "FLWPUBK_TEST-existing", secretKey: "FLWSECK_TEST-existing", isEnabled: true } },
+          { key: "flutterwave_test_config", value: { publicKey: "FLWPUBK_TEST-existing", webhookUrl: "", isEnabled: true } },
         ],
       });
       render(<AdminSettings />);
       expect(screen.getByDisplayValue("FLWPUBK_TEST-existing")).toBeTruthy();
-      expect(screen.getByDisplayValue("FLWSECK_TEST-existing")).toBeTruthy();
+      // Secrets are stripped at write time — no secret input/value renders.
+      expect(screen.queryByDisplayValue("FLWSECK_TEST-existing")).toBeNull();
+      expect(screen.queryByPlaceholderText(/FLWSECK/)).toBeNull();
     });
   });
 
@@ -373,7 +380,7 @@ describe("AdminSettings Page", () => {
       expect(screen.getByText("Editing LIVE (Production) keys")).toBeTruthy();
     });
 
-    it("shows live placeholder when in live mode", async () => {
+    it("shows live public-key placeholder and env badges when in live mode", async () => {
       const user = userEvent.setup();
       setQueryData({});
       render(<AdminSettings />);
@@ -381,7 +388,9 @@ describe("AdminSettings Page", () => {
       await user.click(switches[0]);
       await user.click(screen.getByText("Yes, Switch to Live"));
       expect(screen.getByPlaceholderText(/FLWPUBK_live/)).toBeTruthy();
-      expect(screen.getByPlaceholderText(/FLWSECK_live/)).toBeTruthy();
+      // Secrets are shared across modes and come from the environment.
+      expect(screen.getByText(/Not configured.*FLW_SECRET_KEY/)).toBeTruthy();
+      expect(screen.queryByPlaceholderText(/FLWSECK_live/)).toBeNull();
     });
   });
 
@@ -420,16 +429,20 @@ describe("AdminSettings Page", () => {
       expect(screen.getByText("Send Test")).toBeTruthy();
     });
 
-    it("saves Resend config", async () => {
+    it("saves Resend config without persisting the API key", async () => {
       const user = userEvent.setup();
       setQueryData({});
       render(<AdminSettings />);
       await user.click(screen.getByTestId("tab-trigger-resend"));
-      await user.type(screen.getByPlaceholderText(/re_/), "re_abc123");
       await user.click(screen.getByText("Save Resend Config").closest("button")!);
       await waitFor(() => {
         expect(toast.success).toHaveBeenCalledWith("Resend email configuration saved");
       });
+      // The API key is env-managed — the persisted config never contains it.
+      const saveCall = mockFetch.mock.calls.find((c: any) => String(c[0]).includes("resend_config"));
+      const body = JSON.parse(saveCall![1].body);
+      expect(body.value.fromEmail).toContain("noreply");
+      expect(body.value.apiKey).toBeUndefined();
     });
   });
 
