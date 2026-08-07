@@ -1,3 +1,5 @@
+[![E2E Matrix](https://github.com/afrifundedcapital/AfriFundedCapital/actions/workflows/e2e-matrix.yml/badge.svg)](https://github.com/afrifundedcapital/AfriFundedCapital/actions/workflows/e2e-matrix.yml)
+
 ## Overview
 
 This project uses the following tech stack:
