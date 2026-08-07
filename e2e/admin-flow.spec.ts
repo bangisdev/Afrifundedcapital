@@ -111,28 +111,41 @@ async function warmUp(page: Page, path: string): Promise<boolean> {
 
 /** Sign in as admin through the real /auth page. */
 async function signInAsAdmin(page: Page) {
-  const ready = await warmUp(page, "/auth");
-  if (!ready) {
-    await page.goto("/auth");
-    await page.waitForTimeout(10_000);
+  // A Vite cold-start full reload can wipe the form between fill and click,
+  // which would silently leave the app on /auth. Retry the whole sign-in a
+  // few times; each attempt re-warms the page so the inputs exist.
+  const deadline = Date.now() + 90_000;
+  for (let attempt = 0; attempt < 4 && Date.now() < deadline; attempt++) {
+    const ready = await warmUp(page, "/auth");
+    if (!ready) {
+      await page.goto("/auth").catch(() => {});
+      await page.waitForTimeout(10_000);
+    }
+    await waitForAppReady(page);
+
+    const emailInput = page.locator('input[type="email"]').first();
+    await emailInput.waitFor({ state: "visible", timeout: 30_000 }).catch(() => null);
+    const passwordInput = page.locator('input[type="password"]').first();
+    await emailInput.fill(ADMIN_EMAIL).catch(() => {});
+    await passwordInput.fill(ADMIN_PASSWORD).catch(() => {});
+
+    const submitBtn = page.locator('button[type="submit"]').first();
+    await submitBtn.click().catch(() => {});
+
+    // On success the app navigates away from /auth. Poll instead of a single
+    // wait so a slow navigation can't flake; retry the attempt if a reload
+    // bounced us back to the form.
+    try {
+      await expect
+        .poll(() => page.url(), { timeout: 25_000 })
+        .not.toContain("/auth");
+      return;
+    } catch {
+      if (page.isClosed()) return;
+      await page.waitForTimeout(2_000);
+    }
   }
-  await waitForAppReady(page);
-
-  const emailInput = page.locator('input[type="email"]').first();
-  await emailInput.waitFor({ state: "visible", timeout: 30_000 });
-
-  const passwordInput = page.locator('input[type="password"]').first();
-  await emailInput.fill(ADMIN_EMAIL);
-  await passwordInput.fill(ADMIN_PASSWORD);
-
-  const submitBtn = page.locator('button[type="submit"]').first();
-  await submitBtn.click();
-
-  // On success the app navigates away from /auth. Poll instead of a single
-  // wait so a slow navigation can't flake, and the failure shows the URL.
-  await expect
-    .poll(() => page.url(), { timeout: 25_000 })
-    .not.toContain("/auth");
+  throw new Error(`sign-in did not leave /auth after retries (url: ${page.url()})`);
 }
 
 // ─── Suite ────────────────────────────────────────────────
@@ -335,8 +348,14 @@ test.describe("Admin Dashboard E2E Flow", () => {
     test("renders landing page on a mobile viewport", async ({ page }) => {
       const ready = await warmUp(page, "/");
       expect(ready).toBeTruthy();
-      const text = await page.textContent("body");
-      expect(text?.length).toBeGreaterThan(100);
+      // Poll for real content: a cold-start Vite reload can briefly leave the
+      // body at just "Loading…" right after warmUp returns, and expect.poll
+      // waits for the actual landing page to finish mounting.
+      await expect
+        .poll(async () => (await page.textContent("body").catch(() => ""))?.length ?? 0, {
+          timeout: 20_000,
+        })
+        .toBeGreaterThan(100);
     });
 
     test("renders auth page on a mobile viewport", async ({ page }) => {

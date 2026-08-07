@@ -51,6 +51,8 @@ test.describe("9. Trading metrics", () => {
     await expect(page.getByText("Total Balance").first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText("Total Equity").first()).toBeVisible();
     await expect(page.getByText("MT5 Accounts").first()).toBeVisible();
-    await expect(page.getByText(/Account #AFC/)).toBeVisible({ timeout: 15_000 });
+    // Previous runs may have created several accounts; any of them proves the
+    // account card renders (avoid a strict-mode violation on multiple matches).
+    await expect(page.getByText(/Account #AFC/).first()).toBeVisible({ timeout: 15_000 });
   });
 });
