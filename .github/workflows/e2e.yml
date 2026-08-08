@@ -78,3 +78,19 @@ jobs:
             test-results/
           retention-days: 7
           if-no-files-found: ignore
+
+  # ─── Secrets guard ───────────────────────────────────────────────────────
+  # Fails the workflow if real payment/email gateway secrets (Flutterwave
+  # FLWSECK-* values, Resend re_* keys, or hardcoded FLW_SECRET_KEY / 
+  # RESEND_API_KEY assignments) are committed. Runs in seconds with no deps
+  # (plain bash + grep) and is independent of the Playwright matrix.
+  secrets-scan:
+    name: secrets-scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Scan for committed gateway secrets
+        run: bash scripts/check-secrets.sh

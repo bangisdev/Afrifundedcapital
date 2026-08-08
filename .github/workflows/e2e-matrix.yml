@@ -151,3 +151,18 @@ jobs:
           name: traces-${{ matrix.chunk }}-shard${{ matrix.shard }}
           path: test-results/**/trace.zip
           retention-days: 7
+
+  # ─── Secrets guard ───────────────────────────────────────────────────────
+  # Same gate as e2e.yml: fail the workflow if real gateway secrets are
+  # committed (Flutterwave FLWSECK-* values, Resend re_* keys, hardcoded
+  # FLW_SECRET_KEY / RESEND_API_KEY assignments). Plain bash + grep, no deps.
+  secrets-scan:
+    name: secrets-scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Scan for committed gateway secrets
+        run: bash scripts/check-secrets.sh
