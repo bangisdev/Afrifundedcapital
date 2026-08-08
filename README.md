@@ -25,11 +25,42 @@ This project is set up already and running on a cloud environment, as well as a 
 
 ## Environment Variables
 
-The project is set up with project specific CONVEX_DEPLOYMENT and VITE_CONVEX_URL environment variables on the client side.
+Third-party credentials are managed as **environment variables — never stored in the database**. Set them in the platform's **Keys/API keys** tab (or in your deployment environment). The admin **Settings** page surfaces their runtime status as green "From env · …abcd" / amber "Not configured" badges and never returns raw values, only a masked tail (last 4 characters) for display.
 
-The convex server has a separate set of environment variables that are accessible by the convex backend.
+### Payment gateway (Flutterwave)
 
-Currently, these variables include auth-specific keys: JWKS, JWT_PRIVATE_KEY, and SITE_URL.
+| Env var | Visibility | Used for |
+| --- | --- | --- |
+| `FLW_PUBLIC_KEY` | Client-safe (public) | Checkout and the Admin → Settings → Flutterwave tab |
+| `FLW_SECRET_KEY` | Server-only | Verifying transactions (`/api/payments/verify`) and issuing refunds (`POST /api/payments/admin/:id/refund`) |
+| `FLW_SECRET_HASH` | Server-only | Validating webhook signatures (`verif-hash` header) and signing the admin "test webhook" |
+
+Only the public key may be persisted (in the `flutterwave_config` setting). The secret key and hash are read from the environment at request time and never written to the database or returned to the client — the admin API exposes only `secretKeyConfigured` / `secretHashConfigured` plus a masked tail.
+
+> The Paystack tab in Admin Settings references `PAYSTACK_SECRET_KEY` under the same model: gateway secrets belong in the environment, not the database.
+
+### Email (Resend)
+
+| Env var | Used for |
+| --- | --- |
+| `RESEND_API_KEY` | Transactional email (KYC, payments, support, payouts, referrals, security alerts) |
+| `RESEND_EMAIL_FROM` | Optional sender-address override (falls back to the stored `fromEmail`, then `AfriFundedCapital <onboarding@resend.dev>`) |
+
+`GET /api/test-email/status` exposes only `apiKeyConfigured` and a masked key. The "Send test email" form may accept a one-off key for a single send — it is used in memory and never persisted.
+
+### App & infrastructure
+
+| Env var | Used for |
+| --- | --- |
+| `APP_URL` | Base URL baked into transactional email links (confirmations, alerts, etc.) |
+| `DB_PATH` | SQLite database file path (the Docker image defaults to `/app/data/afrifundedcapital.db`) |
+
+### Platform-managed
+
+- **Client (`VITE_*`)**: `CONVEX_DEPLOYMENT` and `VITE_CONVEX_URL` are set by the platform.
+- **Convex backend**: `JWKS`, `JWT_PRIVATE_KEY`, and `SITE_URL` are consumed by the auth layer via the Convex environment.
+
+E2E-only variables (`PLAYWRIGHT_BASE_URL`, `E2E_ADMIN_EMAIL`, `E2E_ADMIN_PASSWORD`, `E2E_TESTING`) are documented under [End-to-end tests](#end-to-end-tests-playwright).
 
 
 # Using Authentication (Important!)
