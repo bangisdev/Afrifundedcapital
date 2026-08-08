@@ -152,18 +152,33 @@ You can use different secrets for each environment:
 Repository Secrets (shared):
 ├── DEPLOY_SSH_PRIVATE_KEY
 ├── FLW_PUBLIC_KEY
-└── RESEND_API_KEY
+├── RESEND_API_KEY
+├── JWT_PRIVATE_KEY
+└── SMTP_PASSWORD
 
 Production Environment Secrets:
 ├── DEPLOY_SSH_HOST = 203.0.113.50
 ├── DEPLOY_PATH = /opt/afrifundedcapital
-└── FLW_SECRET_KEY = (production key)
+├── FLW_SECRET_KEY = (production key)
+└── MT5_GATEWAY_API_KEY = (production gateway key)
 
 Staging Environment Secrets:
 ├── DEPLOY_SSH_HOST = 198.51.100.25
 ├── DEPLOY_PATH = /opt/afrifundedcapital-staging
-└── FLW_SECRET_KEY = (test key)
+├── FLW_SECRET_KEY = (test key)
+└── MT5_GATEWAY_API_KEY = (test gateway key)
 ```
+
+### Additional Secrets Reference
+
+| Secret | Notes |
+| --- | --- |
+| `JWT_PRIVATE_KEY` | Signing key consumed by the auth layer via the Convex environment. For platform-managed deployments this is set automatically; provide it here only if you self-host the auth layer. |
+| `SMTP_PASSWORD` (or `SMTP_PASS`) | Reserved for SMTP relay should you add one for transactional email (email currently goes through Resend — see `RESEND_API_KEY`). `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` are connection metadata, not secrets, and may be set as plain variables. |
+| `MT5_GATEWAY_API_KEY` (or `MT5_API_KEY`) | The runtime MT5 gateway credentials (base URLs, API key, manager login/password) are entered in **Admin → MT5** and stored encrypted in the settings table — no env var is read at runtime. These env names exist for the CI secrets scan: committing a hardcoded value here (or anywhere) fails the `check:secrets` job. Keep them empty/unset unless you intentionally use env-driven provisioning. |
+
+> **Placeholder convention:** always use `(production key)` / `(test key)` style placeholders in documentation. The `check:secrets` scan (`.github/workflows/e2e.yml` → `secrets-scan` job) fails the build if real-looking values (Flutterwave `FLWSECK-*`, Resend `re_*`, SMTP/JWT/MT5 hardcoded assignments) are committed.
+
 
 ## Best Practices
 
