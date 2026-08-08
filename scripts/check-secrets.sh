@@ -1,20 +1,25 @@
 #!/usr/bin/env bash
 #
-# check-secrets.sh — fails CI if payment/email gateway secrets are committed.
+# check-secrets.sh — fails CI if payment/email/gateway secrets are committed.
 #
 # The check deliberately matches secret *values*, not env-var names: references
 # like `process.env.FLW_SECRET_KEY` and `process.env.RESEND_API_KEY` appear
 # all over the codebase legitimately, but a real Flutterwave secret starts with
 # `FLWSECK`, and a real Resend API key starts with `re_` followed by 20+
-# characters. We also flag hardcoded assignments of the secret env vars
-# (`FLW_SECRET_KEY=…`) to catch real values pasted into config/example files
-# even when they lack the usual key prefix.
+# characters. We also flag hardcoded assignments of secret env vars
+# (`FLW_SECRET_KEY=…`, `SMTP_PASSWORD=…`, `JWT_PRIVATE_KEY=…`,
+# `MT5_GATEWAY_API_KEY=…`) and hardcoded MT5 gateway `apiKey` fields to catch
+# real values pasted into config/example files. Assignment patterns accept
+# `.env` (`KEY=value`), YAML (`key: value`) and JSON (`"KEY": "value"`)
+# quoting forms.
 #
-# Deliberately skipped: `__tests__` directories — unit tests carry intentional
-# MOCK credentials (e.g. payments.test.ts sets `FLW_SECRET_KEY =
-# "FLWSECK_TEST-def456"`) precisely to verify that secrets are scrubbed from
-# the DB and never rendered. Those are fake by design; GitHub's own secret
-# scanning still covers test files for real keys.
+# What is deliberately NOT flagged:
+#   - SMTP_HOST / SMTP_PORT / SMTP_USER — connection metadata, not secrets.
+#   - `__tests__` directories — unit tests carry intentional MOCK credentials
+#     (e.g. payments.test.ts sets `FLW_SECRET_KEY = "<your-key>"`) precisely
+#     to verify that secrets are scrubbed from the DB and never rendered.
+#     Those are fake by design; GitHub's own secret scanning still covers
+#     test files for real keys.
 #
 # Run locally:  bun run check:secrets   (or: bash scripts/check-secrets.sh)
 # Usage:        scripts/check-secrets.sh [dir]   (default: repo root)
@@ -45,16 +50,25 @@ done
 #    (test). The public key prefix FLWPUBK is safe and deliberately not
 #    matched.
 # 2. Resend API keys — `re_` + 24+ alphanumeric characters.
-# 3. Hardcoded secret env-var assignments: the value must start with an
-#    alphanumeric/underscore and run 8+ non-space chars. This skips empty
-#    assignments, `$VAR` indirections, quoted values, and `(placeholder)`
-#    forms while still catching real-looking tokens (e.g. `FLW_SECRET_KEY=
-#    8f3a9c2b7d1e4f5a6b7c8d9e0f1a2b3c`). Real keys are caught by patterns 1-2
-#    even when quoted.
+# 3. Hardcoded secret env-var assignments: optional quotes around the name
+#    (JSON/YAML), a `=` or `:` separator, an optional opening quote, then a
+#    value starting with an alphanumeric/underscore and running 8+ non-space
+#    chars. This skips empty assignments, `$VAR` indirections,
+#    `(placeholder)` forms and quoted values like `""` while still catching
+#    real-looking tokens (e.g. `JWT_PRIVATE_KEY=<your-token>`,
+#    `"SMTP_PASSWORD": "<your-token>"`). Real Flutterwave/Resend keys are
+#    caught by patterns 1-2 even when quoted.
+# 4. MT5 gateway `apiKey` field — a hardcoded token (16+ alnum / `-` / `_`,
+#    optionally quoted, with optional quotes around the field name for JSON)
+#    assigned via `:` or `=`. The 16+ token rule skips code expressions
+#    (`apiKey: typeof body.apiKey === "string" ? …`, `cfg.apiKey`,
+#    `apiKey: e.target.value`), type declarations (`apiKey: string;`), empty
+#    defaults, and derived fields like `apiKeyLast4` / `hasApiKey`.
 PATTERNS=(
   'FLWSECK[-_](TEST[-_])?[A-Za-z0-9]{8,}'
   're_[A-Za-z0-9]{24,}'
-  '(FLW_SECRET_KEY|FLW_SECRET_HASH|RESEND_API_KEY|PAYSTACK_SECRET_KEY)[[:space:]]*=[[:space:]]*[[:alnum:]_][^[:space:]]{7,}'
+  '["'"'"']?(FLW_SECRET_KEY|FLW_SECRET_HASH|RESEND_API_KEY|PAYSTACK_SECRET_KEY|JWT_PRIVATE_KEY|SMTP_PASS|SMTP_PASSWORD|MT5_API_KEY|MT5_GATEWAY_API_KEY)["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?[[:alnum:]_][^[:space:]]{7,}'
+  '["'"'"']?apiKey["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_-]{16,}'
 )
 
 # Build explicit `-e pattern` pairs — `"${ARRAY[@]/#/-e }"` would glue the
