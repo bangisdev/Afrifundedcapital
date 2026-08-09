@@ -277,6 +277,12 @@ export const challengeTemplates = sqliteTable(
     allowEATrading: integer("allow_ea_trading", { mode: "boolean" }).default(true),
     allowCopyTrading: integer("allow_copy_trading", { mode: "boolean" }).default(false),
 
+    // News blackout window — minutes before/after a high-impact news event
+    // during which opening positions is banned when allowNewsTrading is off.
+    // null = platform default (15 min each side, FTMO-style).
+    newsBlackoutBeforeMinutes: integer("news_blackout_before_minutes"),
+    newsBlackoutAfterMinutes: integer("news_blackout_after_minutes"),
+
     price: real("price").notNull(),
     currency: text("currency").notNull().default("NGN"),
     durationDays: integer("duration_days").notNull(),

@@ -667,7 +667,11 @@ function RuleEnginePanel() {
     if (rules.maxPositionSize) chips.push(`Max pos ${rules.maxPositionSize} lots`);
     if (!rules.allowEATrading) chips.push("No EA");
     if (!rules.allowCopyTrading) chips.push("No copy");
-    if (!rules.allowNewsTrading) chips.push("No news");
+    if (!rules.allowNewsTrading) {
+      const before = rules.newsBlackoutBeforeMinutes ?? 15;
+      const after = rules.newsBlackoutAfterMinutes ?? 15;
+      chips.push(before === after ? `No news ${before}m` : `No news ${before}m/${after}m`);
+    }
     if (!rules.allowWeekendHolding) chips.push("No weekend");
     return chips.join(" · ");
   };
@@ -908,8 +912,9 @@ function NewsCalendarPanel() {
         <Newspaper className="h-4 w-4 shrink-0 mt-0.5 text-sky-500" />
         <span>
           This feed powers the rule engine's <code className="text-foreground">news_trading</code> rule: when a
-          challenge template disables news trading, any position opened within <b className="text-foreground/80">±15 minutes</b>{" "}
-          of a <span className="font-medium text-red-600 dark:text-red-400">high-impact</span> event violates the rule.
+          challenge template disables news trading, any position opened within the template's configured blackout
+          window (default <b className="text-foreground/80">±15 minutes</b>, set on Admin → Challenges) of a{" "}
+          <span className="font-medium text-red-600 dark:text-red-400">high-impact</span> event violates the rule.
           Medium/low events are informational only. Changes save through the audited settings endpoint and are recorded
           in the audit trail as <code className="text-foreground">settings.updated</code>.
         </span>

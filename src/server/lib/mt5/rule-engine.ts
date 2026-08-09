@@ -43,6 +43,10 @@ export interface ChallengeRules {
   allowNewsTrading: boolean;
   allowEATrading: boolean;
   allowCopyTrading: boolean;
+  /** Minutes BEFORE a high-impact event during which opening is banned. null/0 = default 15. */
+  newsBlackoutBeforeMinutes?: number | null;
+  /** Minutes AFTER a high-impact event during which opening is banned. null/0 = default 15. */
+  newsBlackoutAfterMinutes?: number | null;
 }
 
 export type RuleCode =
@@ -92,6 +96,8 @@ export function rulesFromTemplate(template: {
   allowNewsTrading: boolean | null;
   allowEATrading: boolean | null;
   allowCopyTrading: boolean | null;
+  newsBlackoutBeforeMinutes?: number | null;
+  newsBlackoutAfterMinutes?: number | null;
 }): ChallengeRules {
   return {
     profitTarget: template.profitTarget ?? 0,
@@ -104,6 +110,8 @@ export function rulesFromTemplate(template: {
     allowNewsTrading: !!template.allowNewsTrading,
     allowEATrading: !!template.allowEATrading,
     allowCopyTrading: !!template.allowCopyTrading,
+    newsBlackoutBeforeMinutes: template.newsBlackoutBeforeMinutes ?? null,
+    newsBlackoutAfterMinutes: template.newsBlackoutAfterMinutes ?? null,
   };
 }
 
@@ -145,7 +153,8 @@ export function violationReason(v: RuleViolation, rules: ChallengeRules): string
  */
 export const DRAWDOWN_WARNING_THRESHOLD = 0.8;
 
-const NEWS_WINDOW_MS = 15 * 60 * 1000; // ±15 min around a news event
+/** Default news blackout window (minutes each side) when a template leaves it unset. */
+export const NEWS_DEFAULT_WINDOW_MINUTES = 15;
 const EA_SPACING_MS = 60_000; // robotic gap between consecutive opens
 const EA_MIN_STREAK = 3; // consecutive robotic gaps needed
 const EA_MIN_NIGHT_TRADES = 5; // opens between 22:00–06:59 UTC
@@ -269,17 +278,25 @@ export function evaluateChallengeRules(input: RuleEngineInput): RuleViolation[] 
       }
     }
 
-    // News trading — only meaningful with a configured news feed
+    // News trading — only meaningful with a configured news feed. The blackout
+    // window is per-template (minutes before/after the event, default 15 each
+    // side); an explicit 0 disables that side of the window.
     if (!rules.allowNewsTrading && input.newsEvents && input.newsEvents.length > 0) {
+      const beforeMin = (rules.newsBlackoutBeforeMinutes ?? NEWS_DEFAULT_WINDOW_MINUTES) || 0;
+      const afterMin = (rules.newsBlackoutAfterMinutes ?? NEWS_DEFAULT_WINDOW_MINUTES) || 0;
+      const beforeMs = beforeMin * 60_000;
+      const afterMs = afterMin * 60_000;
       const newsTrade = trades.find((t) =>
-        input.newsEvents!.some((ev) => Math.abs(t.openedAt - ev) <= NEWS_WINDOW_MS),
+        input.newsEvents!.some((ev) => t.openedAt >= ev - beforeMs && t.openedAt <= ev + afterMs),
       );
       if (newsTrade) {
         push(
           "news_trading",
           "hard",
-          `Position on ${newsTrade.symbol} was opened within ${NEWS_WINDOW_MS / 60_000} minutes of a high-impact news event.`,
-          { symbol: newsTrade.symbol, openedAt: newsTrade.openedAt, windowMinutes: NEWS_WINDOW_MS / 60_000 },
+          beforeMin === afterMin
+            ? `Position on ${newsTrade.symbol} was opened within ${beforeMin} minutes of a high-impact news event.`
+            : `Position on ${newsTrade.symbol} was opened within ${beforeMin} min before / ${afterMin} min after a high-impact news event.`,
+          { symbol: newsTrade.symbol, openedAt: newsTrade.openedAt, windowMinutesBefore: beforeMin, windowMinutesAfter: afterMin },
         );
       }
     }

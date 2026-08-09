@@ -48,6 +48,21 @@ describe("rulesFromTemplate", () => {
     expect(disabled.consistencyTarget).toBeNull();
     expect(disabled.maxPositionSize).toBeNull();
   });
+
+  it("defaults the news blackout window to null (engine falls back to 15 min)", () => {
+    expect(rules.newsBlackoutBeforeMinutes).toBeNull();
+    expect(rules.newsBlackoutAfterMinutes).toBeNull();
+  });
+
+  it("maps a configured asymmetric news blackout window", () => {
+    const custom = rulesFromTemplate({
+      ...TEMPLATE_DEFAULTS,
+      newsBlackoutBeforeMinutes: 30,
+      newsBlackoutAfterMinutes: 5,
+    });
+    expect(custom.newsBlackoutBeforeMinutes).toBe(30);
+    expect(custom.newsBlackoutAfterMinutes).toBe(5);
+  });
 });
 
 describe("max drawdown", () => {
@@ -206,6 +221,57 @@ describe("news trading", () => {
       ...base,
       metrics: makeMetrics(),
       trades: [makeTrade({ openedAt: newsAt - 20 * 60_000 })],
+      newsEvents: [newsAt],
+    });
+    expect(codes(vs)).not.toContain("news_trading");
+  });
+
+  it("honors a wider per-template before window", () => {
+    const wide = rulesFromTemplate({ ...TEMPLATE_DEFAULTS, newsBlackoutBeforeMinutes: 30 });
+    // 20 min before the event: inside the 30 min window, outside the 15 min default.
+    const vs = evaluateChallengeRules({
+      ...base,
+      rules: wide,
+      metrics: makeMetrics(),
+      trades: [makeTrade({ openedAt: newsAt - 20 * 60_000 })],
+      newsEvents: [newsAt],
+    });
+    expect(codes(vs)).toContain("news_trading");
+  });
+
+  it("enforces an asymmetric before/after window", () => {
+    const asym = rulesFromTemplate({ ...TEMPLATE_DEFAULTS, newsBlackoutBeforeMinutes: 30, newsBlackoutAfterMinutes: 5 });
+    // 20 min before: within the 30 min pre-window → violated.
+    const before = evaluateChallengeRules({
+      ...base,
+      rules: asym,
+      metrics: makeMetrics(),
+      trades: [makeTrade({ openedAt: newsAt - 20 * 60_000 })],
+      newsEvents: [newsAt],
+    });
+    expect(codes(before)).toContain("news_trading");
+    // 10 min after: past the 5 min post-window → clean.
+    const after = evaluateChallengeRules({
+      ...base,
+      rules: asym,
+      metrics: makeMetrics(),
+      trades: [makeTrade({ openedAt: newsAt + 10 * 60_000 })],
+      newsEvents: [newsAt],
+    });
+    expect(codes(after)).not.toContain("news_trading");
+    // Violation message describes the asymmetric window.
+    expect(before[0].message).toContain("30 min before / 5 min after");
+    expect(before[0].evidence.windowMinutesBefore).toBe(30);
+    expect(before[0].evidence.windowMinutesAfter).toBe(5);
+  });
+
+  it("respects an explicit 0 window (side disabled)", () => {
+    const none = rulesFromTemplate({ ...TEMPLATE_DEFAULTS, newsBlackoutBeforeMinutes: 0, newsBlackoutAfterMinutes: 0 });
+    const vs = evaluateChallengeRules({
+      ...base,
+      rules: none,
+      metrics: makeMetrics(),
+      trades: [makeTrade({ openedAt: newsAt - 5 * 60_000 })],
       newsEvents: [newsAt],
     });
     expect(codes(vs)).not.toContain("news_trading");

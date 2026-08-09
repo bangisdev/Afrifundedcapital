@@ -422,6 +422,8 @@ app.post("/admin/templates", requireAuth, requireAdmin, async (c) => {
       allowNewsTrading: body.allowNewsTrading ?? true,
       allowEATrading: body.allowEATrading ?? true,
       allowCopyTrading: body.allowCopyTrading || false,
+      newsBlackoutBeforeMinutes: body.newsBlackoutBeforeMinutes ?? null,
+      newsBlackoutAfterMinutes: body.newsBlackoutAfterMinutes ?? null,
       resetFee: body.resetFee || null,
       createdBy: userId,
       createdAt: now,

@@ -52,6 +52,8 @@ interface Template {
   allowNewsTrading: boolean | null;
   allowEATrading: boolean | null;
   allowCopyTrading: boolean | null;
+  newsBlackoutBeforeMinutes: number | null;
+  newsBlackoutAfterMinutes: number | null;
   price: number;
   currency: string;
   durationDays: number;
@@ -181,6 +183,8 @@ export default function AdminChallenges() {
     allowNewsTrading: true,
     allowEATrading: true,
     allowCopyTrading: false,
+    newsBlackoutBeforeMinutes: 15 as number | null,
+    newsBlackoutAfterMinutes: 15 as number | null,
   });
 
   // Add size form
@@ -590,6 +594,21 @@ export default function AdminChallenges() {
                   Copy Trading
                 </label>
               </div>
+              {!newTemplate.allowNewsTrading && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1">Blackout before news (min)</label>
+                    <Input type="number" min={0} value={newTemplate.newsBlackoutBeforeMinutes ?? ""} onChange={(e) => setNewTemplate({ ...newTemplate, newsBlackoutBeforeMinutes: e.target.value === "" ? null : Number(e.target.value) })} className="text-xs h-8" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1">Blackout after news (min)</label>
+                    <Input type="number" min={0} value={newTemplate.newsBlackoutAfterMinutes ?? ""} onChange={(e) => setNewTemplate({ ...newTemplate, newsBlackoutAfterMinutes: e.target.value === "" ? null : Number(e.target.value) })} className="text-xs h-8" />
+                  </div>
+                  <p className="col-span-2 text-[10px] text-muted-foreground">
+                    No new positions within these windows around high-impact news events (from the News Calendar feed). Empty = 15 min each side.
+                  </p>
+                </div>
+              )}
               <Button
                 className="w-full text-xs"
                 size="sm"
@@ -604,6 +623,7 @@ export default function AdminChallenges() {
                       maxDrawdown: 10, maxLeverage: 100, minTradingDays: 5, maxTradingDays: null,
                       price: 50000, currency: "NGN", durationDays: 30, resetFee: null,
                       allowWeekendHolding: false, allowNewsTrading: true, allowEATrading: true, allowCopyTrading: false,
+                      newsBlackoutBeforeMinutes: 15, newsBlackoutAfterMinutes: 15,
                     });
                   } catch (err: any) {
                     toast.error(err?.message || "Failed to create template");
@@ -682,6 +702,21 @@ export default function AdminChallenges() {
                   Copy
                 </label>
               </div>
+              {!editingTemplate.allowNewsTrading && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1">Blackout before news (min)</label>
+                    <Input type="number" min={0} value={editingTemplate.newsBlackoutBeforeMinutes ?? ""} onChange={(e) => setEditingTemplate({ ...editingTemplate, newsBlackoutBeforeMinutes: e.target.value === "" ? null : Number(e.target.value) })} className="text-xs h-8" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1">Blackout after news (min)</label>
+                    <Input type="number" min={0} value={editingTemplate.newsBlackoutAfterMinutes ?? ""} onChange={(e) => setEditingTemplate({ ...editingTemplate, newsBlackoutAfterMinutes: e.target.value === "" ? null : Number(e.target.value) })} className="text-xs h-8" />
+                  </div>
+                  <p className="col-span-2 text-[10px] text-muted-foreground">
+                    No new positions within these windows around high-impact news events. Empty = 15 min each side.
+                  </p>
+                </div>
+              )}
               <Button
                 className="w-full text-xs"
                 size="sm"

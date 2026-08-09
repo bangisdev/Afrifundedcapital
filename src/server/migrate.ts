@@ -208,6 +208,8 @@ export function runMigrations(sqlite: Database.Database) {
       allow_news_trading INTEGER DEFAULT 1,
       allow_ea_trading INTEGER DEFAULT 1,
       allow_copy_trading INTEGER DEFAULT 0,
+      news_blackout_before_minutes INTEGER,
+      news_blackout_after_minutes INTEGER,
       price REAL NOT NULL,
       currency TEXT NOT NULL DEFAULT 'NGN',
       duration_days INTEGER NOT NULL,
@@ -833,6 +835,23 @@ export function runMigrations(sqlite: Database.Database) {
   addUserColumn("reset_password_token", "reset_password_token TEXT");
   addUserColumn("reset_password_expires_at", "reset_password_expires_at INTEGER");
   addUserColumn("two_factor_backup_codes", "two_factor_backup_codes TEXT");
+
+  // challenge_templates: news blackout window (minutes before/after high-
+  // impact events) — same guarded ADD COLUMN pattern as the users columns.
+  const existingTemplateColumns = new Set(
+    (sqlite.prepare("PRAGMA table_info(challenge_templates)").all() as Array<{ name: string }>).map((c) => c.name),
+  );
+  const addTemplateColumn = (name: string, ddl: string) => {
+    if (existingTemplateColumns.has(name)) return;
+    try {
+      sqlite.exec(`ALTER TABLE challenge_templates ADD COLUMN ${ddl}`);
+      console.log(`[DB] Added challenge_templates.${name} column`);
+    } catch (e) {
+      console.warn(`[DB] Could not add challenge_templates.${name}:`, e);
+    }
+  };
+  addTemplateColumn("news_blackout_before_minutes", "news_blackout_before_minutes INTEGER");
+  addTemplateColumn("news_blackout_after_minutes", "news_blackout_after_minutes INTEGER");
 
   console.log("[DB] All tables created/verified successfully.");
 
