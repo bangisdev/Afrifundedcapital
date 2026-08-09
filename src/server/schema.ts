@@ -125,8 +125,15 @@ export const users = sqliteTable(
     // Security
     twoFactorEnabled: integer("two_factor_enabled", { mode: "boolean" }).default(false),
     twoFactorSecret: text("two_factor_secret"),
+    twoFactorBackupCodes: text("two_factor_backup_codes"), // JSON array of SHA-256 hashed backup codes
     accountLockedUntil: integer("account_locked_until"),
     loginAttempts: integer("login_attempts").default(0),
+
+    // Email verification & password recovery
+    emailVerificationToken: text("email_verification_token"),
+    emailVerificationExpiresAt: integer("email_verification_expires_at"),
+    resetPasswordToken: text("reset_password_token"),
+    resetPasswordExpiresAt: integer("reset_password_expires_at"),
 
     // Referral
     referralCode: text("referral_code").unique(),

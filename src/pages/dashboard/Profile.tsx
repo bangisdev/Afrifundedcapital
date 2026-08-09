@@ -6,11 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
-  Loader2, User, Shield, Upload, CheckCircle, XCircle, Clock,
+  Loader2, User, Shield, ShieldCheck, Upload, CheckCircle, XCircle, Clock,
   FileText, X, AlertTriangle, RefreshCw,
   ArrowUp, ArrowDown, ArrowUpDown, History,
 } from "lucide-react";
 import { toast } from "sonner";
+import { AccountSecurity } from "@/components/dashboard/AccountSecurity";
 
 const DOC_TYPES = [
   { type: "passport", label: "International Passport", icon: "🪪", required: true },
@@ -293,6 +294,9 @@ export default function Profile() {
           <TabsTrigger value="kyc" className="text-xs data-[state=active]:bg-secondary">
             <Shield className="h-3 w-3 mr-1" /> KYC
           </TabsTrigger>
+          <TabsTrigger value="security" className="text-xs data-[state=active]:bg-secondary">
+            <ShieldCheck className="h-3 w-3 mr-1" /> Security
+          </TabsTrigger>
         </TabsList>
 
         {/* ─── Profile Tab ─── */}
@@ -515,6 +519,11 @@ export default function Profile() {
               );
             })}
           </div>
+        </TabsContent>
+
+        {/* ─── Security Tab ─── */}
+        <TabsContent value="security" className="space-y-4">
+          <AccountSecurity />
         </TabsContent>
       </Tabs>
 

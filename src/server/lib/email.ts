@@ -13,7 +13,9 @@ import { eq } from "drizzle-orm";
 import { getSecret } from "./secrets";
 
 const FROM_EMAIL_FALLBACK = "AfriFundedCapital <onboarding@resend.dev>";
-const APP_URL = process.env.APP_URL || "https://beige-crews-rescue.freebuff.dev";
+// Exported so auth routes can build deep links (verify-email, password reset)
+// that point at the same origin as every other email button.
+export const APP_URL = process.env.APP_URL || "https://beige-crews-rescue.freebuff.dev";
 
 // Hard cap on how long a Resend send may take before the request fails fast.
 // Prevents a slow/unreachable Resend API from hanging the HTTP request until a
@@ -185,6 +187,46 @@ function button(href: string, label: string): string {
       font-weight: 500;
       margin: 16px 0;
     ">${label}</a>`;
+}
+
+// ─── Auth Emails ───────────────────────────────────
+
+export function emailVerificationEmail(userName: string, verifyUrl: string): SendEmailParams & { subject: string; html: string } {
+  return {
+    to: "",
+    subject: "Verify your email — AfriFundedCapital",
+    html: wrapLayout(`
+      <h2 style="font-size: 18px; font-weight: 600; margin: 0 0 12px;">Confirm your email</h2>
+      <p style="font-size: 14px; color: #444;">Hi ${userName},</p>
+      <p style="font-size: 14px; color: #444;">
+        Welcome to AfriFundedCapital. Please confirm your email address to activate
+        your account and unlock purchases.
+      </p>
+      ${button(verifyUrl, "Verify Email")}
+      <p style="font-size: 13px; color: #888;">
+        This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.
+      </p>
+    `),
+  };
+}
+
+export function passwordResetEmail(userName: string, resetUrl: string): SendEmailParams & { subject: string; html: string } {
+  return {
+    to: "",
+    subject: "Reset your password — AfriFundedCapital",
+    html: wrapLayout(`
+      <h2 style="font-size: 18px; font-weight: 600; margin: 0 0 12px;">Reset your password</h2>
+      <p style="font-size: 14px; color: #444;">Hi ${userName},</p>
+      <p style="font-size: 14px; color: #444;">
+        We received a request to reset the password for your AfriFundedCapital account.
+      </p>
+      ${button(resetUrl, "Reset Password")}
+      <p style="font-size: 13px; color: #888;">
+        This link expires in 30 minutes. If you didn't request this, you can safely ignore this email —
+        your password won't change.
+      </p>
+    `),
+  };
 }
 
 // ─── KYC Emails ────────────────────────────────────

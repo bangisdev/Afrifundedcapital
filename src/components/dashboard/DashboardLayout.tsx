@@ -1,12 +1,58 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, Outlet, useLocation } from "react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { Sidebar } from "./Sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { NotificationBell } from "@/components/NotificationBell";
+import { MailWarning } from "lucide-react";
+
+function EmailVerificationBanner({ email, onVerified }: { email?: string | null; onVerified: () => void }) {
+  const [sending, setSending] = useState(false);
+  const [status, setStatus] = useState<"idle" | "sent" | "error">("idle");
+
+  const resend = async () => {
+    if (!email || sending) return;
+    setSending(true);
+    setStatus("idle");
+    try {
+      const res = await fetch("/api/auth/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email }),
+      });
+      setStatus(res.ok ? "sent" : "error");
+    } catch {
+      setStatus("error");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-between gap-4 px-6 py-2.5 text-xs bg-amber-500/10 border-b border-amber-500/30 text-amber-800 dark:text-amber-300">
+      <div className="flex items-center gap-2 min-w-0">
+        <MailWarning className="h-4 w-4 shrink-0" />
+        <span className="truncate">
+          Please verify your email{email ? ` (${email})` : ""} to unlock full account access.
+        </span>
+      </div>
+      <div className="flex items-center gap-3 shrink-0">
+        {status === "sent" && <span className="text-green-600 dark:text-green-400">Verification email sent</span>}
+        {status === "error" && <span className="text-red-600 dark:text-red-400">Couldn't send — try again</span>}
+        <button onClick={resend} disabled={sending} className="underline hover:no-underline disabled:opacity-50">
+          {sending ? "Sending…" : "Resend email"}
+        </button>
+        <button onClick={onVerified} className="underline hover:no-underline">
+          I&apos;ve verified
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boolean; children?: React.ReactNode }) {
-  const { isLoading, isAuthenticated, user } = useAuth();
+  const { isLoading, isAuthenticated, user, refetch } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -71,6 +117,8 @@ export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boole
             </div>
           </div>
         </header>
+        {/* Email verification banner */}
+        {user && user.emailVerified === false && <EmailVerificationBanner email={user.email} onVerified={refetch} />}
         {/* Main content */}
         <main className="flex-1 overflow-auto">
           {children || <Outlet />}

@@ -1,11 +1,14 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { getDb } from "./db";
-import { users, sessions, settings } from "./schema";
+import { users, sessions, settings, loginHistory } from "./schema";
 import { eq, and, gt } from "drizzle-orm";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { initDatabase } from "./db";
+import { writeAuditLog } from "./lib/audit";
+import { sendEmail, emailVerificationEmail, APP_URL } from "./lib/email";
+import { createTwoFactorChallenge } from "./lib/security";
 import type { Plugin } from "vite";
 import {
   signInRateLimit,
@@ -30,6 +33,7 @@ import payoutsRouter from "./routes/payouts";
 import seedRouter from "./routes/seed";
 import testEmailRouter from "./routes/test-email";
 import secretsRouter from "./routes/secrets";
+import securityRouter from "./routes/security";
 import { startMT5Scheduler } from "./lib/mt5/scheduler";
 
 // Initialize database
@@ -65,6 +69,33 @@ function parseCookies(cookieHeader: string): Record<string, string> {
       return [key, val.join("=")];
     })
   );
+}
+
+function getClientIp(c: { req: { header(name: string): string | undefined } }): string {
+  return (
+    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
+    c.req.header("x-real-ip") ||
+    "unknown"
+  );
+}
+
+const EMAIL_VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
+
+function recordLoginHistory(userId: number, success: boolean, c: { req: { header(name: string): string | undefined } }, failedReason?: string): void {
+  try {
+    const db = getDb();
+    db.insert(loginHistory)
+      .values({
+        userId,
+        ipAddress: getClientIp(c),
+        deviceInfo: (c.req.header("user-agent") || "").slice(0, 200),
+        location: null,
+        success,
+        failedReason: failedReason || null,
+        timestamp: Date.now(),
+      })
+      .run();
+  } catch { /* non-critical */ }
 }
 
 const app = new Hono();
@@ -186,12 +217,18 @@ app.post("/api/auth/sign-up/email", signUpRateLimit, async (c) => {
     const hashedPassword = await hashPassword(password);
     const now = Date.now();
 
+    // New accounts start unverified — the verification email (below) must be
+    // confirmed before the account is fully active.
+    const verificationToken = generateToken();
+
     const user = db
       .insert(users)
       .values({
         name: name || email.split("@")[0],
         email,
-        emailVerified: true,
+        emailVerified: false,
+        emailVerificationToken: verificationToken,
+        emailVerificationExpiresAt: now + EMAIL_VERIFY_TTL_MS,
         role: null,
         onboardingComplete: false,
         createdAt: now,
@@ -218,14 +255,34 @@ app.post("/api/auth/sign-up/email", signUpRateLimit, async (c) => {
       id: sessionId,
       token,
       userId: user.id,
+      deviceInfo: (c.req.header("user-agent") || "").slice(0, 200),
+      ipAddress: getClientIp(c),
+      lastActiveAt: now,
       expiresAt: now + SESSION_DURATION_MS,
       createdAt: now,
     }).execute();
 
+    // Send the verification email (fire-and-forget — never block sign-up on it).
+    const verifyUrl = `${APP_URL}/auth?verify=${verificationToken}`;
+    void sendEmail({
+      ...emailVerificationEmail(user.name || user.email?.split("@")[0] || "Trader", verifyUrl),
+      to: email,
+    }).catch(() => {});
+
+    recordLoginHistory(user.id, true, c);
+    writeAuditLog(db, {
+      userId: user.id,
+      action: "auth.signup",
+      entity: "user",
+      entityId: user.id,
+      details: { email: user.email },
+      ipAddress: getClientIp(c),
+    });
+
     c.header("Set-Cookie", `${COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_DURATION_MS / 1000}`);
 
     return c.json({
-      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      user: { id: user.id, name: user.name, email: user.email, role: user.role, emailVerified: false },
       session: { id: token, expiresAt: now + SESSION_DURATION_MS },
     }, 201);
   } catch (err) {
@@ -282,24 +339,52 @@ app.post("/api/auth/sign-in/email", signInRateLimit, loginAccountLockout, async 
 
     const valid = await verifyPassword(passwordHash, password);
     if (!valid) {
+      recordLoginHistory(user.id, false, c, "invalid_password");
       return c.json({ error: "Invalid email or password" }, 401);
     }
 
-    const token = generateToken();
     const now = Date.now();
+
+    // 2FA gate: the password is correct, but the session is only issued after
+    // a TOTP/backup-code step via POST /api/auth/2fa/verify (5-min challenge).
+    if (user.twoFactorEnabled) {
+      const challenge = createTwoFactorChallenge(user.id);
+      recordLoginHistory(user.id, true, c, "2fa_pending");
+      return c.json({
+        requiresTwoFactor: true,
+        challengeToken: challenge.token,
+        challengeExpiresAt: challenge.expiresAt,
+        user: { id: user.id, email: user.email },
+      });
+    }
+
+    const token = generateToken();
     const sessionId = generateToken();
     db.insert(sessions).values({
       id: sessionId,
       token,
       userId: user.id,
+      deviceInfo: (c.req.header("user-agent") || "").slice(0, 200),
+      ipAddress: getClientIp(c),
+      lastActiveAt: now,
       expiresAt: now + SESSION_DURATION_MS,
       createdAt: now,
     }).execute();
 
+    recordLoginHistory(user.id, true, c);
+    writeAuditLog(db, {
+      userId: user.id,
+      action: "auth.signin",
+      entity: "user",
+      entityId: user.id,
+      details: { email: user.email },
+      ipAddress: getClientIp(c),
+    });
+
     c.header("Set-Cookie", `${COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_DURATION_MS / 1000}`);
 
     return c.json({
-      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      user: { id: user.id, name: user.name, email: user.email, role: user.role, emailVerified: !!user.emailVerified },
       session: { id: token, expiresAt: now + SESSION_DURATION_MS },
     });
   } catch (err) {
@@ -447,6 +532,11 @@ app.get("/api/auth/session", (c) => {
       return c.json({ error: "User not found" }, 401);
     }
 
+    // Touch the session so "active sessions" reflect real usage.
+    try {
+      db.update(sessions).set({ lastActiveAt: Date.now() }).where(eq(sessions.id, session.id)).run();
+    } catch { /* non-critical */ }
+
     return c.json({
       user: {
         id: user.id,
@@ -455,6 +545,8 @@ app.get("/api/auth/session", (c) => {
         image: user.image,
         role: user.role,
         isAnonymous: false,
+        emailVerified: !!user.emailVerified,
+        twoFactorEnabled: !!user.twoFactorEnabled,
         tradingExperience: user.tradingExperience,
         country: user.country,
         timezone: user.timezone,
@@ -748,6 +840,7 @@ app.route("/api/payouts", payoutsRouter);
 app.route("/api/seed", seedRouter);
 app.route("/api/test-email", testEmailRouter);
 app.route("/api/admin/secrets", secretsRouter);
+app.route("/api/auth", securityRouter);
 
 // ═══════════════════════════════════════════════
 //  VITE PLUGIN — mounts Hono into dev server

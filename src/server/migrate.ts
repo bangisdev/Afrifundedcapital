@@ -812,6 +812,28 @@ export function runMigrations(sqlite: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_msq_status ON mt5_sync_queue(status);
   `);
 
+  // ─── Column migrations for pre-existing databases ──────────────────
+  // CREATE TABLE IF NOT EXISTS never alters existing tables, so any column
+  // added after a deployment must be applied explicitly. SQLite lacks
+  // "ADD COLUMN IF NOT EXISTS", so guard each one via PRAGMA table_info.
+  const existingUserColumns = new Set(
+    (sqlite.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>).map((c) => c.name),
+  );
+  const addUserColumn = (name: string, ddl: string) => {
+    if (existingUserColumns.has(name)) return;
+    try {
+      sqlite.exec(`ALTER TABLE users ADD COLUMN ${ddl}`);
+      console.log(`[DB] Added users.${name} column`);
+    } catch (e) {
+      console.warn(`[DB] Could not add users.${name}:`, e);
+    }
+  };
+  addUserColumn("email_verification_token", "email_verification_token TEXT");
+  addUserColumn("email_verification_expires_at", "email_verification_expires_at INTEGER");
+  addUserColumn("reset_password_token", "reset_password_token TEXT");
+  addUserColumn("reset_password_expires_at", "reset_password_expires_at INTEGER");
+  addUserColumn("two_factor_backup_codes", "two_factor_backup_codes TEXT");
+
   console.log("[DB] All tables created/verified successfully.");
 
   scrubStoredSecrets(sqlite);

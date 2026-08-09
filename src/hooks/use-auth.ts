@@ -17,6 +17,8 @@ interface User {
   notificationPreferences?: Record<string, boolean> | null;
   isDemoSeeded?: boolean;
   referralCode?: string | null;
+  emailVerified?: boolean;
+  twoFactorEnabled?: boolean;
   [key: string]: unknown;
 }
 
@@ -119,7 +121,21 @@ export function useAuth() {
         throw new Error(err.message || err.error || "Sign in failed");
       }
 
+      const body = await res.json().catch(() => ({}));
+
+      // 2FA gate: password is correct but the account requires a TOTP/backup
+      // code. The caller shows the code screen and finishes via
+      // /api/auth/2fa/verify — no session is created yet.
+      if (body?.requiresTwoFactor) {
+        return {
+          requiresTwoFactor: true as const,
+          challengeToken: body.challengeToken as string,
+          challengeExpiresAt: body.challengeExpiresAt as number | undefined,
+        };
+      }
+
       await fetchSession();
+      return { requiresTwoFactor: false as const };
     },
     [fetchSession],
   );

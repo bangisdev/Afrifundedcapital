@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
 import { readResponseBody, errorMessageOf } from "@/lib/api";
 import logo from "@/assets/logo.svg";
-import { ArrowRight, Loader2, Mail, Lock, UserIcon, AlertCircle } from "lucide-react";
+import { ArrowRight, Loader2, Mail, Lock, UserIcon, AlertCircle, ShieldCheck, KeyRound, CheckCircle2 } from "lucide-react";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -24,11 +24,17 @@ interface AuthProps {
   redirectAfterAuth?: string;
 }
 
+type AuthMode = "sign-in" | "sign-up" | "forgot" | "reset" | "verify" | "2fa";
+
 function Auth({ redirectAfterAuth }: AuthProps = {}) {
-  const { isLoading: authLoading, isAuthenticated, signIn } = useAuth();
+  const { isLoading: authLoading, isAuthenticated, signIn, refetch } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const refCode = useMemo(() => searchParams.get("ref") || null, [searchParams]);
+
+  // Deep-link tokens: /auth?verify=<token> and /auth?reset=<token> (from emails).
+  const verifyToken = useMemo(() => searchParams.get("verify"), [searchParams]);
+  const resetToken = useMemo(() => searchParams.get("reset"), [searchParams]);
 
   // Optional ?returnTo= deep link — only accept same-origin relative paths
   // (reject protocol-relative and backslash-prefixed values to avoid open redirects).
@@ -39,15 +45,56 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     return raw;
   }, [searchParams]);
   const redirectPath = returnTo || redirectAfterAuth || "/dashboard";
-  const [mode, setMode] = useState<"sign-in" | "sign-up">(refCode ? "sign-up" : "sign-in");
+
+  const initialMode: AuthMode = verifyToken ? "verify" : resetToken ? "reset" : refCode ? "sign-up" : "sign-in";
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [rememberMe, setRememberMe] = useState(
     () => localStorage.getItem(REMEMBER_KEY) === "true",
   );
+
+  // 2FA challenge state
+  const [challengeToken, setChallengeToken] = useState<string | null>(null);
+  const [code, setCode] = useState("");
+  const [useBackupCode, setUseBackupCode] = useState(false);
+
+  // Verify-email auto-run on mount
+  useEffect(() => {
+    if (mode !== "verify" || !verifyToken || success) return;
+    let cancelled = false;
+    setIsLoading(true);
+    setError(null);
+    void (async () => {
+      try {
+        const res = await fetch("/api/auth/verify-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ token: verifyToken }),
+        });
+        if (!res.ok) {
+          throw new Error(errorMessageOf(await readResponseBody(res), res.status));
+        }
+        if (!cancelled) {
+          setSuccess("Your email has been verified. You can now sign in.");
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Verification failed. The link may be invalid or expired.");
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, verifyToken, success]);
 
   // Mount-side: if already authenticated, redirect immediately
   useEffect(() => {
@@ -60,11 +107,20 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
+    setSuccess(null);
     try {
       const formData = new FormData();
       formData.set("email", email);
       formData.set("password", password);
-      await signIn("email", formData);
+      const result = await signIn("email", formData);
+
+      if (result?.requiresTwoFactor) {
+        setChallengeToken(result.challengeToken);
+        setCode("");
+        setUseBackupCode(false);
+        setMode("2fa");
+        return;
+      }
 
       navigate(redirectPath, { replace: true });
     } catch (err) {
@@ -75,10 +131,37 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     }
   };
 
+  const handleTwoFactor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!challengeToken) return;
+    setIsLoading(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch("/api/auth/2fa/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ challengeToken, code: code.trim() }),
+      });
+      if (!res.ok) {
+        throw new Error(errorMessageOf(await readResponseBody(res), res.status));
+      }
+      await refetch();
+      navigate(redirectPath, { replace: true });
+    } catch (err) {
+      console.error("2FA error:", err);
+      setError(err instanceof Error ? err.message : "Verification failed. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
+    setSuccess(null);
     try {
       const res = await fetch("/api/auth/sign-up/email", {
         method: "POST",
@@ -97,6 +180,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       formData.set("password", password);
       await signIn("email", formData);
 
+      setSuccess("Account created! Check your inbox to verify your email.");
       navigate(redirectPath, { replace: true });
     } catch (err) {
       console.error("Sign up error:", err);
@@ -106,29 +190,93 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     }
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email }),
+      });
+      if (!res.ok) {
+        throw new Error(errorMessageOf(await readResponseBody(res), res.status));
+      }
+      setSuccess("If an account exists for that email, a password reset link has been sent.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ token: resetToken, password }),
+      });
+      if (!res.ok) {
+        throw new Error(errorMessageOf(await readResponseBody(res), res.status));
+      }
+      setSuccess("Your password has been reset. Please sign in with your new password.");
+      setMode("sign-in");
+      setPassword("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Password reset failed. The link may be invalid or expired.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const errorBlock = error ? (
+    <div className="flex items-center gap-2 text-sm text-red-500 bg-red-500/5 rounded-md p-2.5">
+      <AlertCircle className="h-4 w-4 shrink-0" />
+      <span>{error}</span>
+    </div>
+  ) : null;
+
+  const successBlock = success ? (
+    <div className="flex items-center gap-2 text-sm text-green-600 bg-green-500/5 rounded-md p-2.5">
+      <CheckCircle2 className="h-4 w-4 shrink-0" />
+      <span>{success}</span>
+    </div>
+  ) : null;
+
+  const header = (title: string, description: string) => (
+    <CardHeader className="text-center">
+      <div className="flex justify-center">
+        <img
+          src={logo}
+          alt="Logo"
+          width={64}
+          height={64}
+          className="rounded-lg mb-4 mt-4 cursor-pointer"
+          onClick={() => navigate("/")}
+        />
+      </div>
+      <CardTitle className="text-xl">{title}</CardTitle>
+      <CardDescription>{description}</CardDescription>
+    </CardHeader>
+  );
+
   return (
     <div className="min-h-screen flex flex-col">
       <div className="flex-1 flex items-center justify-center">
         <div className="flex items-center justify-center h-full flex-col">
           <Card className="min-w-[350px] pb-0 border shadow-md">
-            {mode === "sign-in" ? (
+            {mode === "sign-in" && (
               <>
-                <CardHeader className="text-center">
-                  <div className="flex justify-center">
-                    <img
-                      src={logo}
-                      alt="Logo"
-                      width={64}
-                      height={64}
-                      className="rounded-lg mb-4 mt-4 cursor-pointer"
-                      onClick={() => navigate("/")}
-                    />
-                  </div>
-                  <CardTitle className="text-xl">Welcome Back</CardTitle>
-                  <CardDescription>
-                    Sign in to your account
-                  </CardDescription>
-                </CardHeader>
+                {header("Welcome Back", "Sign in to your account")}
                 <form onSubmit={handleSignIn}>
                   <CardContent className="space-y-4">
                     <div className="relative">
@@ -177,12 +325,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                       </Label>
                     </div>
 
-                    {error && (
-                      <div className="flex items-center gap-2 text-sm text-red-500 bg-red-500/5 rounded-md p-2.5">
-                        <AlertCircle className="h-4 w-4 shrink-0" />
-                        <span>{error}</span>
-                      </div>
-                    )}
+                    {errorBlock}
 
                     <Button type="submit" className="w-full" disabled={isLoading}>
                       {isLoading ? (
@@ -198,10 +341,19 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                 </form>
                 <CardFooter className="flex-col gap-2 pb-6">
                   <div className="text-xs text-muted-foreground">
+                    <button
+                      type="button"
+                      onClick={() => { setMode("forgot"); setError(null); setSuccess(null); }}
+                      className="underline hover:text-foreground transition-colors"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
                     Don&apos;t have an account?{" "}
                     <button
                       type="button"
-                      onClick={() => { setMode("sign-up"); setError(null); }}
+                      onClick={() => { setMode("sign-up"); setError(null); setSuccess(null); }}
                       className="underline hover:text-foreground transition-colors"
                     >
                       Sign up
@@ -209,24 +361,11 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                   </div>
                 </CardFooter>
               </>
-            ) : (
+            )}
+
+            {mode === "sign-up" && (
               <>
-                <CardHeader className="text-center">
-                  <div className="flex justify-center">
-                    <img
-                      src={logo}
-                      alt="Logo"
-                      width={64}
-                      height={64}
-                      className="rounded-lg mb-4 mt-4 cursor-pointer"
-                      onClick={() => navigate("/")}
-                    />
-                  </div>
-                  <CardTitle className="text-xl">Create Account</CardTitle>
-                  <CardDescription>
-                    Join AfriFundedCapital today
-                  </CardDescription>
-                </CardHeader>
+                {header("Create Account", "Join AfriFundedCapital today")}
                 <form onSubmit={handleSignUp}>
                   <CardContent className="space-y-4">
                     <div className="relative">
@@ -267,12 +406,8 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                       />
                     </div>
 
-                    {error && (
-                      <div className="flex items-center gap-2 text-sm text-red-500 bg-red-500/5 rounded-md p-2.5">
-                        <AlertCircle className="h-4 w-4 shrink-0" />
-                        <span>{error}</span>
-                      </div>
-                    )}
+                    {errorBlock}
+                    {successBlock}
 
                     <Button type="submit" className="w-full" disabled={isLoading}>
                       {isLoading ? (
@@ -291,10 +426,162 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                     Already have an account?{" "}
                     <button
                       type="button"
-                      onClick={() => { setMode("sign-in"); setError(null); }}
+                      onClick={() => { setMode("sign-in"); setError(null); setSuccess(null); }}
                       className="underline hover:text-foreground transition-colors"
                     >
                       Sign in
+                    </button>
+                  </div>
+                </CardFooter>
+              </>
+            )}
+
+            {mode === "forgot" && (
+              <>
+                {header("Reset Password", "Enter your email and we'll send you a reset link")}
+                <form onSubmit={handleForgotPassword}>
+                  <CardContent className="space-y-4">
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="name@example.com"
+                        type="email"
+                        className="pl-9"
+                        disabled={isLoading}
+                        required
+                      />
+                    </div>
+                    {errorBlock}
+                    {successBlock}
+                    <Button type="submit" className="w-full" disabled={isLoading}>
+                      {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send Reset Link"}
+                    </Button>
+                  </CardContent>
+                </form>
+                <CardFooter className="flex-col gap-2 pb-6">
+                  <div className="text-xs text-muted-foreground">
+                    Remembered it?{" "}
+                    <button
+                      type="button"
+                      onClick={() => { setMode("sign-in"); setError(null); setSuccess(null); }}
+                      className="underline hover:text-foreground transition-colors"
+                    >
+                      Back to sign in
+                    </button>
+                  </div>
+                </CardFooter>
+              </>
+            )}
+
+            {mode === "reset" && (
+              <>
+                {header("Choose a New Password", "Enter your new password below")}
+                <form onSubmit={handleResetPassword}>
+                  <CardContent className="space-y-4">
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="New password (min 6 characters)"
+                        type="password"
+                        className="pl-9"
+                        disabled={isLoading}
+                        required
+                        minLength={6}
+                      />
+                    </div>
+                    {errorBlock}
+                    {successBlock}
+                    <Button type="submit" className="w-full" disabled={isLoading}>
+                      {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Update Password"}
+                    </Button>
+                  </CardContent>
+                </form>
+                <CardFooter className="flex-col gap-2 pb-6">
+                  <div className="text-xs text-muted-foreground">
+                    <button
+                      type="button"
+                      onClick={() => { setMode("sign-in"); setError(null); setSuccess(null); }}
+                      className="underline hover:text-foreground transition-colors"
+                    >
+                      Back to sign in
+                    </button>
+                  </div>
+                </CardFooter>
+              </>
+            )}
+
+            {mode === "verify" && (
+              <>
+                {header("Verify Your Email", "Confirming your email address")}
+                <CardContent className="space-y-4">
+                  {isLoading && !success && !error && (
+                    <div className="flex flex-col items-center gap-3 py-4">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">Verifying…</p>
+                    </div>
+                  )}
+                  {successBlock}
+                  {errorBlock}
+                  <Button
+                    type="button"
+                    className="w-full"
+                    onClick={() => { setMode("sign-in"); setError(null); setSuccess(null); }}
+                  >
+                    Continue to Sign In
+                  </Button>
+                </CardContent>
+              </>
+            )}
+
+            {mode === "2fa" && (
+              <>
+                {header("Two-Factor Authentication", "Enter the code from your authenticator app")}
+                <form onSubmit={handleTwoFactor}>
+                  <CardContent className="space-y-4">
+                    <div className="relative">
+                      <ShieldCheck className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        value={code}
+                        onChange={(e) => setCode(e.target.value)}
+                        placeholder={useBackupCode ? "Backup code" : "6-digit code"}
+                        inputMode={useBackupCode ? "text" : "numeric"}
+                        className="pl-9 tracking-widest"
+                        disabled={isLoading}
+                        required
+                        maxLength={useBackupCode ? 10 : 6}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setUseBackupCode((v) => !v); setCode(""); setError(null); }}
+                      className="text-xs text-muted-foreground underline hover:text-foreground transition-colors"
+                    >
+                      {useBackupCode ? "Use authenticator code instead" : "Use a backup code"}
+                    </button>
+                    {errorBlock}
+                    <Button type="submit" className="w-full" disabled={isLoading || !challengeToken}>
+                      {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : (
+                        <>
+                          Verify
+                          <KeyRound className="ml-2 h-4 w-4" />
+                        </>
+                      )}
+                    </Button>
+                  </CardContent>
+                </form>
+                <CardFooter className="flex-col gap-2 pb-6">
+                  <div className="text-xs text-muted-foreground">
+                    Can&apos;t access your codes?{" "}
+                    <button
+                      type="button"
+                      onClick={() => { setMode("sign-in"); setChallengeToken(null); setError(null); }}
+                      className="underline hover:text-foreground transition-colors"
+                    >
+                      Back to sign in
                     </button>
                   </div>
                 </CardFooter>

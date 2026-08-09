@@ -129,6 +129,16 @@ SecretKeyField  →  PUT/DELETE /api/admin/secrets/:name      (admin-only, audit
 - **E2E (Playwright):** `e2e/admin-flow.spec.ts` is split into greppable chunks (see package.json `test:e2e:*` scripts); each chunk boots its own Vite server on port 5174 with `E2E_TESTING=1` and an isolated `.e2e/` DB.
 - **CI:** `.github/workflows/e2e.yml` / `e2e-matrix.yml` run the e2e chunks in parallel plus a `secrets-scan` job; `secret-scan.yml` runs gitleaks.
 
+## Auth Hardening
+
+Account security features implemented on top of the session-cookie auth (all under `/api/auth/*`, in `src/server/routes/security.ts` + the inline routes in `src/server/index.ts`):
+
+- **Email verification** — new sign-ups start `email_verified = 0` and receive a 24h verification link (`/auth?verify=<token>`). Sign-in still works, but the dashboard shows a persistent banner with a resend option until verified. Verified accounts are required before purchases.
+- **Password recovery** — `POST /api/auth/forgot-password` (never reveals whether an account exists) mails a 30-minute reset link (`/auth?reset=<token>`); `POST /api/auth/reset-password` invalidates every active session. `POST /api/auth/change-password` (authed) verifies the current password first.
+- **Two-factor authentication (TOTP)** — RFC 6238 via `src/server/lib/security.ts` (no extra dependency). Authed `2fa/setup` returns a QR code (`qrcode`), manual-entry secret, and 10 single-use backup codes (stored as SHA-256 hashes). Sign-in with 2FA enabled returns a 5-minute challenge (`requiresTwoFactor` + `challengeToken`), completed via `2fa/verify`; backup codes are accepted once.
+- **Session management** — every session records `device_info` + `ip_address` + `last_active_at`. `GET /sessions`, `POST /sessions/revoke`, and `POST /sessions/revoke-others` let users audit and kill devices. `GET /login-history` lists recent sign-in attempts (success/failure with device + IP).
+- **Audit trail** — `auth.signup`, `auth.signin`, `auth.email_verified`, `auth.password_reset`, `auth.2fa_enabled`, `auth.session_revoked`, … are written via `lib/audit.ts` and surface in the Admin audit logs.
+
 ## Setup
 
 This project is set up already and running on a cloud environment, as well as a convex development in the sandbox.

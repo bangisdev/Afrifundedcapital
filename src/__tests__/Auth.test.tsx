@@ -8,9 +8,12 @@ import React from "react";
 // ─── Mock: react-router ───────────────────────────────────
 const mockNavigate = vi.fn();
 const mockSetSearchParams = vi.fn();
+// Mutable search params so tests can simulate deep links like /auth?verify=...
+let searchParamsMock = new URLSearchParams();
+
 vi.mock("react-router", () => ({
   useNavigate: () => mockNavigate,
-  useSearchParams: () => [new URLSearchParams(), mockSetSearchParams],
+  useSearchParams: () => [searchParamsMock, mockSetSearchParams],
 }));
 
 // ─── Mock: useAuth ─────────────────────────────────────────
@@ -46,6 +49,9 @@ vi.mock("lucide-react", () => {
     Lock: createIcon("Lock"),
     UserIcon: createIcon("UserIcon"),
     AlertCircle: createIcon("AlertCircle"),
+    CheckCircle2: createIcon("CheckCircle2"),
+    ShieldCheck: createIcon("ShieldCheck"),
+    KeyRound: createIcon("KeyRound"),
     BarChart3: createIcon("BarChart3"),
     Shield: createIcon("Shield"),
     Zap: createIcon("Zap"),
@@ -122,6 +128,7 @@ describe("Auth Page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    searchParamsMock = new URLSearchParams();
     mockUseAuth.mockReturnValue({
       isLoading: false,
       isAuthenticated: false,
@@ -718,6 +725,84 @@ describe("Auth Page", () => {
         const errorContainer = errorEl.closest("div");
         expect(errorContainer?.className).toContain("text-red-500");
       });
+    });
+  });
+
+  describe("Auth Hardening Flows", () => {
+    it("shows the 2FA code screen when sign-in requires two-factor", async () => {
+      mockSignIn.mockResolvedValueOnce({
+        requiresTwoFactor: true,
+        challengeToken: "chal-123",
+      } as any);
+      const user = userEvent.setup();
+      render(<AuthPage />);
+
+      await user.type(screen.getByPlaceholderText("name@example.com"), "x@x.com");
+      await user.type(screen.getByPlaceholderText("Password"), "pass123");
+      await user.click(screen.getByRole("button", { name: /Sign In/ }));
+
+      await waitFor(() => {
+        expect(screen.getByText("Two-Factor Authentication")).toBeTruthy();
+      });
+      expect(screen.getByPlaceholderText("6-digit code")).toBeTruthy();
+      // No navigation until the code is verified
+      expect(mockNavigate).not.toHaveBeenCalled();
+    });
+
+    it("can switch to a backup code during the 2FA step", async () => {
+      mockSignIn.mockResolvedValueOnce({
+        requiresTwoFactor: true,
+        challengeToken: "chal-123",
+      } as any);
+      const user = userEvent.setup();
+      render(<AuthPage />);
+
+      await user.type(screen.getByPlaceholderText("name@example.com"), "x@x.com");
+      await user.type(screen.getByPlaceholderText("Password"), "pass123");
+      await user.click(screen.getByRole("button", { name: /Sign In/ }));
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText("6-digit code")).toBeTruthy();
+      });
+      await user.click(screen.getByRole("button", { name: /Use a backup code/ }));
+      expect(screen.getByPlaceholderText("Backup code")).toBeTruthy();
+    });
+
+    it("forgot-password sends the reset email and shows a confirmation", async () => {
+      const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true }),
+      } as Response);
+      const user = userEvent.setup();
+      render(<AuthPage />);
+
+      await user.click(screen.getByRole("button", { name: /Forgot password/i }));
+      expect(screen.getByText("Reset Password")).toBeTruthy();
+      await user.type(screen.getByPlaceholderText("name@example.com"), "x@x.com");
+      await user.click(screen.getByRole("button", { name: /Send Reset Link/ }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/reset link has been sent/i)).toBeTruthy();
+      });
+      fetchSpy.mockRestore();
+    });
+
+    it("verify-email mode runs the verification request from the URL token", async () => {
+      const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true, email: "x@x.com" }),
+      } as Response);
+      searchParamsMock = new URLSearchParams({ verify: "tok-123" });
+      render(<AuthPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Your email has been verified/i)).toBeTruthy();
+      });
+      expect(fetchSpy).toHaveBeenCalledWith("/api/auth/verify-email", expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ token: "tok-123" }),
+      }));
+      fetchSpy.mockRestore();
     });
   });
 });

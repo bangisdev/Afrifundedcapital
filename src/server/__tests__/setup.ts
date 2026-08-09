@@ -151,12 +151,16 @@ export async function buildTestApp(): Promise<Hono> {
     const hashedPassword = await hashPw(password);
     const now = Date.now();
 
+    // Mirrors production: new accounts start unverified with a token so the
+    // security router's verify-email flow can be exercised in tests.
     const user = db
       .insert(schema.users)
       .values({
         name: name || email.split("@")[0],
         email,
-        emailVerified: true,
+        emailVerified: false,
+        emailVerificationToken: genToken(),
+        emailVerificationExpiresAt: now + 24 * 60 * 60 * 1000,
         role: null,
         onboardingComplete: false,
         createdAt: now,
@@ -174,6 +178,21 @@ export async function buildTestApp(): Promise<Hono> {
     db.insert(schema.sessions)
       .values({ id: sessionId, token, userId: user.id, expiresAt: now + SESSION_DURATION_MS, createdAt: now })
       .execute();
+
+    // Mirrors production: record the sign-up as a successful login entry.
+    try {
+      db.insert(schema.loginHistory)
+        .values({
+          userId: user.id,
+          ipAddress: (c.req.header("x-forwarded-for") || "").split(",")[0]?.trim() || "unknown",
+          deviceInfo: (c.req.header("user-agent") || "").slice(0, 200),
+          location: null,
+          success: true,
+          failedReason: null,
+          timestamp: now,
+        })
+        .run();
+    } catch { /* non-critical */ }
 
     c.header("Set-Cookie", `${COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_DURATION_MS / 1000}`);
 
@@ -216,17 +235,40 @@ export async function buildTestApp(): Promise<Hono> {
     const valid = await verifyPw(passwordHash, password);
     if (!valid) return c.json({ error: "Invalid email or password" }, 401);
 
-    const token = genToken();
     const now = Date.now();
+
+    // Mirrors production: 2FA-enabled accounts require a challenge step before
+    // a session is issued (verified via /api/auth/2fa/verify).
+    if (user.twoFactorEnabled) {
+      const { createTwoFactorChallenge } = await import("../lib/security");
+      const challenge = createTwoFactorChallenge(user.id);
+      return c.json({
+        requiresTwoFactor: true,
+        challengeToken: challenge.token,
+        challengeExpiresAt: challenge.expiresAt,
+        user: { id: user.id, email: user.email },
+      });
+    }
+
+    const token = genToken();
     const sessionId = genToken();
     db.insert(schema.sessions)
-      .values({ id: sessionId, token, userId: user.id, expiresAt: now + SESSION_DURATION_MS, createdAt: now })
+      .values({
+        id: sessionId,
+        token,
+        userId: user.id,
+        deviceInfo: (c.req.header("user-agent") || "").slice(0, 200),
+        ipAddress: (c.req.header("x-forwarded-for") || "").split(",")[0]?.trim() || "unknown",
+        lastActiveAt: now,
+        expiresAt: now + SESSION_DURATION_MS,
+        createdAt: now,
+      })
       .execute();
 
     c.header("Set-Cookie", `${COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_DURATION_MS / 1000}`);
 
     return c.json({
-      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      user: { id: user.id, name: user.name, email: user.email, role: user.role, emailVerified: !!user.emailVerified },
       session: { id: token, expiresAt: now + SESSION_DURATION_MS },
     });
   });
@@ -308,6 +350,7 @@ export async function buildTestApp(): Promise<Hono> {
   const seedModule = await import("../routes/seed");
   const secretsModule = await import("../routes/secrets");
   const testEmailModule = await import("../routes/test-email");
+  const securityModule = await import("../routes/security");
 
   app.route("/api/kyc", kycModule.default);
   app.route("/api/payments", paymentsModule.default);
@@ -324,6 +367,7 @@ export async function buildTestApp(): Promise<Hono> {
   app.route("/api/seed", seedModule.default);
   app.route("/api/admin/secrets", secretsModule.default);
   app.route("/api/test-email", testEmailModule.default);
+  app.route("/api/auth", securityModule.default);
 
   // Unmock so other tests can re-mock cleanly
   vi.doUnmock("../db");
