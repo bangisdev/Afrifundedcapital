@@ -5,6 +5,7 @@ import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { newsBlackoutWindow } from "@/lib/utils";
 import {
   Loader2,
   Plus,
@@ -86,6 +87,14 @@ const TEMPLATE_TYPES = [
 
 function formatNgn(n: number) {
   return `₦${n.toLocaleString()}`;
+}
+
+// Compact news-trading rule label for the challenges table — mirrors the
+// dashboard/landing "No · 15m" formatting via the shared blackout formatter.
+function newsRulesLabel(rules: any): string {
+  if (rules?.allowNewsTrading !== false) return "News on";
+  const win = newsBlackoutWindow(rules || {});
+  return win ? `No · ${win}` : "No · no blackout";
 }
 
 export default function AdminChallenges() {
@@ -477,6 +486,7 @@ export default function AdminChallenges() {
                     <th className="text-left p-3 font-medium text-muted-foreground">{challengeSortHeader("accountSize", "Account Size")}</th>
                     <th className="text-left p-3 font-medium text-muted-foreground">{challengeSortHeader("amountPaid", "Amount Paid")}</th>
                     <th className="text-left p-3 font-medium text-muted-foreground">{challengeSortHeader("status", "Status")}</th>
+                    <th className="text-left p-3 font-medium text-muted-foreground">Rules</th>
                     <th className="text-left p-3 font-medium text-muted-foreground">{challengeSortHeader("createdAt", "Created")}</th>
                   </tr>
                 </thead>
@@ -501,6 +511,22 @@ export default function AdminChallenges() {
                           className="text-[10px]"
                         >
                           {ch.status}
+                        </Badge>
+                      </td>
+                      <td className="p-3">
+                        <Badge
+                          className={
+                            ch.templateRules?.allowNewsTrading !== false
+                              ? "text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                              : "text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/20"
+                          }
+                          title={
+                            ch.templateRules?.allowNewsTrading !== false
+                              ? "News trading allowed"
+                              : "News trading disabled — blocked around high-impact events per the template blackout window"
+                          }
+                        >
+                          {newsRulesLabel(ch.templateRules)}
                         </Badge>
                       </td>
                       <td className="p-3 text-muted-foreground">

@@ -386,7 +386,32 @@ app.get("/admin/all", requireAuth, requireAdmin, (c) => {
     .from(userChallenges)
     .orderBy(sortOrder)
     .all();
-  return c.json(challenges);
+
+  // Stamp the template name + rule set (news blackout window etc.) onto each
+  // row so the admin challenges table can show trading-rule details inline,
+  // mirroring the /my/:id detail stamp.
+  const templates = db.select().from(challengeTemplates).all();
+  const templateById = new Map(templates.map((t) => [t.id, t]));
+
+  return c.json(
+    challenges.map((ch) => {
+      const template = templateById.get(ch.templateId);
+      return {
+        ...ch,
+        templateName: template?.name || null,
+        templateRules: template
+          ? {
+              allowNewsTrading: template.allowNewsTrading,
+              allowWeekendHolding: template.allowWeekendHolding,
+              allowEATrading: template.allowEATrading,
+              allowCopyTrading: template.allowCopyTrading,
+              newsBlackoutBeforeMinutes: template.newsBlackoutBeforeMinutes,
+              newsBlackoutAfterMinutes: template.newsBlackoutAfterMinutes,
+            }
+          : null,
+      };
+    })
+  );
 });
 
 // Admin: Challenge stats
