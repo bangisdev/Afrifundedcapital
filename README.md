@@ -342,6 +342,36 @@ Configure the gateway in **Admin → Settings → MT5** (persisted as the `mt5_c
 2. Set `enabled: true`, the gateway `baseUrls`, `apiKey`, and manager credentials in Admin → Settings → MT5.
 3. Click **Test connection** in the admin MT5 page — the scheduler starts syncing, retrying, and reconciling automatically.
 
+# Security
+
+## Committed-secret guard (`check:secrets`)
+
+`bun run check:secrets` (or `bash scripts/check-secrets.sh`) scans the working tree and exits `1` if any payment, email, JWT, SMTP, or MT5 gateway secret values have been committed. It runs as the `secrets-scan` job in both workflow files (see [Testing → CI](#ci)) on every push and PR, in parallel with the e2e matrix.
+
+The check deliberately matches secret **values**, not env-var names — references like `process.env.FLW_SECRET_KEY` appear all over the codebase legitimately, but a real Flutterwave secret starts with `FLWSECK`, and a real Resend API key is `re_` + 24+ characters. Assignment patterns accept `.env` (`KEY=value`), YAML (`key: value`), and JSON (`"KEY": "value"`) quoting forms.
+
+### What gets flagged
+
+| Secret class | Matched shape |
+| --- | --- |
+| Flutterwave (payment gateway) | `FLWSECK-…` / `FLWSECK_TEST-…` values (the public `FLWPUBK` prefix is safe) |
+| Resend (email) | `re_` + 24+ alphanumeric characters |
+| Hardcoded gateway / JWT / SMTP assignments | `FLW_SECRET_KEY`, `FLW_SECRET_HASH`, `RESEND_API_KEY`, `PAYSTACK_SECRET_KEY`, `JWT_PRIVATE_KEY`, `SMTP_PASS`, `SMTP_PASSWORD`, `MT5_API_KEY`, `MT5_GATEWAY_API_KEY` followed by `=` or `:` and a real-looking value (8+ chars) |
+| MT5 gateway `apiKey` fields | Hardcoded `apiKey: …` / `apiKey = …` / `"apiKey": "…"` with a 16+ char token (skips code expressions like `cfg.apiKey`, type declarations, and derived fields such as `apiKeyLast4` / `hasApiKey`) |
+
+### What is deliberately not flagged
+
+- **`SMTP_HOST` / `SMTP_PORT` / `SMTP_USER`** — connection metadata, not secrets.
+- **`__tests__` directories** — unit tests carry intentional mock credentials (e.g. `payments.test.ts`) to verify secrets are scrubbed from the DB and never rendered; those are fake by design. GitHub's own secret scanning still covers test files for real keys.
+- **Placeholders & indirection** — `(production key)` forms, `$VAR` references, empty / `""` values, and docs or comments that merely *name* the env vars or describe the key formats.
+
+### Example
+
+```bash
+bun run check:secrets           # exit 0 when clean
+bash scripts/check-secrets.sh   # exit 1 + prints the offending file:line list
+```
+
 # Testing
 
 ## Unit & integration tests (Vitest)
@@ -409,3 +439,5 @@ The same flag accelerates the MT5 background scheduler (`src/server/lib/mt5/sche
 ### CI
 
 `CI=true bun test:e2e` runs with retries and forbids `test.only`. In headless environments the Freebuff platform cold-start overlay can delay first paint, so the suite's `warmUp` helper retries page loads; when running against a raw local dev server this isn't an issue.
+
+Every push and PR also runs the `secrets-scan` job — `bun run check:secrets` — in parallel with the e2e matrix (see [Security → Committed-secret guard](#committed-secret-guard-checksecrets)).
