@@ -5,7 +5,7 @@
 # The check deliberately matches secret *values*, not env-var names: references
 # like `process.env.FLW_SECRET_KEY` and `process.env.RESEND_API_KEY` appear
 # all over the codebase legitimately, but a real Flutterwave secret starts with
-# `FLWSECK`, and a real Resend API key starts with `re_` followed by 20+
+# `FLWSECK`, and a real Resend API key starts with `re_` followed by 24+
 # characters. We also flag hardcoded assignments of secret env vars
 # (`FLW_SECRET_KEY=…`, `SMTP_PASSWORD=…`, `JWT_PRIVATE_KEY=…`,
 # `MT5_GATEWAY_API_KEY=…`) and hardcoded MT5 gateway `apiKey` fields to catch
@@ -13,8 +13,18 @@
 # `.env` (`KEY=value`), YAML (`key: value`) and JSON (`"KEY": "value"`)
 # quoting forms.
 #
+# Kept in sync with .gitleaks.toml (the pre-commit gate run by
+# .github/workflows/secret-scan.yml): same value thresholds, assignment names
+# and exclusions. gitleaks is deliberately the stricter superset — it also
+# flags public keys (FLWPUBK, pk_live_) and generic api/secret-key
+# assignments; this script intentionally ignores those to stay deterministic.
+# When adding a pattern here, mirror it in .gitleaks.toml (and vice versa),
+# then update the README Security section.
+#
 # What is deliberately NOT flagged:
 #   - SMTP_HOST / SMTP_PORT / SMTP_USER — connection metadata, not secrets.
+#   - Public keys (FLWPUBK-*, pk_live_*) — not secrets; gitleaks flags them
+#     for completeness but this gate deliberately does not.
 #   - `__tests__` directories — unit tests carry intentional MOCK credentials
 #     (e.g. payments.test.ts sets `FLW_SECRET_KEY = "<your-key>"`) precisely
 #     to verify that secrets are scrubbed from the DB and never rendered.
@@ -64,11 +74,19 @@ done
 #    (`apiKey: typeof body.apiKey === "string" ? …`, `cfg.apiKey`,
 #    `apiKey: e.target.value`), type declarations (`apiKey: string;`), empty
 #    defaults, and derived fields like `apiKeyLast4` / `hasApiKey`.
+# 5. Private-key PEM blocks — `-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE
+#    KEY-----` (mirrors the gitleaks `private-key-block` rule). A committed
+#    private key is a credential no matter which service it belongs to.
+# 6. Paystack / Stripe secret values — `sk_live_…` / `sk_test_…` + 16+ chars
+#    (mirrors the gitleaks `paystack-secret` / `stripe-live-secret` rules).
+#    Public keys (`pk_live_`, `FLWPUBK`) are deliberately not matched.
 PATTERNS=(
   'FLWSECK[-_](TEST[-_])?[A-Za-z0-9]{8,}'
   're_[A-Za-z0-9]{24,}'
   '["'"'"']?(FLW_SECRET_KEY|FLW_SECRET_HASH|RESEND_API_KEY|PAYSTACK_SECRET_KEY|JWT_PRIVATE_KEY|SMTP_PASS|SMTP_PASSWORD|MT5_API_KEY|MT5_GATEWAY_API_KEY)["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?[[:alnum:]_][^[:space:]]{7,}'
   '["'"'"']?apiKey["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_-]{16,}'
+  '-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----'
+  'sk_(live|test)_[A-Za-z0-9]{16,}'
 )
 
 # Build explicit `-e pattern` pairs — `"${ARRAY[@]/#/-e }"` would glue the

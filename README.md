@@ -348,6 +348,8 @@ Configure the gateway in **Admin → Settings → MT5** (persisted as the `mt5_c
 
 `bun run check:secrets` (or `bash scripts/check-secrets.sh`) scans the working tree and exits `1` if any payment, email, JWT, SMTP, or MT5 gateway secret values have been committed. It runs as the `secrets-scan` job in both workflow files (see [Testing → CI](#ci)) on every push and PR, in parallel with the e2e matrix.
 
+The same patterns are enforced pre-commit by **gitleaks** (`.gitleaks.toml`, run in `.github/workflows/secret-scan.yml`) — the two configs are kept in sync. gitleaks is deliberately the stricter superset: it also flags public keys (`FLWPUBK-…`, `pk_live_…`) and generic `api_key` / `secret_key` assignments, which this gate intentionally ignores to stay deterministic.
+
 The check deliberately matches secret **values**, not env-var names — references like `process.env.FLW_SECRET_KEY` appear all over the codebase legitimately, but a real Flutterwave secret starts with `FLWSECK`, and a real Resend API key is `re_` + 24+ characters. Assignment patterns accept `.env` (`KEY=value`), YAML (`key: value`), and JSON (`"KEY": "value"`) quoting forms.
 
 ### What gets flagged
@@ -358,11 +360,13 @@ The check deliberately matches secret **values**, not env-var names — referenc
 | Resend (email) | `re_` + 24+ alphanumeric characters |
 | Hardcoded gateway / JWT / SMTP assignments | `FLW_SECRET_KEY`, `FLW_SECRET_HASH`, `RESEND_API_KEY`, `PAYSTACK_SECRET_KEY`, `JWT_PRIVATE_KEY`, `SMTP_PASS`, `SMTP_PASSWORD`, `MT5_API_KEY`, `MT5_GATEWAY_API_KEY` followed by `=` or `:` and a real-looking value (8+ chars) |
 | MT5 gateway `apiKey` fields | Hardcoded `apiKey: …` / `apiKey = …` / `"apiKey": "…"` with a 16+ char token (skips code expressions like `cfg.apiKey`, type declarations, and derived fields such as `apiKeyLast4` / `hasApiKey`) |
+| Private keys & other gateway secrets | PEM private-key blocks (`-----BEGIN … PRIVATE KEY-----`) and Paystack/Stripe secret values (`sk_live_…` / `sk_test_…` + 16+ chars) — mirrors `.gitleaks.toml` |
 
 ### What is deliberately not flagged
 
 - **`SMTP_HOST` / `SMTP_PORT` / `SMTP_USER`** — connection metadata, not secrets.
 - **`__tests__` directories** — unit tests carry intentional mock credentials (e.g. `payments.test.ts`) to verify secrets are scrubbed from the DB and never rendered; those are fake by design. GitHub's own secret scanning still covers test files for real keys.
+- **Public keys** — `FLWPUBK-…` / `pk_live_…` are not secrets; gitleaks flags them for completeness, but this gate deliberately does not.
 - **Placeholders & indirection** — `(production key)` forms, `$VAR` references, empty / `""` values, and docs or comments that merely *name* the env vars or describe the key formats.
 
 ### Example

@@ -1,6 +1,23 @@
 # gitleaks configuration for AfriFundedCapital
 # Blocks commits containing secrets before they reach GitHub.
 # Extends gitleaks' built-in rule set with the patterns this project uses.
+#
+# Kept in sync with scripts/check-secrets.sh — the deterministic working-tree
+# gate run as `bun run check:secrets` (secrets-scan job in the e2e workflows).
+# Alignment contract:
+#   - Same value thresholds for Flutterwave (FLWSECK-* incl. FLWSECK_TEST-*),
+#     Resend (re_ + 24 chars) and Paystack/Stripe (sk_*) secrets; same
+#     hardcoded env-var assignment names (incl. JWT_PRIVATE_KEY,
+#     SMTP_PASS / SMTP_PASSWORD, FLW_SECRET_HASH) and MT5 `apiKey` fields;
+#     same private-key PEM block shape.
+#   - Same exclusions: node_modules, dist, .vite, .e2e, __tests__ (intentional
+#     mock credentials), lockfiles, test-results, playwright-report.
+#   - gitleaks is deliberately the *superset*: it additionally flags public
+#     keys (FLWPUBK-*, pk_live_*) and generic api/secret-key assignments that
+#     check-secrets intentionally ignores (public keys aren't secrets; broad
+#     name-based rules risk false positives in the deterministic CI gate).
+# When adding a pattern here, mirror it in scripts/check-secrets.sh (and vice
+# versa), then update the README Security section.
 
 title = "AfriFundedCapital gitleaks config"
 
@@ -9,26 +26,26 @@ useDefault = true
 
 [[rules]]
 id = "resend-api-key"
-description = "Resend API key (re_...) — the key that was previously exposed"
-regex = '''re_[a-zA-Z0-9]{20,}'''
+description = "Resend API key (re_ + 24 chars) — the key that was previously exposed"
+regex = '''re_[a-zA-Z0-9]{24,}'''
 secretGroup = 0
 entropy = 3.0
 
 [[rules]]
 id = "flutterwave-secret-key"
-description = "Flutterwave secret key (FLWSECK...)"
-regex = '''FLWSECK[-_][a-zA-Z0-9]{10,}'''
+description = "Flutterwave secret key (FLWSECK-... or FLWSECK_TEST-...)"
+regex = '''FLWSECK[-_](TEST[-_])?[a-zA-Z0-9]{8,}'''
 secretGroup = 0
 
 [[rules]]
 id = "flutterwave-public-key"
-description = "Flutterwave public key (FLWPUBK...)"
+description = "Flutterwave public key (FLWPUBK...) — public, kept for completeness"
 regex = '''FLWPUBK[-_][a-zA-Z0-9]{10,}'''
 secretGroup = 0
 
 [[rules]]
 id = "stripe-live-secret"
-description = "Stripe live secret key"
+description = "Stripe live secret key (also caught by paystack-secret)"
 regex = '''sk_live_[a-zA-Z0-9]{16,}'''
 secretGroup = 0
 
@@ -41,27 +58,36 @@ secretGroup = 0
 [[rules]]
 id = "paystack-secret"
 description = "Paystack secret key (sk_...) used for server-side calls"
-regex = '''(?i)sk_(test|live)_[a-zA-Z0-9]{20,}'''
+regex = '''(?i)sk_(test|live)_[a-zA-Z0-9]{16,}'''
+secretGroup = 0
+
+[[rules]]
+id = "env-secret-assignment"
+description = "Hardcoded gateway/JWT/SMTP env-var assignments — mirrors check-secrets.sh pattern 3 (.env, YAML and JSON quoting forms)"
+regex = '''(?i)["']?(FLW_SECRET_KEY|FLW_SECRET_HASH|RESEND_API_KEY|PAYSTACK_SECRET_KEY|JWT_PRIVATE_KEY|SMTP_PASS|SMTP_PASSWORD|MT5_API_KEY|MT5_GATEWAY_API_KEY)["']?\s*[=:]\s*["']?[a-zA-Z0-9_][^\s"']{7,}'''
 secretGroup = 0
 
 [[rules]]
 id = "generic-api-key"
-description = "Generic API key / secret key assignment"
+description = "Generic API key / secret key assignment (superset of check-secrets.sh pattern 4)"
 regex = '''(?i)(api[_-]?key|secret[_-]?key)\s*[=:]\s*["']?[a-zA-Z0-9+/=_\-]{16,}'''
 secretGroup = 0
 entropy = 3.0
 
 [[rules]]
 id = "private-key-block"
-description = "Private key block"
+description = "Private key block (mirrors check-secrets.sh pattern 5)"
 regex = '''-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----'''
 secretGroup = 0
 
 [allowlist]
-description = "Files that are allowed to contain matching patterns"
+description = "Files that are allowed to contain matching patterns (kept in sync with check-secrets.sh exclusions)"
 paths = [
   '''node_modules/''',
+  '''dist/''',
+  '''\.vite/''',
   '''\.e2e/''',
+  '''__tests__/''',
   '''bun\.lock''',
   '''package-lock\.json''',
   '''yarn\.lock''',
