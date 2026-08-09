@@ -8,8 +8,9 @@
 # `FLWSECK`, and a real Resend API key starts with `re_` followed by 24+
 # characters. We also flag hardcoded assignments of secret env vars
 # (`FLW_SECRET_KEY=…`, `SMTP_PASSWORD=…`, `JWT_PRIVATE_KEY=…`,
-# `MT5_GATEWAY_API_KEY=…`) and hardcoded MT5 gateway `apiKey` fields to catch
-# real values pasted into config/example files. Assignment patterns accept
+# `MT5_GATEWAY_API_KEY=…`, `MT5_MANAGER_PASSWORD=…`) and hardcoded MT5
+# gateway `apiKey` / `managerPassword` fields to catch real values pasted
+# into config/example files. Assignment patterns accept
 # `.env` (`KEY=value`), YAML (`key: value`) and JSON (`"KEY": "value"`)
 # quoting forms.
 #
@@ -71,14 +72,18 @@ done
 #    chars. This skips empty assignments, `$VAR` indirections,
 #    `(placeholder)` forms and quoted values like `""` while still catching
 #    real-looking tokens (e.g. `JWT_PRIVATE_KEY=<your-token>`,
-#    `"SMTP_PASSWORD": "<your-token>"`). Real Flutterwave/Resend keys are
-#    caught by patterns 1-2 even when quoted.
-# 4. MT5 gateway `apiKey` field — a hardcoded token (16+ alnum / `-` / `_`,
+#    `"SMTP_PASSWORD": "<your-token>"`, `MT5_MANAGER_PASSWORD=…`). Real
+#    Flutterwave/Resend keys are caught by patterns 1-2 even when quoted.
+# 4. MT5 gateway `apiKey` / `managerPassword` fields — a hardcoded token
+#    (16+ alnum / `-` / `_` with at least one non-letter character,
 #    optionally quoted, with optional quotes around the field name for JSON)
-#    assigned via `:` or `=`. The 16+ token rule skips code expressions
-#    (`apiKey: typeof body.apiKey === "string" ? …`, `cfg.apiKey`,
-#    `apiKey: e.target.value`), type declarations (`apiKey: string;`), empty
-#    defaults, and derived fields like `apiKeyLast4` / `hasApiKey`.
+#    assigned via `:` or `=`. The non-letter requirement skips camelCase
+#    code expressions (`managerPassword: rawManagerPassword`, `cfg.apiKey`,
+#    `apiKey: typeof body.apiKey === "string" ? …`, `apiKey: e.target.value`),
+#    type declarations (`apiKey: string;`) and empty defaults, while still
+#    catching real tokens — gateway keys and manager passwords virtually
+#    always contain digits or dashes. Derived fields like `apiKeyLast4` /
+#    `hasApiKey` are also skipped.
 # 5. Private-key PEM blocks — `-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE
 #    KEY-----` (mirrors the gitleaks `private-key-block` rule). A committed
 #    private key is a credential no matter which service it belongs to.
@@ -88,8 +93,8 @@ done
 PATTERNS=(
   'FLWSECK[-_](TEST[-_])?[A-Za-z0-9]{8,}'
   're_[A-Za-z0-9]{24,}'
-  '["'"'"']?(FLW_SECRET_KEY|FLW_SECRET_HASH|RESEND_API_KEY|PAYSTACK_SECRET_KEY|JWT_PRIVATE_KEY|SMTP_PASS|SMTP_PASSWORD|MT5_API_KEY|MT5_GATEWAY_API_KEY)["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?[[:alnum:]_][^[:space:]]{7,}'
-  '["'"'"']?apiKey["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_-]{16,}'
+  '["'"'"']?(FLW_SECRET_KEY|FLW_SECRET_HASH|RESEND_API_KEY|PAYSTACK_SECRET_KEY|JWT_PRIVATE_KEY|SMTP_PASS|SMTP_PASSWORD|MT5_API_KEY|MT5_GATEWAY_API_KEY|MT5_MANAGER_PASSWORD)["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?[[:alnum:]_][^[:space:]]{7,}'
+  '["'"'"']?(apiKey|managerPassword)["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_-]*[0-9_-][A-Za-z0-9_-]{15,}'
   '-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----'
   'sk_(live|test)_[A-Za-z0-9]{16,}'
 )

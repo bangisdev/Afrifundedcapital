@@ -4,10 +4,13 @@
 # aligned so the two secret gates cover the same shapes. Fails CI on drift.
 #
 # Alignment contract (see .gitleaks.toml header and README → Security):
-#   1. The same 9 hardcoded env-var names are tracked by both gates.
+#   1. The same 10 hardcoded env-var names are tracked by both gates.
 #   2. Shared value-shape regexes (Flutterwave, Resend, Paystack/Stripe sk_,
 #      PEM private keys) are byte-identical in both files.
-#   3. Token thresholds match: 16+ for apiKey / sk_, 8+ env-var values.
+#   3. Token thresholds match: 16+ for apiKey / managerPassword / sk_,
+#      8+ env-var values. Field tokens (apiKey / managerPassword) must also
+#      contain ≥1 non-letter char so camelCase identifiers never trip the
+#      gates — asserted semantically since the two value char-classes differ.
 #   4. Every check-secrets exclusion has a gitleaks allowlist counterpart
 #      (.git is excluded by check-secrets and handled by gitleaks' built-in
 #      default allowlist, so it is not asserted here).
@@ -40,6 +43,7 @@ FLW_SECRET_KEY
 JWT_PRIVATE_KEY
 MT5_API_KEY
 MT5_GATEWAY_API_KEY
+MT5_MANAGER_PASSWORD
 PAYSTACK_SECRET_KEY
 RESEND_API_KEY
 SMTP_PASS
@@ -80,19 +84,21 @@ sk_(live|test)_[A-Za-z0-9]{16,}:paystack-secret
 -----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----:private-key-block
 PATTERNS
 
-# ── 3. apiKey / generic threshold parity (16+ token) ───────────────────────
-if sed -n '/^PATTERNS=(/,/^)/p' "$CS" | grep -F 'apiKey' | grep -q '{16,}'; then
-  :
-else
-  echo "❌ check-secrets apiKey pattern must require a 16+ token" >&2
-  fail=1
-fi
-if rule_regex "$GL" "afc-generic-api-key" | grep -q '{16,}'; then
-  :
-else
-  echo "❌ gitleaks afc-generic-api-key must require a 16+ token" >&2
-  fail=1
-fi
+# ── 3. apiKey / managerPassword / generic threshold parity ────────────────
+#     16+ total chars AND at least one non-letter (so camelCase identifiers
+#     like `rawManagerPassword` never trip the gates). Asserted semantically
+#     because the two gates use different value char-classes.
+cs_field="$(sed -n '/^PATTERNS=(/,/^)/p' "$CS" | grep -F 'managerPassword' | head -1)"
+gl_field="$(rule_regex "$GL" "afc-generic-api-key")"
+ok_field() { # $1 = pattern line, $2 = gate label
+  if printf '%s\n' "$1" | grep -q '{15,}' && printf '%s\n' "$1" | grep -qE '\[[^]]*0-9'; then
+    return 0
+  fi
+  echo "❌ $2 field pattern must require a 16+ token with ≥1 non-letter char" >&2
+  return 1
+}
+ok_field "$cs_field" "check-secrets" || fail=1
+ok_field "$gl_field" "gitleaks afc-generic-api-key" || fail=1
 
 # ── 4. exclusion parity ────────────────────────────────────────────────────
 gl_allow="$(sed -n '/^\[allowlist\]/,$p' "$GL")"

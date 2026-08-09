@@ -348,7 +348,7 @@ Configure the gateway in **Admin → Settings → MT5** (persisted as the `mt5_c
 
 `bun run check:secrets` (or `bash scripts/check-secrets.sh`) scans the working tree and exits `1` if any payment, email, JWT, SMTP, or MT5 gateway secret values have been committed. When scanning the repo itself (no target dir) it also runs the alignment check (`scripts/check-alignment.sh`) as stage 2, so one command covers both the working tree and config sync. It runs as the `secrets-scan` job in both workflow files (see [Testing → CI](#ci)) on every push and PR, in parallel with the e2e matrix.
 
-The same patterns are enforced pre-commit by **gitleaks** (`.gitleaks.toml`, run in `.github/workflows/secret-scan.yml`) — the two configs are kept in sync. gitleaks is deliberately the stricter superset: it also flags public keys (`FLWPUBK-…`, `pk_live_…`) and generic `api_key` / `secret_key` assignments, which this gate intentionally ignores to stay deterministic.
+The same patterns are enforced pre-commit by **gitleaks** (`.gitleaks.toml`, run in `.github/workflows/secret-scan.yml`) — the two configs are kept in sync. gitleaks is deliberately the stricter superset: it also flags public keys (`FLWPUBK-…`, `pk_live_…`) and generic `api_key` / `secret_key` / MT5 `managerPassword` assignments, which this gate intentionally ignores to stay deterministic.
 
 The check deliberately matches secret **values**, not env-var names — references like `process.env.FLW_SECRET_KEY` appear all over the codebase legitimately, but a real Flutterwave secret starts with `FLWSECK`, and a real Resend API key is `re_` + 24+ characters. Assignment patterns accept `.env` (`KEY=value`), YAML (`key: value`), and JSON (`"KEY": "value"`) quoting forms.
 
@@ -358,8 +358,8 @@ The check deliberately matches secret **values**, not env-var names — referenc
 | --- | --- |
 | Flutterwave (payment gateway) | `FLWSECK-…` / `FLWSECK_TEST-…` values (the public `FLWPUBK` prefix is safe) |
 | Resend (email) | `re_` + 24+ alphanumeric characters |
-| Hardcoded gateway / JWT / SMTP assignments | `FLW_SECRET_KEY`, `FLW_SECRET_HASH`, `RESEND_API_KEY`, `PAYSTACK_SECRET_KEY`, `JWT_PRIVATE_KEY`, `SMTP_PASS`, `SMTP_PASSWORD`, `MT5_API_KEY`, `MT5_GATEWAY_API_KEY` followed by `=` or `:` and a real-looking value (8+ chars) |
-| MT5 gateway `apiKey` fields | Hardcoded `apiKey: …` / `apiKey = …` / `"apiKey": "…"` with a 16+ char token (skips code expressions like `cfg.apiKey`, type declarations, and derived fields such as `apiKeyLast4` / `hasApiKey`) |
+| Hardcoded gateway / JWT / SMTP assignments | `FLW_SECRET_KEY`, `FLW_SECRET_HASH`, `RESEND_API_KEY`, `PAYSTACK_SECRET_KEY`, `JWT_PRIVATE_KEY`, `SMTP_PASS`, `SMTP_PASSWORD`, `MT5_API_KEY`, `MT5_GATEWAY_API_KEY`, `MT5_MANAGER_PASSWORD` followed by `=` or `:` and a real-looking value (8+ chars) |
+| MT5 gateway `apiKey` / `managerPassword` fields | Hardcoded `apiKey: …` / `apiKey = …` / `"apiKey": "…"` (and the same for `managerPassword`) with a 16+ char token containing ≥1 non-letter (skips camelCase code expressions like `rawManagerPassword` / `cfg.apiKey`, type declarations, and derived fields such as `apiKeyLast4` / `hasApiKey`) |
 | Private keys & other gateway secrets | PEM private-key blocks (`-----BEGIN … PRIVATE KEY-----`) and Paystack/Stripe secret values (`sk_live_…` / `sk_test_…` + 16+ chars) — mirrors `.gitleaks.toml` |
 
 ### What is deliberately not flagged
@@ -380,7 +380,7 @@ bash scripts/check-secrets.sh   # exit 1 + prints the offending file:line list
 
 `bash scripts/gitleaks-fixture.sh` (or `bun run test:secrets-fixture`) generates a temporary fixture covering every shape both gates must catch and asserts that `check:secrets` trips on the secrets while ignoring placeholders — and, if gitleaks is installed (or `GITLEAKS_BIN` points at it), that gitleaks fires all nine custom rules on the same shapes. The fixture is built from shell fragments at runtime, so the script itself never trips either gate.
 
-`bash scripts/check-alignment.sh` (or `bun run test:secrets-alignment`) statically asserts the two configs stay in sync: the same 9 hardcoded env-var names, byte-identical shared regexes (Flutterwave, Resend, `sk_*`, PEM), matching 16+/8+ token thresholds and matching exclusions, plus the documented public-key divergence. It also runs automatically as stage 2 of `bun run check:secrets` when scanning the repo. Run both after changing `scripts/check-secrets.sh` or `.gitleaks.toml`.
+`bash scripts/check-alignment.sh` (or `bun run test:secrets-alignment`) statically asserts the two configs stay in sync: the same 10 hardcoded env-var names, byte-identical shared regexes (Flutterwave, Resend, `sk_*`, PEM), matching 16+/8+ token thresholds and matching exclusions, plus the documented public-key divergence. It also runs automatically as stage 2 of `bun run check:secrets` when scanning the repo. Run both after changing `scripts/check-secrets.sh` or `.gitleaks.toml`.
 
 ## Runtime-managed secrets (Admin → Settings)
 

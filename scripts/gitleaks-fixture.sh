@@ -11,7 +11,9 @@
 #   3. gitleaks (if available) FAILS and fires ALL custom rules
 #      (resend-api-key, afc-flutterwave-*, stripe-*, paystack-secret,
 #      env-secret-assignment, afc-generic-api-key, private-key-block) — the
-#      same shapes, so the two gates stay aligned.
+#      same shapes, so the two gates stay aligned. Covers the MT5 manager
+#      password as both an env-var assignment and a `managerPassword` JSON
+#      field (mirroring the `apiKey` field).
 #
 # The fixture is generated at runtime from shell fragments (${hex}, ${tok}…)
 # so this file itself never contains a value that would trip the gates — that
@@ -81,6 +83,8 @@ FLWPUBK-${hex2}
 pk_live_${hex2}
 FLW_SECRET_KEY = (production key)
 SMTP_HOST = smtp.example.com
+MT5_MANAGER_PASSWORD=${pw}
+"managerPassword": "${tok1}"
 EOF
 
 if [ "$VERBOSE" -eq 1 ]; then
@@ -98,7 +102,7 @@ else
   fail=1
 fi
 
-for shape in 'FLWSECK' 'JWT_PRIVATE_KEY' 'SMTP_PASSWORD' 'apiKey' 'sk_live_' 'PRIVATE KEY' 're_'; do
+for shape in 'FLWSECK' 'JWT_PRIVATE_KEY' 'SMTP_PASSWORD' 'MT5_MANAGER_PASSWORD' 'apiKey' 'managerPassword' 'sk_live_' 'PRIVATE KEY' 're_'; do
   if echo "$cs_out" | grep -qF -- "$shape"; then
     :
   else
