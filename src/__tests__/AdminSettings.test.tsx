@@ -293,8 +293,8 @@ describe("AdminSettings Page", () => {
       expect(screen.getByText("Verif Hash (Webhook Signature)")).toBeTruthy();
       // Secrets are env-managed — status badges surface the runtime state and
       // no FLWSECK input is rendered.
-      expect(screen.getByText(/Not configured.*FLW_SECRET_KEY/)).toBeTruthy();
-      expect(screen.getByText(/Not configured.*FLW_SECRET_HASH/)).toBeTruthy();
+      expect(screen.getByText(/FLW_SECRET_KEY.*Not configured/)).toBeTruthy();
+      expect(screen.getByText(/FLW_SECRET_HASH.*Not configured/)).toBeTruthy();
       expect(screen.queryByPlaceholderText(/FLWSECK/)).toBeNull();
     });
 
@@ -389,7 +389,7 @@ describe("AdminSettings Page", () => {
       await user.click(screen.getByText("Yes, Switch to Live"));
       expect(screen.getByPlaceholderText(/FLWPUBK_live/)).toBeTruthy();
       // Secrets are shared across modes and come from the environment.
-      expect(screen.getByText(/Not configured.*FLW_SECRET_KEY/)).toBeTruthy();
+      expect(screen.getByText(/FLW_SECRET_KEY.*Not configured/)).toBeTruthy();
       expect(screen.queryByPlaceholderText(/FLWSECK_live/)).toBeNull();
     });
   });

@@ -13,6 +13,46 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Tolerant response-body reader: prefers JSON, but never crashes on a
+ * plain-text body — e.g. a reverse proxy's `Service unavailable` 503 page
+ * served while the app server is restarting. Falls back to
+ * `{ error: <raw text> }` so callers can surface a meaningful message instead
+ * of a raw `SyntaxError: Unexpected token 'S', "Service unavailable" ...`.
+ */
+export async function readResponseBody(res: Response): Promise<any> {
+  try {
+    return await res.json();
+  } catch {
+    /* not JSON (empty body, proxy error page, ...) — read as text below */
+  }
+  try {
+    const text = await res.text();
+    return text.trim() ? { error: text.trim() } : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Human-readable message for a failed response: prefers the server's JSON
+ * `error` / `message`, then the raw body text, with friendlier wording for
+ * reverse-proxy 502/503 pages ("Service unavailable").
+ */
+export function errorMessageOf(body: any, status: number): string {
+  const raw =
+    typeof body?.error === "string"
+      ? body.error
+      : typeof body?.message === "string"
+        ? body.message
+        : "";
+  if (/service unavailable/i.test(raw) || (status >= 502 && status <= 503)) {
+    return "The server is temporarily unavailable — please try again in a moment.";
+  }
+  if (raw.trim()) return raw;
+  return `Request failed (HTTP ${status})`;
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -33,18 +73,14 @@ async function request<T>(
   });
 
   if (!res.ok) {
-    let message = `Request failed: ${res.status}`;
-    try {
-      const err = await res.json();
-      message = err.message || err.error || message;
-    } catch { /* non-critical */ }
-    throw new ApiError(res.status, message);
+    const err = await readResponseBody(res);
+    throw new ApiError(res.status, errorMessageOf(err, res.status));
   }
 
   // 204 No Content
   if (res.status === 204) return undefined as T;
 
-  return res.json();
+  return (await readResponseBody(res)) as T;
 }
 
 export const api = {

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, readResponseBody, errorMessageOf } from "@/lib/api";
 
 // ═══════════════════════════════════════════════
 //  GENERIC HOOKS
@@ -79,8 +79,8 @@ export function useSignIn() {
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Sign in failed");
+        const err = await readResponseBody(res);
+        throw new Error(errorMessageOf(err, res.status));
       }
       return res.json();
     },
@@ -97,8 +97,8 @@ export function useSignUp() {
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Sign up failed");
+        const err = await readResponseBody(res);
+        throw new Error(errorMessageOf(err, res.status));
       }
       return res.json();
     },

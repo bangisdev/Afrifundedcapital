@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
+import { readResponseBody, errorMessageOf } from "@/lib/api";
 import { useState, type ReactNode } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
@@ -465,11 +466,11 @@ export default function AdminSettings() {
         credentials: "include",
         body: JSON.stringify({ to: testEmail, ...(testApiKey ? { apiKey: testApiKey } : {}) }),
       });
-      const data = await res.json();
+      const data = await readResponseBody(res);
       if (res.ok && data.success) {
         toast.success(`Test email sent to ${testEmail}`);
       } else {
-        toast.error(data.error || "Failed to send test email");
+        toast.error(errorMessageOf(data, res.status));
       }
     } catch (e: any) {
       toast.error(e?.message || "Failed to send test email");
@@ -529,11 +530,11 @@ export default function AdminSettings() {
         credentials: "include",
         body: JSON.stringify({}),
       });
-      const data = await res.json();
+      const data = await readResponseBody(res);
       if (data.success) {
         toast.success("All demo data seeded successfully!");
       } else {
-        toast.warning(data.message || "Seed completed with some errors");
+        toast.warning(data.message || errorMessageOf(data, res.status));
       }
       refetch();
     } catch (e: any) {
@@ -554,8 +555,8 @@ export default function AdminSettings() {
           paymentId: testWebhookPaymentId ? parseInt(testWebhookPaymentId) : undefined,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Test webhook failed");
+      const data = await readResponseBody(res);
+      if (!res.ok) throw new Error(errorMessageOf(data, res.status));
       setTestWebhookResult(data);
       setTestWebhookState("done");
       if (data.webhookStatus === "ok") {
