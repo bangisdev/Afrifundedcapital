@@ -23,6 +23,11 @@ import {
   EyeOff,
   ShieldAlert,
   Gavel,
+  Newspaper,
+  CalendarClock,
+  Trash2,
+  Save,
+  Clock,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
@@ -272,6 +277,7 @@ export default function AdminMT5() {
           <TabsTrigger value="queue" className="text-xs data-[state=active]:bg-secondary gap-1.5"><Activity className="h-3 w-3" /> Retry Queue {queueStats.pending > 0 && <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />}</TabsTrigger>
           <TabsTrigger value="reconcile" className="text-xs data-[state=active]:bg-secondary gap-1.5"><RefreshCcw className="h-3 w-3" /> Reconciliation</TabsTrigger>
           <TabsTrigger value="rules" className="text-xs data-[state=active]:bg-secondary gap-1.5"><Gavel className="h-3 w-3" /> Rule Engine</TabsTrigger>
+          <TabsTrigger value="news" className="text-xs data-[state=active]:bg-secondary gap-1.5"><Newspaper className="h-3 w-3" /> News Calendar</TabsTrigger>
         </TabsList>
 
         {/* ─── ACCOUNTS TAB ─────────────────────────────── */}
@@ -632,6 +638,11 @@ export default function AdminMT5() {
         <TabsContent value="rules" className="space-y-6">
           <RuleEnginePanel />
         </TabsContent>
+
+        {/* ─── NEWS CALENDAR TAB ────────────────────────── */}
+        <TabsContent value="news" className="space-y-6">
+          <NewsCalendarPanel />
+        </TabsContent>
       </Tabs>
     </div>
   );
@@ -737,6 +748,307 @@ function RuleEnginePanel() {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  NEWS CALENDAR — the high-impact event feed the rule engine's news-trading
+//  rule consumes (settings key `news_calendar`, a JSON array of events).
+//  Previously only editable via raw settings JSON — this panel gives admins a
+//  proper editor: add / remove events, mark impact, save with audit trail.
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface NewsEvent {
+  /** Epoch ms — when the release lands. */
+  at: number;
+  impact: "high" | "medium" | "low";
+  /** Human-readable label, e.g. "US Non-Farm Payrolls". */
+  title?: string;
+}
+
+const IMPACT_ORDER: NewsEvent["impact"][] = ["high", "medium", "low"];
+
+const IMPACT_BADGE: Record<NewsEvent["impact"], string> = {
+  high: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
+  medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+  low: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+};
+
+/** Normalize raw feed rows (settings JSON) into typed events; impact defaults to high. */
+function parseNewsEvents(raw: any[]): NewsEvent[] {
+  return raw
+    .filter((e: any) => e && typeof e.at === "number" && Number.isFinite(e.at))
+    .map((e: any) => ({
+      at: e.at,
+      impact: IMPACT_ORDER.includes(e.impact) ? e.impact : "high",
+      title: typeof e.title === "string" && e.title.trim() ? e.title : undefined,
+    }));
+}
+
+/** Format an epoch ms value into an <input type="datetime-local"> value (local time). */
+function toLocalInput(ts: number): string {
+  const d = new Date(ts);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** Parse an <input type="datetime-local"> value (local time) into epoch ms. */
+function fromLocalInput(v: string): number {
+  return v ? new Date(v).getTime() : Number.NaN;
+}
+
+function formatEventTime(ts: number): string {
+  return new Date(ts).toLocaleString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** Compact relative countdown — "in 3h", "12m ago", "now". */
+function relativeFromNow(ts: number, now: number): string {
+  const diff = ts - now;
+  if (Math.abs(diff) < 60_000) return "now";
+  const abs = Math.abs(diff);
+  const mins = Math.round(abs / 60_000);
+  if (mins < 60) return diff >= 0 ? `in ${mins}m` : `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 48) return diff >= 0 ? `in ${hours}h` : `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return diff >= 0 ? `in ${days}d` : `${days}d ago`;
+}
+
+/**
+ * News Calendar editor — reads/writes the `news_calendar` settings row via the
+ * generic audited settings endpoints (GET/PUT /api/seed/settings). High-impact
+ * events are the ones the rule engine enforces; medium/low are informational.
+ */
+function NewsCalendarPanel() {
+  const { data: settings, isLoading } = useApiQuery<any[]>(
+    ["admin", "mt5", "news-calendar"],
+    "/api/seed/settings"
+  );
+
+  const [events, setEvents] = useState<NewsEvent[]>([]);
+  const [savedSnapshot, setSavedSnapshot] = useState("");
+  const [hydratedKey, setHydratedKey] = useState<string | null>(null);
+
+  // Snapshot of "now" refreshed every 30s — keeps the next-event countdown
+  // fresh without calling Date.now() during render (React purity).
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const [newAt, setNewAt] = useState("");
+  const [newImpact, setNewImpact] = useState<NewsEvent["impact"]>("high");
+  const [newTitle, setNewTitle] = useState("");
+
+  // Hydrate the local editors from the settings row exactly once. This is the
+  // React-sanctioned render-phase "adjust state when data arrives" pattern —
+  // later cache refreshes are ignored so unsaved local edits survive.
+  const serverRow = settings?.find((s: any) => s.key === "news_calendar");
+  const serverEvents = serverRow && Array.isArray(serverRow.value) ? serverRow.value : [];
+  if (hydratedKey === null && !isLoading) {
+    const parsed = parseNewsEvents(serverEvents);
+    setEvents(parsed);
+    setSavedSnapshot(JSON.stringify([...parsed].sort((a, b) => a.at - b.at)));
+    setNewAt(toLocalInput(now + 24 * 60 * 60 * 1000));
+    setHydratedKey("hydrated");
+  }
+
+  const save = useApiMutation<any, any>("put", "/api/seed/settings/news_calendar", {
+    invalidateKeys: [["admin", "mt5", "news-calendar"]],
+    onSuccess: () => {
+      toast.success("News calendar saved — the rule engine picks it up on the next metrics sync");
+    },
+  });
+
+  const sorted = [...events].sort((a, b) => a.at - b.at);
+  const dirty = JSON.stringify(sorted) !== savedSnapshot;
+  const highCount = sorted.filter((e) => e.impact === "high").length;
+  const next = sorted.find((e) => e.at >= now);
+
+  const addEvent = () => {
+    const at = fromLocalInput(newAt);
+    if (!Number.isFinite(at)) {
+      toast.error("Pick a valid date and time for the event");
+      return;
+    }
+    setEvents((prev) => [...prev, { at, impact: newImpact, title: newTitle.trim() || undefined }]);
+    setNewTitle("");
+    setNewAt(toLocalInput(at + 24 * 60 * 60 * 1000));
+  };
+
+  const removeEvent = (index: number) => {
+    setEvents((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSave = () => {
+    save.mutate({ value: sorted, group: "mt5" });
+    setSavedSnapshot(JSON.stringify(sorted));
+  };
+
+  const handleClearAll = () => {
+    setEvents([]);
+  };
+
+  if (isLoading) {
+    return <div className="card-subtle p-8 text-center text-muted-foreground text-xs flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Loading news calendar…</div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* How the feed is enforced */}
+      <div className="card-subtle p-4 text-xs text-muted-foreground flex items-start gap-2">
+        <Newspaper className="h-4 w-4 shrink-0 mt-0.5 text-sky-500" />
+        <span>
+          This feed powers the rule engine's <code className="text-foreground">news_trading</code> rule: when a
+          challenge template disables news trading, any position opened within <b className="text-foreground/80">±15 minutes</b>{" "}
+          of a <span className="font-medium text-red-600 dark:text-red-400">high-impact</span> event violates the rule.
+          Medium/low events are informational only. Changes save through the audited settings endpoint and are recorded
+          in the audit trail as <code className="text-foreground">settings.updated</code>.
+        </span>
+      </div>
+
+      {/* Summary stats */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="card-subtle p-3">
+          <div className="text-lg font-medium">{sorted.length}</div>
+          <div className="text-[10px] text-muted-foreground">Configured events</div>
+        </div>
+        <div className="card-subtle p-3">
+          <div className="text-lg font-medium text-red-600 dark:text-red-400">{highCount}</div>
+          <div className="text-[10px] text-muted-foreground">High-impact (enforced)</div>
+        </div>
+        <div className="card-subtle p-3">
+          <div className="text-sm font-medium truncate">{next ? formatEventTime(next.at) : "—"}</div>
+          <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+            <Clock className="h-2.5 w-2.5" />
+            {next ? `Next event ${relativeFromNow(next.at, now)}` : "Nothing scheduled"}
+          </div>
+        </div>
+      </div>
+
+      {/* Add event */}
+      <div className="card-subtle p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <CalendarClock className="h-4 w-4 text-muted-foreground" />
+          <h3 className="text-sm font-medium">Add news event</h3>
+        </div>
+        <div className="grid gap-4 md:grid-cols-[1fr_auto_1.4fr_auto] items-end">
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground">Date &amp; time (local)</label>
+            <Input
+              type="datetime-local"
+              value={newAt}
+              onChange={(e) => setNewAt(e.target.value)}
+              className="text-xs"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground">Impact</label>
+            <div className="flex rounded-md border border-border p-0.5">
+              {IMPACT_ORDER.map((imp) => (
+                <button
+                  key={imp}
+                  type="button"
+                  onClick={() => setNewImpact(imp)}
+                  className={`rounded px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
+                    newImpact === imp
+                      ? "bg-secondary text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {imp}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground">Event label (optional)</label>
+            <Input
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addEvent()}
+              placeholder="e.g. US Non-Farm Payrolls"
+              className="text-xs"
+            />
+          </div>
+          <Button size="sm" className="text-xs" onClick={addEvent}>
+            <Plus className="h-3 w-3 mr-1" /> Add
+          </Button>
+        </div>
+      </div>
+
+      {/* Configured events */}
+      <div className="card-subtle p-5 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-medium">Configured events</h3>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" className="text-xs" onClick={handleClearAll} disabled={sorted.length === 0}>
+              <Trash2 className="h-3 w-3 mr-1" /> Clear all
+            </Button>
+            <Button size="sm" className="text-xs" onClick={handleSave} disabled={!dirty || save.isPending}>
+              {save.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
+              {save.isPending ? "Saving…" : "Save feed"}
+            </Button>
+          </div>
+        </div>
+
+        {sorted.length === 0 ? (
+          <div className="card-subtle p-8 text-center text-muted-foreground text-xs">
+            No events configured — the news-trading rule stays dormant until you add high-impact releases.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {sorted.map((ev, i) => (
+              <div key={`${ev.at}-${i}`} className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span
+                    className={`h-2 w-2 rounded-full shrink-0 ${
+                      ev.impact === "high" ? "bg-red-500" : ev.impact === "medium" ? "bg-amber-500" : "bg-emerald-500"
+                    }`}
+                  />
+                  <div className="min-w-0">
+                    <div className="text-xs font-medium truncate">
+                      {ev.title || (ev.impact === "high" ? "High-impact news release" : `${ev.impact}-impact news release`)}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {formatEventTime(ev.at)} · {relativeFromNow(ev.at, now)}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase ${IMPACT_BADGE[ev.impact]}`}>
+                    {ev.impact}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeEvent(i)}
+                    className="text-muted-foreground hover:text-red-500 transition-colors"
+                    title="Remove event"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+          <div className={`text-[10px] ${dirty ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+            {dirty
+              ? "Unsaved changes — the rule engine still uses the last saved feed"
+              : "All changes saved — enforced on the next metrics sync"}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
