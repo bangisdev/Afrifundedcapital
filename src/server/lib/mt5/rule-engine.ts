@@ -16,6 +16,12 @@
  *   - EA detection    (heuristics: high frequency, robotic spacing, night trading)
  *   - copy trading    (identical trade signatures within a short window)
  *
+ * Severity model: `hard` violations terminate the challenge (enforced by the
+ * sync service); `warning` violations are non-terminal heads-ups. The engine
+ * currently emits hard violations for every breach and `warning` drawdown
+ * proximity alerts once drawdown reaches `DRAWDOWN_WARNING_THRESHOLD` (80%)
+ * of its limit — so traders are warned before a breach, FTMO-style.
+ *
  * Trade-based rules need closed-trade history from the gateway provider;
  * when no gateway is configured (simulated mode) those checks simply see no
  * trades. The news rule additionally requires a configured news feed
@@ -47,7 +53,10 @@ export type RuleCode =
   | "weekend_holding"
   | "news_trading"
   | "ea_detected"
-  | "copy_trading_detected";
+  | "copy_trading_detected"
+  // Non-terminal proximity alerts (same underlying rule, warning severity).
+  | "max_drawdown_warning"
+  | "daily_drawdown_warning";
 
 export interface RuleViolation {
   code: RuleCode;
@@ -63,9 +72,9 @@ export interface RuleEngineInput {
   rules: ChallengeRules;
   metrics: SyncMetrics;
   /** All stored daily metrics for this challenge, oldest → newest. */
-  metricsHistory: Array<{ dailyPL: number | null; totalProfit: number | null; recordedAt: number }>;
+  metricsHistory?: Array<{ dailyPL: number | null; totalProfit: number | null; recordedAt: number }>;
   /** Closed trades in the evaluation window (gateway provider only). */
-  trades: MT5TradeRecord[];
+  trades?: MT5TradeRecord[];
   /** High-impact news event timestamps (epoch ms) — from a configured feed. */
   newsEvents?: number[];
   now?: number;
@@ -109,6 +118,8 @@ export function ruleLabel(code: RuleCode): string {
     case "news_trading": return "News trading";
     case "ea_detected": return "EA trading";
     case "copy_trading_detected": return "Copy trading";
+    case "max_drawdown_warning": return "Max drawdown (approaching)";
+    case "daily_drawdown_warning": return "Daily drawdown (approaching)";
   }
 }
 
@@ -123,8 +134,16 @@ export function violationReason(v: RuleViolation, rules: ChallengeRules): string
     case "news_trading": return "trading around high-impact news events";
     case "ea_detected": return "using trading patterns consistent with automated (EA) trading";
     case "copy_trading_detected": return "using patterns consistent with copy trading";
+    case "max_drawdown_warning": return `approaching the maximum drawdown limit (${rules.maxDrawdown}%)`;
+    case "daily_drawdown_warning": return `approaching the daily drawdown limit (${rules.dailyDrawdown}%)`;
   }
 }
+
+/**
+ * Drawdown level (fraction of the limit) at which a non-terminal warning is
+ * emitted — traders get a heads-up at 80% of the breach, FTMO-style.
+ */
+export const DRAWDOWN_WARNING_THRESHOLD = 0.8;
 
 const NEWS_WINDOW_MS = 15 * 60 * 1000; // ±15 min around a news event
 const EA_SPACING_MS = 60_000; // robotic gap between consecutive opens
@@ -146,11 +165,13 @@ function isNightUTC(ts: number): boolean {
 /**
  * Evaluate every enabled rule for one challenge. Returns all violations found
  * (usually zero). `hard` violations terminate the challenge; `warning`s are
- * surfaced but non-terminal (the engine currently only emits hard violations).
+ * non-terminal proximity alerts (drawdown at/above 80% of its limit).
  */
 export function evaluateChallengeRules(input: RuleEngineInput): RuleViolation[] {
   const now = input.now ?? Date.now();
-  const { rules, metrics, challenge, trades } = input;
+  const { rules, metrics, challenge } = input;
+  const trades = input.trades ?? [];
+  const metricsHistory = input.metricsHistory ?? [];
   const baseBalance = challenge.accountSize || 0;
   const violations: RuleViolation[] = [];
 
@@ -158,7 +179,7 @@ export function evaluateChallengeRules(input: RuleEngineInput): RuleViolation[] 
     violations.push({ code, severity, message, evidence, detectedAt: now });
   };
 
-  // ── Drawdowns ─────────────────────────────────────────────
+  // ── Drawdowns (hard breach + non-terminal proximity warning) ──
   if (rules.maxDrawdown > 0 && baseBalance > 0) {
     const limit = (rules.maxDrawdown / 100) * baseBalance;
     const current = metrics.currentDrawdown ?? 0;
@@ -168,6 +189,14 @@ export function evaluateChallengeRules(input: RuleEngineInput): RuleViolation[] 
         "hard",
         `Current drawdown ${current.toFixed(2)} exceeds the ${rules.maxDrawdown}% limit (${limit.toFixed(2)}).`,
         { currentDrawdown: current, limit, maxDrawdownPct: rules.maxDrawdown, equity: metrics.equity, balance: metrics.balance },
+      );
+    } else if (current >= limit * DRAWDOWN_WARNING_THRESHOLD) {
+      const usedPct = Math.round((current / limit) * 100);
+      push(
+        "max_drawdown_warning",
+        "warning",
+        `Current drawdown ${current.toFixed(2)} is at ${usedPct}% of the ${rules.maxDrawdown}% max drawdown limit (${limit.toFixed(2)}).`,
+        { currentDrawdown: current, limit, maxDrawdownPct: rules.maxDrawdown, usedPct, equity: metrics.equity, balance: metrics.balance },
       );
     }
   }
@@ -182,16 +211,24 @@ export function evaluateChallengeRules(input: RuleEngineInput): RuleViolation[] 
         `Daily drawdown ${daily.toFixed(2)} exceeds the ${rules.dailyDrawdown}% limit (${limit.toFixed(2)}).`,
         { dailyDrawdown: daily, limit, dailyDrawdownPct: rules.dailyDrawdown, dailyPL: metrics.dailyPL },
       );
+    } else if (daily >= limit * DRAWDOWN_WARNING_THRESHOLD) {
+      const usedPct = Math.round((daily / limit) * 100);
+      push(
+        "daily_drawdown_warning",
+        "warning",
+        `Daily drawdown ${daily.toFixed(2)} is at ${usedPct}% of the ${rules.dailyDrawdown}% limit (${limit.toFixed(2)}).`,
+        { dailyDrawdown: daily, limit, dailyDrawdownPct: rules.dailyDrawdown, usedPct, dailyPL: metrics.dailyPL },
+      );
     }
   }
 
   // ── Consistency rule ──────────────────────────────────────
   // Best day's profit must not exceed consistencyTarget % of total profit
   // (only meaningful while the account is in profit).
-  if (rules.consistencyTarget && rules.consistencyTarget > 0 && input.metricsHistory.length > 0) {
+  if (rules.consistencyTarget && rules.consistencyTarget > 0 && metricsHistory.length > 0) {
     const totalProfit = metrics.totalProfit ?? 0;
     if (totalProfit > 0) {
-      const bestDay = Math.max(0, ...input.metricsHistory.map((m) => m.dailyPL ?? 0));
+      const bestDay = Math.max(0, ...metricsHistory.map((m) => m.dailyPL ?? 0));
       const bestPct = (bestDay / totalProfit) * 100;
       if (bestDay > 0 && bestPct > rules.consistencyTarget) {
         push(

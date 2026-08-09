@@ -27,6 +27,17 @@ export interface SyncOutcome {
   error?: string;
 }
 
+/** Shape of entries persisted in `user_challenges.violations` (JSON). */
+interface StoredViolation {
+  code?: string;
+  type?: string; // legacy alias kept for pre-warning consumers
+  severity?: string;
+  message?: string;
+  detectedAt?: number;
+  evidence?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
 /**
  * Resolve the purchase label ("Two-Step Evaluation · $50,000") for a
  * challenge row, for stamping audit entries.
@@ -190,9 +201,10 @@ export async function syncChallenge(
       if (setting?.value) {
         const parsed: unknown = JSON.parse(setting.value);
         if (Array.isArray(parsed)) {
-          newsEvents = parsed
-            .filter((e: any) => e?.at && (e?.impact === undefined || e?.impact === "high"))
-            .map((e: any) => Number(e.at))
+          const events = parsed as Array<{ at?: unknown; impact?: unknown }>;
+          newsEvents = events
+            .filter((e) => e?.at !== undefined && (e?.impact === undefined || e?.impact === "high"))
+            .map((e) => Number(e.at))
             .filter((n: number) => Number.isFinite(n));
         }
       }
@@ -201,14 +213,65 @@ export async function syncChallenge(
     violations = evaluateChallengeRules({ challenge, rules, metrics, metricsHistory, trades, newsEvents, now });
   }
 
+  // ─── Warning handling: non-terminal drawdown proximity alerts ────────
+  // Warnings are persisted into the same violations JSON (the `severity`
+  // field distinguishes them from hard breaches) so the admin panel can
+  // surface them, but each rule code notifies the trader only ONCE — repeat
+  // warnings on later syncs refresh the stored entry instead of spamming the
+  // bell. Warnings never terminate or suspend a challenge.
+  const warnings = violations.filter((v) => v.severity === "warning");
+  if (isGatewaySync && rules && warnings.length > 0 && challenge.status === "active") {
+    let storedWarnings: StoredViolation[] = [];
+    try { storedWarnings = challenge.violations ? (JSON.parse(challenge.violations) as StoredViolation[]) : []; } catch { storedWarnings = []; }
+    const mergedWarnings = [...storedWarnings];
+    const codeOf = (v: StoredViolation) => v.code || v.type || "";
+    const knownCodes = new Set(mergedWarnings.map(codeOf));
+    let notified = 0;
+
+    for (const w of warnings) {
+      const entry: StoredViolation = { ...w, type: w.code }; // `type` kept for legacy consumers
+      if (knownCodes.has(w.code)) {
+        const idx = mergedWarnings.findIndex((v) => codeOf(v) === w.code);
+        if (idx >= 0) mergedWarnings[idx] = { ...mergedWarnings[idx], detectedAt: w.detectedAt, message: w.message };
+      } else {
+        mergedWarnings.push(entry);
+        knownCodes.add(w.code);
+        createNotification(db, challenge.userId, {
+          type: "challenge_warning",
+          title: "Drawdown Warning",
+          message: `Heads up — ${violationReason(w, rules)}. Consider reducing risk before the limit is hit.`,
+          link: "/dashboard/challenges",
+        });
+        notified++;
+      }
+    }
+
+    db.update(userChallenges).set({
+      violations: JSON.stringify(mergedWarnings),
+      updatedAt: now,
+    }).where(eq(userChallenges.id, challenge.id)).run();
+
+    if (notified > 0) {
+      writeLifecycleAudit(db, challenge, "challenge.warned", {
+        warnings: warnings.map((w) => ({ code: w.code, message: w.message, evidence: w.evidence })),
+      });
+    }
+  }
+
   // ─── Challenge status transitions (violation wins over phase pass) ──
   const willViolate = isGatewaySync && !!rules && hasHardViolation(violations) && challenge.status === "active";
 
   if (willViolate) {
-    // Merge with any existing violations, deduped by rule code.
-    let stored: unknown[] = [];
-    try { stored = challenge.violations ? JSON.parse(challenge.violations) : []; } catch { stored = []; }
-    const existingCodes = new Set(stored.map((v: any) => v?.code || v?.type));
+    // Merge with any existing violations, deduped by rule code. Re-read the
+    // row so warnings persisted just above (same sync) are preserved instead
+    // of being clobbered by the stale in-memory `challenge` snapshot.
+    let stored: StoredViolation[] = [];
+    try {
+      const fresh = db.select({ violations: userChallenges.violations }).from(userChallenges)
+        .where(eq(userChallenges.id, challenge.id)).get();
+      stored = fresh?.violations ? (JSON.parse(fresh.violations) as StoredViolation[]) : [];
+    } catch { stored = []; }
+    const existingCodes = new Set(stored.map((v) => v.code || v.type || ""));
     const merged = [
       ...stored,
       ...violations
