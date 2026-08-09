@@ -166,3 +166,6 @@ jobs:
 
       - name: Scan for committed gateway secrets
         run: bash scripts/check-secrets.sh
+
+      - name: Fixture regression guard (both gates)
+        run: bash scripts/gitleaks-fixture.sh
