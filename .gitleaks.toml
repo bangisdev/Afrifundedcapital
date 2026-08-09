@@ -10,6 +10,11 @@
 #     hardcoded env-var assignment names (incl. JWT_PRIVATE_KEY,
 #     SMTP_PASS / SMTP_PASSWORD, FLW_SECRET_HASH) and MT5 `apiKey` fields;
 #     same private-key PEM block shape.
+#   - Custom rules that would collide with default rule ids are renamed with
+#     the `afc-` prefix (e.g. afc-flutterwave-secret-key): with [extend], a
+#     colliding id merges this config INTO the default rule, keeping the
+#     default's keywords/entropy/allowlists, which silently suppresses
+#     matches. Unique ids + explicit `keywords` keep our patterns effective.
 #   - Same exclusions: node_modules, dist, .vite, .e2e, __tests__ (intentional
 #     mock credentials), lockfiles, test-results, playwright-report.
 #   - gitleaks is deliberately the *superset*: it additionally flags public
@@ -32,16 +37,18 @@ secretGroup = 0
 entropy = 3.0
 
 [[rules]]
-id = "flutterwave-secret-key"
-description = "Flutterwave secret key (FLWSECK-... or FLWSECK_TEST-...)"
+id = "afc-flutterwave-secret-key"
+description = "AfriFundedCapital: Flutterwave secret key (FLWSECK-... or FLWSECK_TEST-...) — mirrors check-secrets.sh pattern 1"
 regex = '''FLWSECK[-_](TEST[-_])?[a-zA-Z0-9]{8,}'''
 secretGroup = 0
+keywords = ["flwseck", "flwseck_test"]
 
 [[rules]]
-id = "flutterwave-public-key"
-description = "Flutterwave public key (FLWPUBK...) — public, kept for completeness"
-regex = '''FLWPUBK[-_][a-zA-Z0-9]{10,}'''
+id = "afc-flutterwave-public-key"
+description = "AfriFundedCapital: Flutterwave public key (FLWPUBK... or FLWPUBK_TEST...) — public, kept for completeness"
+regex = '''FLWPUBK[-_](TEST[-_])?[a-zA-Z0-9]{10,}'''
 secretGroup = 0
+keywords = ["flwpubk", "flwpubk_test"]
 
 [[rules]]
 id = "stripe-live-secret"
@@ -68,11 +75,12 @@ regex = '''(?i)["']?(FLW_SECRET_KEY|FLW_SECRET_HASH|RESEND_API_KEY|PAYSTACK_SECR
 secretGroup = 0
 
 [[rules]]
-id = "generic-api-key"
-description = "Generic API key / secret key assignment (superset of check-secrets.sh pattern 4)"
-regex = '''(?i)(api[_-]?key|secret[_-]?key)\s*[=:]\s*["']?[a-zA-Z0-9+/=_\-]{16,}'''
-secretGroup = 0
+id = "afc-generic-api-key"
+description = "AfriFundedCapital: generic api/secret-key assignment incl. JSON quoted-name form — mirrors check-secrets.sh pattern 4"
+regex = '''(?i)["']?(api[_-]?key|secret[_-]?key)["']?\s*[=:]\s*["']?([a-zA-Z0-9+/=_\-]{16,})'''
+secretGroup = 2
 entropy = 3.0
+keywords = ["apikey", "api_key", "api-key", "secretkey", "secret_key", "secret-key", "api", "key", "secret"]
 
 [[rules]]
 id = "private-key-block"
