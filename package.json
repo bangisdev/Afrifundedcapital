@@ -28,10 +28,10 @@
     "test:e2e:scheduler": "playwright test --grep \"10\\. MT5 Background Scheduler\"",
     "test:e2e:audit": "playwright test --grep \"11\\. Purchase label & audit trail\"",
     "test:e2e:settings": "playwright test --grep \"12\\. Admin Settings\"",
-  "check:secrets": "bash scripts/check-secrets.sh",
-  "test:secrets-fixture": "bash scripts/gitleaks-fixture.sh",
-  "test:secrets-alignment": "bash scripts/check-alignment.sh"
-},
+    "check:secrets": "bash scripts/check-secrets.sh",
+    "test:secrets-fixture": "bash scripts/gitleaks-fixture.sh",
+    "test:secrets-alignment": "bash scripts/check-alignment.sh"
+  },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
     "@jridgewell/trace-mapping": "^0.3.31",
