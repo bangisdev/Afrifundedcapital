@@ -10,14 +10,124 @@ This project uses the following tech stack:
 - Tailwind v4 (for styling)
 - Shadcn UI (for UI components library)
 - Lucide Icons (for icons)
-- Convex (for backend & database)
-- Convex Auth (for authentication)
+- Hono (HTTP API server, mounted into Vite as a plugin)
+- SQLite + Drizzle ORM (database)
+- Custom session auth (scrypt hashing + HttpOnly cookies)
+- TanStack Query (server-state fetching)
 - Framer Motion (for animations)
 - Three js (for 3d models)
 
 All relevant files live in the 'src' directory.
 
 Use bun for the package manager.
+
+## Architecture
+
+### System map
+
+```
+┌────────────────────────── Frontend (Vite + React 19) ─────────────────────────┐
+│  src/main.tsx — Router + QueryClientProvider + Suspense                        │
+│    /            → Landing.tsx                                                  │
+│    /auth        → Auth.tsx (redirectAfterAuth = /dashboard)                    │
+│    /dashboard/* → Dashboard shell (RequireAuth)                                │
+│    /admin/*     → AdminDashboard (RequireAuth + admin role guard)              │
+│                                                                                │
+│  Data layer                                                                     │
+│    src/lib/api.ts        shared fetch wrapper (api.get/post/put/delete)        │
+│    src/hooks/use-api.ts  useApiQuery / useApiMutation (TanStack Query)         │
+│    src/hooks/use-auth.ts session state (GET /api/auth/session)                 │
+└──────────────────────────────┬──────────────────────────────────────────────────┘
+                               │ fetch("/api/…", { credentials: "include" })
+                               ▼
+┌────────────────── Backend (Hono, mounted as a Vite plugin) ────────────────────┐
+│  src/server/index.ts — Hono app; initDatabase() on load                         │
+│    CORS → session middleware → /api/* route modules                             │
+│    users · challenges · payments · wallets · kyc · support · coupons ·          │
+│    certificates · affiliates · trading · payouts · seed · test-email ·          │
+│    admin/secrets                                                               │
+│  src/server/middleware.ts  requireAuth / requireAdmin                          │
+│  src/server/db.ts · schema.ts · migrate.ts  better-sqlite3 + Drizzle           │
+│  libs: email.ts · secrets.ts · payments.ts · audit.ts · mt5/ (config,          │
+│        provider, scheduler, sync, reconciliation, retry-queue)                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Stack notes**
+
+- One process serves both the SPA and the `/api/*` endpoints: the Hono app is a **Vite plugin** in `src/server/index.ts`. The `src/convex/` files are unused template stubs — the template's Convex/auth sections further down describe the original scaffold, not the live app.
+- The database is SQLite via `better-sqlite3` + Drizzle (schema in `src/server/schema.ts`, migrations in `src/server/migrate.ts`).
+- Auth is **session-cookie based**: scrypt-hashed passwords, an HttpOnly `afc_session` cookie (7-day expiry), and `requireAuth` / `requireAdmin` middleware. No JWT.
+- Client state uses **TanStack Query** over the shared `src/lib/api.ts` fetch wrapper.
+
+### Request lifecycle
+
+```
+1  A page calls useApiQuery / useApiMutation (or a raw fetch in an event handler)
+2  src/lib/api.ts request() → fetch with credentials: "include"
+3  The Vite dev server routes /api/* to the Hono app
+4  Middleware (requireAuth / requireAdmin) resolves the afc_session cookie against the DB
+5  The route handler runs — reads/writes SQLite via Drizzle (getDb()) or calls a lib
+6  The handler returns c.json(...) — JSON on success AND on error
+7  The client parses via readResponseBody() — JSON first, raw-text fallback, so a
+   reverse-proxy 503 ("Service unavailable" while the app server restarts) can never
+   crash the UI with a JSON SyntaxError
+8  Errors map through errorMessageOf() to a friendly toast; successes invalidate queries
+```
+
+> Seeing "The server is temporarily unavailable — please try again in a moment." means a proxy 502/503 was returned because the app server was mid-restart; wait a moment and retry.
+
+### Trace: Send Test Email (Admin → Settings → Resend)
+
+The end-to-end path behind the test-email feature:
+
+```
+AdminSettings.tsx  sendTestEmail()
+  → POST /api/test-email/send-test        { to, apiKey? }   (requireAuth + requireAdmin)
+  → routes/test-email.ts                  persists only fromEmail (never the API key)
+  → lib/email.ts  sendEmail()             resolves RESEND_API_KEY via getSecret()
+                                          (admin override → env var), lazy Resend client
+  → Resend SDK  emails.send()             wrapped in an 8s timeout — a slow/unreachable
+                                          API fails fast instead of hanging into a proxy
+                                          503 "Service unavailable"
+  → { ok, reason } → 200 { success: true } | 500 { error: "Failed to send email: <reason>" }
+  → client toast via readResponseBody() + errorMessageOf()
+```
+
+### Runtime secret store (Admin → Settings)
+
+Gateway credentials can be updated in-app without a redeploy; they are never stored in plaintext.
+
+```
+SecretKeyField  →  PUT/DELETE /api/admin/secrets/:name      (admin-only, audit-logged)
+  → routes/secrets.ts   masked responses — raw values never leave the server
+  → lib/secrets.ts      AES-256-GCM; rows under secret_override:* in the settings
+                        table; master key derived from APP_SECRETS_KEY only
+  Consumers resolve  admin override → env var → (MT5) legacy stored value:
+    email.ts         RESEND_API_KEY
+    payments.ts      FLW_SECRET_KEY / FLW_SECRET_HASH
+    mt5/config.ts    MT5_GATEWAY_API_KEY / MT5_MANAGER_PASSWORD
+                     (written via PUT /api/trading/admin/config, stripped from plaintext JSON)
+```
+
+### Key files in these flows
+
+| File | Role |
+| --- | --- |
+| `src/lib/api.ts` | Shared fetch wrapper; `readResponseBody` / `errorMessageOf` make every page immune to non-JSON 503 bodies |
+| `src/hooks/use-api.ts` | TanStack Query bindings (`useApiQuery` / `useApiMutation`) + sign-in/up error handling |
+| `src/pages/admin/AdminSettings.tsx` | Secret badges/update fields (`SecretKeyField`) + the Send Test Email form |
+| `src/server/routes/test-email.ts` | `GET /status` (masked key status) + `POST /send-test` (admin-only, fail-fast) |
+| `src/server/lib/email.ts` | `sendEmail` with 8s timeout returning `{ ok, reason }`; used by notifications, payouts, test-email |
+| `src/server/lib/secrets.ts` / `routes/secrets.ts` | Encrypted runtime secret store + admin API |
+| `src/server/routes/trading.ts` / `lib/mt5/config.ts` | MT5 gateway keys routed through the secret store |
+| `scripts/check-secrets.sh` + `.gitleaks.toml` | CI gates: block committed secret values (see [Security → Committed-secret guard](#committed-secret-guard-checksecrets)) |
+
+### Testing & CI map
+
+- **Unit/integration (Vitest):** server tests in `src/server/__tests__/` run in a node environment against a fresh SQLite DB via `buildTestApp()` (see `src/server/__tests__/setup.ts`); frontend tests in `src/__tests__/` run in jsdom. Use `bun run test`.
+- **E2E (Playwright):** `e2e/admin-flow.spec.ts` is split into greppable chunks (see package.json `test:e2e:*` scripts); each chunk boots its own Vite server on port 5174 with `E2E_TESTING=1` and an isolated `.e2e/` DB.
+- **CI:** `.github/workflows/e2e.yml` / `e2e-matrix.yml` run the e2e chunks in parallel plus a `secrets-scan` job; `secret-scan.yml` runs gitleaks.
 
 ## Setup
 
