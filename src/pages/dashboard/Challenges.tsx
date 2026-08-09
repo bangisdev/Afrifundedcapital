@@ -59,6 +59,21 @@ function formatNgn(price: number | string | null | undefined) {
   return `₦${n.toLocaleString()}`;
 }
 
+/**
+ * News-trading rule value for the buy page. "Yes" when news trading is
+ * allowed; otherwise surfaces the template's configured blackout window
+ * (falling back to the rule engine's default ±15 min, honoring an explicit
+ * 0 to disable a side). Mirrors the landing page's newsTradingLabel.
+ */
+function newsTradingLabel(t: Doc) {
+  if (t.allowNewsTrading !== false) return "Yes";
+  const before = t.newsBlackoutBeforeMinutes ?? 15;
+  const after = t.newsBlackoutAfterMinutes ?? 15;
+  if (before <= 0 && after <= 0) return "No · no blackout";
+  if (before === after) return `No · ${before}m`;
+  return `No · ${before}m/${after}m`;
+}
+
 export default function Challenges() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -249,7 +264,7 @@ export default function Challenges() {
     );
   }
 
-  const ruleFlag = (label: string, allowed: boolean) => (
+  const ruleFlag = (label: string, allowed: boolean, value?: string) => (
     <div className="flex items-center gap-1.5 text-xs">
       {allowed ? (
         <Check className="h-3 w-3 text-brand shrink-0" />
@@ -258,7 +273,7 @@ export default function Challenges() {
       )}
       <span className="text-muted-foreground">{label}</span>
       <span className={`ml-auto font-medium tabular-nums ${allowed ? "text-foreground" : "text-muted-foreground"}`}>
-        {allowed ? "Yes" : "No"}
+        {value ?? (allowed ? "Yes" : "No")}
       </span>
     </div>
   );
@@ -420,7 +435,7 @@ export default function Challenges() {
                   <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Trading Rules</div>
                   <div className="space-y-1.5">
                     {ruleFlag("Weekend Holding", template.allowWeekendHolding ?? false)}
-                    {ruleFlag("News Trading", template.allowNewsTrading !== false)}
+                    {ruleFlag("News Trading", template.allowNewsTrading !== false, newsTradingLabel(template))}
                     {ruleFlag("Expert Advisors", template.allowEATrading !== false)}
                     {ruleFlag("Copy Trading", !!template.allowCopyTrading)}
                   </div>
