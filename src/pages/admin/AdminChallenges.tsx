@@ -5,6 +5,7 @@ import { useState, useMemo, Fragment } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { newsBlackoutWindow } from "@/lib/utils";
 import {
   Loader2,
@@ -22,6 +23,7 @@ import {
   ArrowUpDown,
   History,
   Check,
+  Info,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router";
@@ -112,8 +114,9 @@ function ruleRowValue(rules: any, key: string): string {
 }
 
 // Single trading-rule row for the expanded challenge detail — matches the
-// ChallengeDetail card style (check/x + label + Yes/No value).
-function ruleRow(label: string, allowed: boolean, value: string) {
+// ChallengeDetail card style (check/x + label + Yes/No value). An optional
+// hint renders an info icon with a tooltip explaining the restriction.
+function ruleRow(label: string, allowed: boolean, value: string, hint?: string) {
   return (
     <div className="flex items-center gap-1.5 text-xs">
       {allowed ? (
@@ -121,7 +124,23 @@ function ruleRow(label: string, allowed: boolean, value: string) {
       ) : (
         <X className="h-3 w-3 text-muted-foreground/50 shrink-0" />
       )}
-      <span className="text-muted-foreground">{label}</span>
+      <span className="text-muted-foreground">
+        {hint ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex items-center gap-1 cursor-help">
+                {label}
+                <Info className="h-3 w-3 text-muted-foreground/50" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-64 text-xs leading-relaxed">
+              {hint}
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          label
+        )}
+      </span>
       <span className={`ml-auto font-medium tabular-nums ${allowed ? "text-foreground" : "text-muted-foreground"}`}>
         {value}
       </span>
@@ -605,22 +624,26 @@ export default function AdminChallenges() {
                                   {ruleRow(
                                     "Weekend Holding",
                                     tr.allowWeekendHolding !== false,
-                                    ruleRowValue(tr, "allowWeekendHolding")
+                                    ruleRowValue(tr, "allowWeekendHolding"),
+                                    "When restricted, any trade opened or closed on Saturday or Sunday is flagged as a rule violation."
                                   )}
                                   {ruleRow(
                                     "News Trading",
                                     tr.allowNewsTrading !== false,
-                                    ruleRowValue(tr, "news")
+                                    ruleRowValue(tr, "news"),
+                                    "When restricted, trades opened inside the blackout window around a high-impact news release are flagged. The window is template-configured (15 min each side by default)."
                                   )}
                                   {ruleRow(
                                     "Expert Advisors",
                                     tr.allowEATrading !== false,
-                                    ruleRowValue(tr, "allowEATrading")
+                                    ruleRowValue(tr, "allowEATrading"),
+                                    "When restricted, automated strategies are flagged using heuristics — high trade frequency, robotic spacing, and night trading."
                                   )}
                                   {ruleRow(
                                     "Copy Trading",
                                     tr.allowCopyTrading !== false,
-                                    ruleRowValue(tr, "allowCopyTrading")
+                                    ruleRowValue(tr, "allowCopyTrading"),
+                                    "When restricted, trades matching another account's trade signatures within a short window are flagged."
                                   )}
                                 </div>
                               ) : (
