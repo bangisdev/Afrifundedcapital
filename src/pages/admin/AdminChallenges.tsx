@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { readResponseBody, errorMessageOf } from "@/lib/api";
-import { useState, useMemo } from "react";
+import { useState, useMemo, Fragment } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ import {
   ArrowDown,
   ArrowUpDown,
   History,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router";
@@ -97,6 +98,37 @@ function newsRulesLabel(rules: any): string {
   return win ? `No · ${win}` : "No · no blackout";
 }
 
+// Detail-row rule value for the expanded panel: "Yes" when allowed, otherwise
+// the news row carries the configured blackout window ("No · 15m", "No · 30m/5m").
+function ruleRowValue(rules: any, key: string): string {
+  if (key === "news") {
+    if (rules?.allowNewsTrading === false) {
+      const win = newsBlackoutWindow(rules || {});
+      return win ? `No · ${win}` : "No · no blackout";
+    }
+    return "Yes";
+  }
+  return rules?.[key] === false ? "No" : "Yes";
+}
+
+// Single trading-rule row for the expanded challenge detail — matches the
+// ChallengeDetail card style (check/x + label + Yes/No value).
+function ruleRow(label: string, allowed: boolean, value: string) {
+  return (
+    <div className="flex items-center gap-1.5 text-xs">
+      {allowed ? (
+        <Check className="h-3 w-3 text-emerald-500 shrink-0" />
+      ) : (
+        <X className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+      )}
+      <span className="text-muted-foreground">{label}</span>
+      <span className={`ml-auto font-medium tabular-nums ${allowed ? "text-foreground" : "text-muted-foreground"}`}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
 export default function AdminChallenges() {
   const { data: templates, isLoading: tLoading } = useApiQuery<Template[]>(
     ["admin", "templates"],
@@ -166,6 +198,7 @@ export default function AdminChallenges() {
   };
 
   const [expandedTemplate, setExpandedTemplate] = useState<number | null>(null);
+  const [expandedChallenge, setExpandedChallenge] = useState<number | null>(null);
   const [showCreateTemplate, setShowCreateTemplate] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
   const [addingSizeTo, setAddingSizeTo] = useState<number | null>(null);
@@ -222,6 +255,10 @@ export default function AdminChallenges() {
       setExpandedTemplate(id);
       if (!sizesCache[id]) loadSizes(id);
     }
+  };
+
+  const toggleChallengeExpand = (id: number) => {
+    setExpandedChallenge((prev) => (prev === id ? null : id));
   };
 
   const stats = useMemo(() => {
@@ -491,49 +528,112 @@ export default function AdminChallenges() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(allChallenges || []).map((ch: any) => (
-                    <tr key={ch.id} className="border-b last:border-b-0 hover:bg-muted/30">
-                      <td className="p-3 font-medium">#{ch.id}</td>
-                      <td className="p-3">User {ch.userId}</td>
-                      <td className="p-3">${(ch.accountSize || 0).toLocaleString()}</td>
-                      <td className="p-3">{formatNgn(ch.amountPaid || 0)}</td>
-                      <td className="p-3">
-                        <Badge
-                          variant={
-                            ch.status === "active"
-                              ? "default"
-                              : ch.status === "funded"
-                              ? "default"
-                              : ch.status === "violated"
-                              ? "destructive"
-                              : "secondary"
-                          }
-                          className="text-[10px]"
+                  {(allChallenges || []).map((ch: any) => {
+                    const isChallengeExpanded = expandedChallenge === ch.id;
+                    const tr = ch.templateRules;
+                    return (
+                      <Fragment key={ch.id}>
+                        <tr
+                          onClick={() => toggleChallengeExpand(ch.id)}
+                          aria-expanded={isChallengeExpanded}
+                          className={`border-b last:border-b-0 cursor-pointer transition-colors ${
+                            isChallengeExpanded ? "bg-muted/40" : "hover:bg-muted/30"
+                          }`}
                         >
-                          {ch.status}
-                        </Badge>
-                      </td>
-                      <td className="p-3">
-                        <Badge
-                          className={
-                            ch.templateRules?.allowNewsTrading !== false
-                              ? "text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
-                              : "text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/20"
-                          }
-                          title={
-                            ch.templateRules?.allowNewsTrading !== false
-                              ? "News trading allowed"
-                              : "News trading disabled — blocked around high-impact events per the template blackout window"
-                          }
-                        >
-                          {newsRulesLabel(ch.templateRules)}
-                        </Badge>
-                      </td>
-                      <td className="p-3 text-muted-foreground">
-                        {ch.createdAt ? new Date(ch.createdAt).toLocaleDateString() : "—"}
-                      </td>
-                    </tr>
-                  ))}
+                          <td className="p-3 font-medium">
+                            <span className="inline-flex items-center gap-1">
+                              <ChevronRight
+                                className={`h-3 w-3 text-muted-foreground transition-transform duration-200 ${
+                                  isChallengeExpanded ? "rotate-90" : ""
+                                }`}
+                              />
+                              #{ch.id}
+                            </span>
+                          </td>
+                          <td className="p-3">User {ch.userId}</td>
+                          <td className="p-3">${(ch.accountSize || 0).toLocaleString()}</td>
+                          <td className="p-3">{formatNgn(ch.amountPaid || 0)}</td>
+                          <td className="p-3">
+                            <Badge
+                              variant={
+                                ch.status === "active"
+                                  ? "default"
+                                  : ch.status === "funded"
+                                  ? "default"
+                                  : ch.status === "violated"
+                                  ? "destructive"
+                                  : "secondary"
+                              }
+                              className="text-[10px]"
+                            >
+                              {ch.status}
+                            </Badge>
+                          </td>
+                          <td className="p-3">
+                            <Badge
+                              className={
+                                ch.templateRules?.allowNewsTrading !== false
+                                  ? "text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                                  : "text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/20"
+                              }
+                              title={
+                                ch.templateRules?.allowNewsTrading !== false
+                                  ? "News trading allowed"
+                                  : "News trading disabled — blocked around high-impact events per the template blackout window"
+                              }
+                            >
+                              {newsRulesLabel(ch.templateRules)}
+                            </Badge>
+                          </td>
+                          <td className="p-3 text-muted-foreground">
+                            {ch.createdAt ? new Date(ch.createdAt).toLocaleDateString() : "—"}
+                          </td>
+                        </tr>
+                        {isChallengeExpanded && (
+                          <tr className="border-b last:border-b-0 bg-muted/20">
+                            <td colSpan={7} className="p-4">
+                              <div className="flex items-center justify-between mb-3">
+                                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                                  Trading Rules{ch.templateName ? ` · ${ch.templateName}` : ""}
+                                </span>
+                                {ch.templateName && (
+                                  <span className="text-[10px] text-muted-foreground">Template #{ch.templateId}</span>
+                                )}
+                              </div>
+                              {tr ? (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-2.5 max-w-xl">
+                                  {ruleRow(
+                                    "Weekend Holding",
+                                    tr.allowWeekendHolding !== false,
+                                    ruleRowValue(tr, "allowWeekendHolding")
+                                  )}
+                                  {ruleRow(
+                                    "News Trading",
+                                    tr.allowNewsTrading !== false,
+                                    ruleRowValue(tr, "news")
+                                  )}
+                                  {ruleRow(
+                                    "Expert Advisors",
+                                    tr.allowEATrading !== false,
+                                    ruleRowValue(tr, "allowEATrading")
+                                  )}
+                                  {ruleRow(
+                                    "Copy Trading",
+                                    tr.allowCopyTrading !== false,
+                                    ruleRowValue(tr, "allowCopyTrading")
+                                  )}
+                                </div>
+                              ) : (
+                                <p className="text-xs text-muted-foreground">
+                                  Template rules unavailable for this challenge.
+                                </p>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
