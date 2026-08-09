@@ -25,6 +25,7 @@ export function getMT5Config(db: Db): MT5GatewayConfig {
     if (!row) return {
       ...DEFAULT_MT5_CONFIG,
       apiKey: getSecret("MT5_GATEWAY_API_KEY", db),
+      managerPassword: getSecret("MT5_MANAGER_PASSWORD", db),
     };
     const parsed = JSON.parse(row.value) as Partial<MT5GatewayConfig>;
     return {
@@ -32,6 +33,7 @@ export function getMT5Config(db: Db): MT5GatewayConfig {
       ...parsed,
       // Secret store first (encrypted override > env), legacy JSON as fallback.
       apiKey: getSecret("MT5_GATEWAY_API_KEY", db) || parsed.apiKey || "",
+      managerPassword: getSecret("MT5_MANAGER_PASSWORD", db) || parsed.managerPassword || "",
       baseUrls: Array.isArray(parsed.baseUrls) ? parsed.baseUrls.filter(Boolean) : [],
     };
   } catch {

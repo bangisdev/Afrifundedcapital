@@ -715,7 +715,8 @@ test.describe("Admin Dashboard E2E Flow", () => {
   // ─── 12. Admin Settings (runtime-managed gateway secrets) ───
   //
   // Gateway credentials (FLW_SECRET_KEY, FLW_SECRET_HASH, RESEND_API_KEY,
-  // PAYSTACK_SECRET_KEY, SMTP_PASSWORD, MT5_GATEWAY_API_KEY) can be updated
+  // PAYSTACK_SECRET_KEY, SMTP_PASSWORD, MT5_GATEWAY_API_KEY,
+  // MT5_MANAGER_PASSWORD, JWT_PRIVATE_KEY) can be updated
   // directly from the settings page: the value is stored encrypted at rest via
   // PUT /api/admin/secrets/:name, takes effect immediately, and falls back to
   // the environment variable after DELETE. The page shows a status badge per
@@ -838,13 +839,27 @@ test.describe("Admin Dashboard E2E Flow", () => {
       await expect(smtpBadge).toBeVisible({ timeout: 20_000 });
       await expect(smtpBadge).toContainText(/From env|From database|Not configured/);
 
-      // MT5 tab — managed gateway apiKey.
+      // MT5 tab — managed gateway apiKey and manager password.
       await page.getByRole("tab", { name: /MT5/ }).click();
       const mt5Badge = page.locator('[data-slot="badge"]', {
         hasText: "MT5_GATEWAY_API_KEY",
       });
       await expect(mt5Badge).toBeVisible({ timeout: 20_000 });
       await expect(mt5Badge).toContainText(/From env|From database|Not configured/);
+
+      const mgrPwBadge = page.locator('[data-slot="badge"]', {
+        hasText: "MT5_MANAGER_PASSWORD",
+      });
+      await expect(mgrPwBadge).toBeVisible();
+      await expect(mgrPwBadge).toContainText(/From env|From database|Not configured/);
+
+      // Security tab — managed JWT signing key.
+      await page.getByRole("tab", { name: /Security/ }).click();
+      const jwtBadge = page.locator('[data-slot="badge"]', {
+        hasText: "JWT_PRIVATE_KEY",
+      });
+      await expect(jwtBadge).toBeVisible({ timeout: 20_000 });
+      await expect(jwtBadge).toContainText(/From env|From database|Not configured/);
 
       // Full roundtrip on a newly managed name: PUT stores the encrypted
       // override (masked response), DELETE clears it back to the env fallback.

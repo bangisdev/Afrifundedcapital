@@ -500,32 +500,39 @@ describe("PUT /api/trading/admin/config", () => {
     expect(audit!.action).toBe("mt5.config_updated");
   });
 
-  it("stores the apiKey via the encrypted secret store, never in plaintext settings", async () => {
+  it("stores the apiKey and manager password via the encrypted store, never in plaintext settings", async () => {
     const db = getTestDb();
     const res = await authPut(app, "/api/trading/admin/config", adminCookie, {
       apiKey: "store-me-9999",
+      managerPassword: "store-mgr-pw-8888",
     });
     expect(res.status).toBe(200);
     expect((res.body as ApiEnvelope).config.apiKeyLast4).toBe("9999");
+    expect((res.body as ApiEnvelope).config.hasManagerPassword).toBe(true);
 
-    // The plaintext settings row no longer carries the apiKey…
+    // The plaintext settings row no longer carries either secret…
     const row = db.select().from(settings).where(eq(settings.key, MT5_CONFIG_SETTING)).get();
     expect(row).toBeTruthy();
     const parsed = JSON.parse(row!.value) as Record<string, unknown>;
     expect(parsed.apiKey).toBeUndefined();
+    expect(parsed.managerPassword).toBeUndefined();
     expect(JSON.stringify(parsed)).not.toContain("store-me-9999");
+    expect(JSON.stringify(parsed)).not.toContain("store-mgr-pw-8888");
 
-    // …it lives in the encrypted override instead (ciphertext never contains it).
-    const override = db
-      .select()
-      .from(settings)
-      .where(eq(settings.key, "secret_override:MT5_GATEWAY_API_KEY"))
-      .get();
-    expect(override).toBeTruthy();
-    expect(override!.value).not.toContain("store-me-9999");
-
-    // Cleanup so later tests see a clean secret store.
-    db.delete(settings).where(eq(settings.key, "secret_override:MT5_GATEWAY_API_KEY")).run();
+    // …they live in the encrypted overrides instead (ciphertext never contains them).
+    for (const [name, value] of [
+      ["MT5_GATEWAY_API_KEY", "store-me-9999"],
+      ["MT5_MANAGER_PASSWORD", "store-mgr-pw-8888"],
+    ] as const) {
+      const override = db
+        .select()
+        .from(settings)
+        .where(eq(settings.key, `secret_override:${name}`))
+        .get();
+      expect(override, `expected override row for ${name}`).toBeTruthy();
+      expect(override!.value).not.toContain(value);
+      db.delete(settings).where(eq(settings.key, `secret_override:${name}`)).run();
+    }
   });
 
   it("returns 403 for non-admin", async () => {

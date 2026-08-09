@@ -11,7 +11,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Loader2, Save, CreditCard, Shield, Webhook,
   CheckCircle, AlertTriangle, Copy, Database, Zap, Globe, Mail, Users, Settings2, History, ArrowUpRight,
-  KeyRound, Trash2, Server, Activity
+  KeyRound, Trash2, Server, Activity, Lock
 } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router";
@@ -612,8 +612,7 @@ export default function AdminSettings() {
           <div>
             <div className="text-xs font-medium text-yellow-600 dark:text-yellow-400">Secret overrides are not persistent</div>
             <p className="text-[10px] text-muted-foreground mt-0.5">
-              No <code className="bg-muted px-1 rounded">APP_SECRETS_KEY</code> (or{" "}
-              <code className="bg-muted px-1 rounded">JWT_PRIVATE_KEY</code>) is set, so keys saved here are
+              No <code className="bg-muted px-1 rounded">APP_SECRETS_KEY</code> is set, so keys saved here are
               encrypted with an ephemeral key and will not survive a restart. Set{" "}
               <code className="bg-muted px-1 rounded">APP_SECRETS_KEY</code> in the platform Keys/API keys tab
               to make updates permanent.
@@ -771,6 +770,10 @@ export default function AdminSettings() {
           <TabsTrigger value="mt5" className="text-xs data-[state=active]:bg-secondary gap-1.5">
             <Activity className="h-3 w-3" />
             MT5
+          </TabsTrigger>
+          <TabsTrigger value="security" className="text-xs data-[state=active]:bg-secondary gap-1.5">
+            <Lock className="h-3 w-3" />
+            Security
           </TabsTrigger>
         </TabsList>
 
@@ -1281,11 +1284,66 @@ export default function AdminSettings() {
               />
             </div>
 
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Manager Password</Label>
+              <SecretKeyField
+                envVar="MT5_MANAGER_PASSWORD"
+                status={secretStatusOf("MT5_MANAGER_PASSWORD")}
+                hint={
+                  <p className="text-[10px] text-muted-foreground pt-1">
+                    The MT5 Manager API login password sent with gateway requests. Managed like the API key —
+                    encrypted at rest, never in plaintext settings, clearing falls back to{" "}
+                    <code className="bg-muted px-1 rounded">MT5_MANAGER_PASSWORD</code> from the environment.
+                  </p>
+                }
+              />
+            </div>
+
             <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 flex items-start gap-2">
               <Shield className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
               <span className="text-[11px] text-muted-foreground">
                 The Admin → MT5 page's "API Key" field saves through this same encrypted store, so the key is
                 never written to the database in plaintext.
+              </span>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ─── Security (JWT signing key) ──────────── */}
+        <TabsContent value="security" className="space-y-6">
+          <div className="card-subtle p-6 space-y-5">
+            <div className="flex items-center gap-2 mb-1">
+              <Lock className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-medium">Auth Signing Key</h3>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              The JWT signing key used by the auth layer. It is a managed runtime secret — updating here
+              takes effect immediately (stored encrypted at rest) and clearing falls back to the environment
+              variable.
+            </p>
+
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">JWT Private Key</Label>
+              <SecretKeyField
+                envVar="JWT_PRIVATE_KEY"
+                status={secretStatusOf("JWT_PRIVATE_KEY")}
+                hint={
+                  <p className="text-[10px] text-muted-foreground pt-1">
+                    Used to sign authentication tokens. Updating here takes effect immediately (stored
+                    encrypted at rest); clearing falls back to{" "}
+                    <code className="bg-muted px-1 rounded">JWT_PRIVATE_KEY</code> from the environment.
+                  </p>
+                }
+              />
+            </div>
+
+            <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 flex items-start gap-2">
+              <Shield className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+              <span className="text-[11px] text-muted-foreground">
+                Because the JWT key is itself now a managed secret, the override store's master key comes
+                from <code className="bg-muted px-1 rounded">APP_SECRETS_KEY</code> only — set it in the
+                platform Keys/API keys tab so stored secrets survive restarts.
               </span>
             </div>
           </div>

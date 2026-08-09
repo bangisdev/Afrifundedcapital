@@ -13,9 +13,11 @@
  *      `RESEND_API_KEY`, …) — the deployment-level source of truth.
  *
  * The AES master key is derived (SHA-256, domain-separated) from
- * `APP_SECRETS_KEY` (recommended) or `JWT_PRIVATE_KEY`. If neither is set,
- * an ephemeral per-process key is used and the UI is told via
- * `isEncryptionKeyed()` so admins know overrides will not survive a restart.
+ * `APP_SECRETS_KEY` only — `JWT_PRIVATE_KEY` is itself one of the managed
+ * secrets, so it can never be used to encrypt the store (that would be
+ * circular). If `APP_SECRETS_KEY` is not set, an ephemeral per-process key is
+ * used and the UI is told via `isEncryptionKeyed()` so admins know overrides
+ * will not survive a restart.
  */
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
 import { getDb, type Db } from "../db";
@@ -36,6 +38,8 @@ export const SECRET_NAMES = [
   "PAYSTACK_SECRET_KEY",
   "SMTP_PASSWORD",
   "MT5_GATEWAY_API_KEY",
+  "MT5_MANAGER_PASSWORD",
+  "JWT_PRIVATE_KEY",
 ] as const;
 export type SecretName = (typeof SECRET_NAMES)[number];
 
@@ -54,13 +58,13 @@ let _masterKey: Buffer | null | undefined; // undefined = not yet computed
 
 function masterKey(): Buffer {
   if (_masterKey) return _masterKey;
-  const source = process.env.APP_SECRETS_KEY || process.env.JWT_PRIVATE_KEY || "";
+  const source = process.env.APP_SECRETS_KEY || "";
   if (!source) {
     // Ephemeral fallback: overrides still work for this process but will not
     // survive a restart. The admin UI surfaces this via isEncryptionKeyed().
     _masterKey = randomBytes(32);
     console.warn(
-      "[Secrets] No APP_SECRETS_KEY / JWT_PRIVATE_KEY set — secret overrides are encrypted with an ephemeral key and will NOT survive a restart. Set APP_SECRETS_KEY in the Keys/API keys tab.",
+      "[Secrets] No APP_SECRETS_KEY set — secret overrides are encrypted with an ephemeral key and will NOT survive a restart. Set APP_SECRETS_KEY in the Keys/API keys tab.",
     );
   } else {
     _masterKey = createHash("sha256").update(`afc:secret-store:v1:${source}`).digest();
@@ -70,7 +74,7 @@ function masterKey(): Buffer {
 
 /** True when a stable master key is available (overrides persist across restarts). */
 export function isEncryptionKeyed(): boolean {
-  return !!(process.env.APP_SECRETS_KEY || process.env.JWT_PRIVATE_KEY);
+  return !!process.env.APP_SECRETS_KEY;
 }
 
 // ─── AES-256-GCM helpers ───────────────────────────────────────

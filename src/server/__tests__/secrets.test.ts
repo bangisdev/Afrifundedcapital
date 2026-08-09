@@ -79,7 +79,9 @@ describe("Admin secret override API", () => {
     expect(items.map((i) => i.name).sort()).toEqual([
       "FLW_SECRET_HASH",
       "FLW_SECRET_KEY",
+      "JWT_PRIVATE_KEY",
       "MT5_GATEWAY_API_KEY",
+      "MT5_MANAGER_PASSWORD",
       "PAYSTACK_SECRET_KEY",
       "RESEND_API_KEY",
       "SMTP_PASSWORD",
@@ -204,7 +206,12 @@ describe("MT5 gateway apiKey resolution", () => {
       db.insert(settings)
         .values({
           key: MT5_CONFIG_SETTING,
-          value: JSON.stringify({ enabled: true, baseUrls: ["https://gw.test:8443"], apiKey: "legacy-key-0003" }),
+          value: JSON.stringify({
+            enabled: true,
+            baseUrls: ["https://gw.test:8443"],
+            apiKey: "legacy-key-0003",
+            managerPassword: "legacy-mgr-pw-0003",
+          }),
           group: "mt5",
         })
         .run();
@@ -213,9 +220,20 @@ describe("MT5 gateway apiKey resolution", () => {
       // Override takes precedence over the legacy JSON value too.
       setSecretOverride("MT5_GATEWAY_API_KEY", "override-mt5-key-0004", db);
       expect(getMT5Config(db).apiKey).toBe("override-mt5-key-0004");
+
+      // The manager password resolves the same way (override > env > legacy).
+      process.env.MT5_MANAGER_PASSWORD = "env-mgr-pw-0001";
+      expect(getMT5Config(db).managerPassword).toBe("env-mgr-pw-0001");
+      setSecretOverride("MT5_MANAGER_PASSWORD", "override-mgr-pw-0002", db);
+      expect(getMT5Config(db).managerPassword).toBe("override-mgr-pw-0002");
+      clearSecretOverride("MT5_MANAGER_PASSWORD", db);
+      delete process.env.MT5_MANAGER_PASSWORD;
+      expect(getMT5Config(db).managerPassword).toBe("legacy-mgr-pw-0003");
     } finally {
       delete process.env.MT5_GATEWAY_API_KEY;
+      delete process.env.MT5_MANAGER_PASSWORD;
       clearSecretOverride("MT5_GATEWAY_API_KEY", db);
+      clearSecretOverride("MT5_MANAGER_PASSWORD", db);
       db.delete(settings).where(eq(settings.key, MT5_CONFIG_SETTING)).run();
     }
   });

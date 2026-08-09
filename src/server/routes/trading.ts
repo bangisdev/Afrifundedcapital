@@ -543,23 +543,28 @@ app.put("/admin/config", requireAuth, requireAdmin, async (c) => {
   const db = getDb();
   const current = getMT5Config(db);
 
-  // The gateway bearer token is a managed secret: a provided value is stored
-  // encrypted via the secret store (admin override) and is never written to
-  // the settings JSON. Legacy configs that predate the store keep their stored
-  // key until it is replaced, so existing installs don't break.
-  const rawApiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
-  let legacyApiKey = "";
-  if (!rawApiKey) {
-    const stored = db.select().from(settings).where(eq(settings.key, MT5_CONFIG_SETTING)).get();
-    if (stored) {
-      try {
-        legacyApiKey = (JSON.parse(stored.value) as { apiKey?: string }).apiKey ?? "";
-      } catch { /* invalid stored JSON — ignore */ }
+  // The gateway bearer token and manager password are managed secrets: a
+  // provided value is stored encrypted via the secret store (admin override)
+  // and is never written to the settings JSON. Legacy configs that predate the
+  // store keep their stored values until replaced, so existing installs don't
+  // break.
+  const storedRow = db.select().from(settings).where(eq(settings.key, MT5_CONFIG_SETTING)).get();
+  const storedJson = (() => {
+    if (!storedRow) return {} as Record<string, unknown>;
+    try {
+      return JSON.parse(storedRow.value) as Record<string, unknown>;
+    } catch {
+      return {} as Record<string, unknown>;
     }
-  }
-  if (rawApiKey) {
-    setSecretOverride("MT5_GATEWAY_API_KEY", rawApiKey);
-  }
+  })();
+
+  const rawApiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
+  const legacyApiKey = typeof storedJson.apiKey === "string" ? storedJson.apiKey : "";
+  if (rawApiKey) setSecretOverride("MT5_GATEWAY_API_KEY", rawApiKey);
+
+  const rawManagerPassword = typeof body.managerPassword === "string" ? body.managerPassword.trim() : "";
+  const legacyManagerPassword = typeof storedJson.managerPassword === "string" ? storedJson.managerPassword : "";
+  if (rawManagerPassword) setSecretOverride("MT5_MANAGER_PASSWORD", rawManagerPassword);
 
   const next = {
     ...current,
@@ -569,7 +574,7 @@ app.put("/admin/config", requireAuth, requireAdmin, async (c) => {
       : current.baseUrls,
     apiKey: rawApiKey || legacyApiKey,
     managerLogin: typeof body.managerLogin === "string" ? body.managerLogin.trim() : current.managerLogin,
-    managerPassword: typeof body.managerPassword === "string" ? body.managerPassword : current.managerPassword,
+    managerPassword: rawManagerPassword || legacyManagerPassword,
     group: typeof body.group === "string" && body.group.trim() ? body.group.trim() : current.group,
     leverage: typeof body.leverage === "number" ? body.leverage : current.leverage,
     serverName: typeof body.serverName === "string" && body.serverName.trim() ? body.serverName.trim() : current.serverName,
@@ -579,9 +584,15 @@ app.put("/admin/config", requireAuth, requireAdmin, async (c) => {
     reconciliationTolerance: typeof body.reconciliationTolerance === "number" ? body.reconciliationTolerance : current.reconciliationTolerance,
   };
 
-  // Never persist the apiKey in the settings table — it lives in the secret
-  // store (or the legacy fallback read above). Drop it from the payload.
-  const { apiKey: _droppedApiKey, ...persisted } = next;
+  // Never persist the gateway secrets in the settings table — they live in the
+  // secret store. When a legacy value predates the store and no new value was
+  // provided, keep it in the JSON so existing installs don't lose their key on
+  // an unrelated config save; otherwise the fields stay empty in the payload.
+  const persisted: Record<string, unknown> = { ...next };
+  delete persisted.apiKey;
+  delete persisted.managerPassword;
+  if (!rawApiKey && legacyApiKey) persisted.apiKey = legacyApiKey;
+  if (!rawManagerPassword && legacyManagerPassword) persisted.managerPassword = legacyManagerPassword;
   const existing = db.select().from(settings).where(eq(settings.key, MT5_CONFIG_SETTING)).get();
   if (existing) {
     db.update(settings).set({ value: JSON.stringify(persisted) }).where(eq(settings.key, MT5_CONFIG_SETTING)).run();
