@@ -34,7 +34,7 @@ app.get("/status", requireAuth, requireAdmin, (c) => {
 // use any supplied API key transiently for the send, and send a test email.
 // API keys are never stored in the database — they must come from the
 // RESEND_API_KEY environment variable.
-app.post("/send-test", async (c) => {
+app.post("/send-test", requireAuth, requireAdmin, async (c) => {
   const body = await c.req.json();
   const { to, apiKey, fromEmail } = body;
 
@@ -119,7 +119,7 @@ app.post("/send-test", async (c) => {
     text: "Test Email — AfriFundedCapital - Email service is operational",
   }, apiKey ? { apiKey } : undefined);
 
-  if (result) {
+  if (result.ok) {
     return c.json({
       success: true,
       message: apiKey
@@ -127,7 +127,14 @@ app.post("/send-test", async (c) => {
         : "Test email sent successfully",
     });
   } else {
-    return c.json({ error: "Failed to send email. Check your Resend API key configuration (set RESEND_API_KEY)." }, 500);
+    return c.json(
+      {
+        error: result.reason
+          ? `Failed to send email: ${result.reason}`
+          : "Failed to send email. Check your Resend API key configuration (set RESEND_API_KEY).",
+      },
+      500,
+    );
   }
 });
 

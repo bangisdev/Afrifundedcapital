@@ -72,7 +72,7 @@ export async function sendEmailToUser(
       }
     }
 
-    return sendEmail({ ...emailParams, to: user.email });
+    return (await sendEmail({ ...emailParams, to: user.email })).ok;
   } catch (e) {
     console.error("[Email] Failed to send email to user", userId, ":", e);
     return false;

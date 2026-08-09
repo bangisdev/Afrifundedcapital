@@ -307,6 +307,7 @@ export async function buildTestApp(): Promise<Hono> {
   const usersModule = await import("../routes/users");
   const seedModule = await import("../routes/seed");
   const secretsModule = await import("../routes/secrets");
+  const testEmailModule = await import("../routes/test-email");
 
   app.route("/api/kyc", kycModule.default);
   app.route("/api/payments", paymentsModule.default);
@@ -322,6 +323,7 @@ export async function buildTestApp(): Promise<Hono> {
   app.route("/api/users", usersModule.default);
   app.route("/api/seed", seedModule.default);
   app.route("/api/admin/secrets", secretsModule.default);
+  app.route("/api/test-email", testEmailModule.default);
 
   // Unmock so other tests can re-mock cleanly
   vi.doUnmock("../db");

@@ -46,7 +46,7 @@ Only the public key may be persisted (in the `flutterwave_config` setting). The 
 | `RESEND_API_KEY` | Transactional email (KYC, payments, support, payouts, referrals, security alerts) |
 | `RESEND_EMAIL_FROM` | Optional sender-address override (falls back to the stored `fromEmail`, then `AfriFundedCapital <onboarding@resend.dev>`) |
 
-`GET /api/test-email/status` exposes only `apiKeyConfigured` and a masked key. The "Send test email" form may accept a one-off key for a single send — it is used in memory and never persisted.
+`GET /api/test-email/status` exposes only `apiKeyConfigured` and a masked key. The "Send test email" form (admin-only `POST /api/test-email/send-test`) may accept a one-off key for a single send — it is used in memory and never persisted. Sends fail fast (8s timeout) with a specific reason — missing key, Resend API error, or timeout — rather than hanging the request until a proxy 503.
 
 ### App & infrastructure
 

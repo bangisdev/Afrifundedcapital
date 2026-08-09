@@ -15,6 +15,30 @@ import { getSecret } from "./secrets";
 const FROM_EMAIL_FALLBACK = "AfriFundedCapital <onboarding@resend.dev>";
 const APP_URL = process.env.APP_URL || "https://beige-crews-rescue.freebuff.dev";
 
+// Hard cap on how long a Resend send may take before the request fails fast.
+// Prevents a slow/unreachable Resend API from hanging the HTTP request until a
+// reverse proxy gives up with its own 503 "Service unavailable" — instead the
+// caller gets a concrete reason (e.g. "timed out"). Overridable for tests.
+export const EMAIL_SEND_TIMEOUT_MS = Number(
+  process.env.EMAIL_SEND_TIMEOUT_MS || 8_000,
+);
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 // Lazy-init Resend client — reads the API key from the environment ONLY.
 // API keys are never stored in the database (see migrate.ts scrubStoredSecrets).
 let _resend: Resend | null = null;
@@ -67,35 +91,50 @@ export interface SendEmailParams {
  * `overrides.apiKey` allows a one-off key (e.g. from the test-email form) to
  * be used for a single send without ever persisting it.
  */
+export interface SendEmailResult {
+  ok: boolean;
+  /** Human-readable reason when the send failed (missing key, Resend error, timeout). */
+  reason?: string;
+}
+
 export async function sendEmail(
   params: SendEmailParams,
   overrides?: { apiKey?: string },
-): Promise<boolean> {
+): Promise<SendEmailResult> {
   const resendClient = overrides?.apiKey ? new Resend(overrides.apiKey) : getResendClient();
   if (!resendClient) {
     console.warn("[Email] RESEND_API_KEY not configured — skipping email send to", params.to);
-    return false;
+    return { ok: false, reason: "RESEND_API_KEY is not configured" };
   }
 
   try {
-    const { data, error } = await resendClient.emails.send({
-      from: getFromEmail(),
-      to: [params.to],
-      subject: params.subject,
-      html: params.html,
-      text: params.text || params.subject,
-    });
+    const { data, error } = await withTimeout(
+      resendClient.emails.send({
+        from: getFromEmail(),
+        to: [params.to],
+        subject: params.subject,
+        html: params.html,
+        text: params.text || params.subject,
+      }),
+      EMAIL_SEND_TIMEOUT_MS,
+    );
 
     if (error) {
       console.error("[Email] Resend error:", error);
-      return false;
+      const reason =
+        typeof error === "string" ? error : (error as { message?: string }).message || "Resend API error";
+      return { ok: false, reason };
     }
 
     console.log("[Email] Sent to", params.to, "—", params.subject, "— ID:", data?.id);
-    return true;
+    return { ok: true };
   } catch (err) {
-    console.error("[Email] Error sending to", params.to, ":", err);
-    return false;
+    const raw = err instanceof Error ? err.message : "unknown error";
+    console.error("[Email] Error sending to", params.to, ":", raw);
+    const reason = raw.includes("timed out after")
+      ? `Resend request timed out after ${EMAIL_SEND_TIMEOUT_MS}ms — the email service may be slow or unreachable. Please try again.`
+      : raw;
+    return { ok: false, reason };
   }
 }
 
