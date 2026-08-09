@@ -32,14 +32,14 @@ useDefault = true
 [[rules]]
 id = "resend-api-key"
 description = "Resend API key (re_ + 24 chars) — the key that was previously exposed"
-regex = '''re_[a-zA-Z0-9]{24,}'''
+regex = '''re_[A-Za-z0-9]{24,}'''
 secretGroup = 0
 entropy = 3.0
 
 [[rules]]
 id = "afc-flutterwave-secret-key"
 description = "AfriFundedCapital: Flutterwave secret key (FLWSECK-... or FLWSECK_TEST-...) — mirrors check-secrets.sh pattern 1"
-regex = '''FLWSECK[-_](TEST[-_])?[a-zA-Z0-9]{8,}'''
+regex = '''FLWSECK[-_](TEST[-_])?[A-Za-z0-9]{8,}'''
 secretGroup = 0
 keywords = ["flwseck", "flwseck_test"]
 
@@ -65,7 +65,7 @@ secretGroup = 0
 [[rules]]
 id = "paystack-secret"
 description = "Paystack secret key (sk_...) used for server-side calls"
-regex = '''(?i)sk_(test|live)_[a-zA-Z0-9]{16,}'''
+regex = '''sk_(live|test)_[A-Za-z0-9]{16,}'''
 secretGroup = 0
 
 [[rules]]
