@@ -34,7 +34,12 @@
 # Run locally:  bun run check:secrets   (or: bash scripts/check-secrets.sh)
 # Usage:        scripts/check-secrets.sh [dir]   (default: repo root)
 #
-# Exit codes:   0 = clean · 1 = secrets detected
+# When scanning the repo itself (no [dir] argument), stage 2 also runs
+# scripts/check-alignment.sh so one command verifies both the working tree
+# and that .gitleaks.toml / this script haven't drifted apart.
+#
+# Exit codes:   0 = clean (and, for the repo scan, configs aligned)
+#               1 = secrets detected · config drift (repo scan only)
 
 set -u
 
@@ -110,4 +115,13 @@ if [[ -n "$matches" ]]; then
 fi
 
 echo "✅ No gateway secrets found in the working tree."
+
+# Stage 2 — config alignment: only when scanning the repo itself (no [dir]
+# argument, i.e. the `bun run check:secrets` path and CI). Fixture runs pass
+# a dir and are expected to trip stage 1, so alignment is skipped there.
+if [[ $# -eq 0 ]]; then
+  if ! bash "$(dirname "${BASH_SOURCE[0]}")/check-alignment.sh"; then
+    exit 1
+  fi
+fi
 exit 0

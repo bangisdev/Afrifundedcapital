@@ -169,6 +169,3 @@ jobs:
 
       - name: Fixture regression guard (both gates)
         run: bash scripts/gitleaks-fixture.sh
-
-      - name: Gate alignment test (gitleaks ↔ check-secrets)
-        run: bash scripts/check-alignment.sh

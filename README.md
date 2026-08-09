@@ -346,7 +346,7 @@ Configure the gateway in **Admin → Settings → MT5** (persisted as the `mt5_c
 
 ## Committed-secret guard (`check:secrets`)
 
-`bun run check:secrets` (or `bash scripts/check-secrets.sh`) scans the working tree and exits `1` if any payment, email, JWT, SMTP, or MT5 gateway secret values have been committed. It runs as the `secrets-scan` job in both workflow files (see [Testing → CI](#ci)) on every push and PR, in parallel with the e2e matrix.
+`bun run check:secrets` (or `bash scripts/check-secrets.sh`) scans the working tree and exits `1` if any payment, email, JWT, SMTP, or MT5 gateway secret values have been committed. When scanning the repo itself (no target dir) it also runs the alignment check (`scripts/check-alignment.sh`) as stage 2, so one command covers both the working tree and config sync. It runs as the `secrets-scan` job in both workflow files (see [Testing → CI](#ci)) on every push and PR, in parallel with the e2e matrix.
 
 The same patterns are enforced pre-commit by **gitleaks** (`.gitleaks.toml`, run in `.github/workflows/secret-scan.yml`) — the two configs are kept in sync. gitleaks is deliberately the stricter superset: it also flags public keys (`FLWPUBK-…`, `pk_live_…`) and generic `api_key` / `secret_key` assignments, which this gate intentionally ignores to stay deterministic.
 
@@ -380,7 +380,7 @@ bash scripts/check-secrets.sh   # exit 1 + prints the offending file:line list
 
 `bash scripts/gitleaks-fixture.sh` (or `bun run test:secrets-fixture`) generates a temporary fixture covering every shape both gates must catch and asserts that `check:secrets` trips on the secrets while ignoring placeholders — and, if gitleaks is installed (or `GITLEAKS_BIN` points at it), that gitleaks fires all nine custom rules on the same shapes. The fixture is built from shell fragments at runtime, so the script itself never trips either gate.
 
-`bash scripts/check-alignment.sh` (or `bun run test:secrets-alignment`) statically asserts the two configs stay in sync: the same 9 hardcoded env-var names, byte-identical shared regexes (Flutterwave, Resend, `sk_*`, PEM), matching 16+/8+ token thresholds and matching exclusions, plus the documented public-key divergence. Run both after changing `scripts/check-secrets.sh` or `.gitleaks.toml`.
+`bash scripts/check-alignment.sh` (or `bun run test:secrets-alignment`) statically asserts the two configs stay in sync: the same 9 hardcoded env-var names, byte-identical shared regexes (Flutterwave, Resend, `sk_*`, PEM), matching 16+/8+ token thresholds and matching exclusions, plus the documented public-key divergence. It also runs automatically as stage 2 of `bun run check:secrets` when scanning the repo. Run both after changing `scripts/check-secrets.sh` or `.gitleaks.toml`.
 
 # Testing
 
