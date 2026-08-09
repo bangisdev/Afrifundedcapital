@@ -180,6 +180,13 @@ Staging Environment Secrets:
 > **Placeholder convention:** always use `(production key)` / `(test key)` style placeholders in documentation — a real-looking value anywhere in the repo fails CI. The `check:secrets` scan (`.github/workflows/e2e.yml` and `e2e-matrix.yml` → `secrets-scan` job, `scripts/check-secrets.sh`) fails the build if committed values match Flutterwave `FLWSECK-*`, Resend `re_*`, Paystack/Stripe `sk_*`, hardcoded SMTP/JWT/MT5 assignments (`JWT_PRIVATE_KEY`, `SMTP_PASS`/`SMTP_PASSWORD`, `MT5_API_KEY`/`MT5_GATEWAY_API_KEY`, MT5 `apiKey` fields), or PEM private keys.
 >
 > **gitleaks alignment:** the same patterns are enforced pre-commit by gitleaks (`.gitleaks.toml`, run in `.github/workflows/secret-scan.yml`) — keep the two configs in sync when adding a rule. gitleaks is deliberately the stricter superset: it additionally flags public keys (`FLWPUBK-*`, `pk_live_*`) and generic `api_key` / `secret_key` assignments, so the `(placeholder)` convention applies to code comments and docs as well.
+>
+> **One-command gate:** `bun run check:secrets` (or `bash scripts/check-secrets.sh`) is the single local command — stage 1 scans the working tree and, when scanning the repo itself (no target dir), stage 2 verifies `.gitleaks.toml` ↔ `scripts/check-secrets.sh` are still aligned. Exit `0` means clean *and* aligned. Two companion checks complete the picture:
+>
+> - `bun run test:secrets-fixture` — generates a temp fixture covering every shape both gates must catch and asserts `check:secrets` trips on the secrets while ignoring placeholders; with gitleaks installed (or `GITLEAKS_BIN` set) it also asserts all nine custom gitleaks rules fire.
+> - `bun run test:secrets-alignment` — the static sync check on its own (identical env-var names, byte-identical shared regexes, matching thresholds and exclusions).
+>
+> CI runs these automatically: the `secrets-scan` job (`e2e.yml` / `e2e-matrix.yml`) runs `check:secrets` plus the fixture, and the `Secret Scan` workflow (`secret-scan.yml`) runs gitleaks on the repo plus the fixture against the real binary. Run the one-command gate after touching `scripts/check-secrets.sh` or `.gitleaks.toml`.
 
 
 ## Best Practices
