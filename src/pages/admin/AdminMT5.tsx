@@ -21,6 +21,8 @@ import {
   AlertTriangle,
   Eye,
   EyeOff,
+  ShieldAlert,
+  Gavel,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
@@ -269,6 +271,7 @@ export default function AdminMT5() {
           <TabsTrigger value="connector" className="text-xs data-[state=active]:bg-secondary gap-1.5"><Cable className="h-3 w-3" /> Connector</TabsTrigger>
           <TabsTrigger value="queue" className="text-xs data-[state=active]:bg-secondary gap-1.5"><Activity className="h-3 w-3" /> Retry Queue {queueStats.pending > 0 && <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />}</TabsTrigger>
           <TabsTrigger value="reconcile" className="text-xs data-[state=active]:bg-secondary gap-1.5"><RefreshCcw className="h-3 w-3" /> Reconciliation</TabsTrigger>
+          <TabsTrigger value="rules" className="text-xs data-[state=active]:bg-secondary gap-1.5"><Gavel className="h-3 w-3" /> Rule Engine</TabsTrigger>
         </TabsList>
 
         {/* ─── ACCOUNTS TAB ─────────────────────────────── */}
@@ -624,7 +627,116 @@ export default function AdminMT5() {
             )}
           </div>
         </TabsContent>
+
+        {/* ─── RULE ENGINE TAB ────────────────────────────── */}
+        <TabsContent value="rules" className="space-y-6">
+          <RuleEnginePanel />
+        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+/**
+ * Rule Engine ops view — active/non-terminal challenges with their template
+ * rules and the violations the engine recorded (see GET /api/trading/admin/rules).
+ */
+function RuleEnginePanel() {
+  const { data, isLoading } = useApiQuery<any>(["admin", "mt5", "rules"], "/api/trading/admin/rules");
+  const challenges: any[] = data?.challenges || [];
+
+  const statusVariant = (status: string) =>
+    status === "violated" ? "destructive" : status === "active" ? "default" : "secondary";
+
+  const ruleChips = (rules: any) => {
+    if (!rules) return <span className="text-[10px] text-muted-foreground">No template</span>;
+    const chips: string[] = [];
+    chips.push(`DD ${rules.maxDrawdown}% / daily ${rules.dailyDrawdown}%`);
+    if (rules.consistencyTarget) chips.push(`Consistency ≤${rules.consistencyTarget}%`);
+    if (rules.maxPositionSize) chips.push(`Max pos ${rules.maxPositionSize} lots`);
+    if (!rules.allowEATrading) chips.push("No EA");
+    if (!rules.allowCopyTrading) chips.push("No copy");
+    if (!rules.allowNewsTrading) chips.push("No news");
+    if (!rules.allowWeekendHolding) chips.push("No weekend");
+    return chips.join(" · ");
+  };
+
+  if (isLoading) {
+    return <div className="card-subtle p-8 text-center text-muted-foreground text-xs flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Loading rule engine…</div>;
+  }
+
+  if (challenges.length === 0) {
+    return (
+      <div className="card-subtle p-8 text-center text-muted-foreground text-xs">
+        No active challenges — rules are evaluated automatically after each metrics sync.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="card-subtle p-4 text-xs text-muted-foreground flex items-start gap-2">
+        <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
+        <span>
+          Rules are evaluated automatically after each metrics sync. Hard violations (drawdowns, consistency,
+          position size, weekend/news/EA/copy-trading) terminate the challenge, suspend the account, notify the
+          trader, and are recorded in the audit trail as <code className="text-foreground">challenge.violated</code>.
+        </span>
+      </div>
+
+      {challenges.map((ch: any) => (
+        <div key={ch.challengeId} className="card-subtle p-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium truncate">{ch.label || `Challenge #${ch.challengeId}`}</span>
+                <Badge variant={statusVariant(ch.status) as any} className="text-[10px]">{ch.status}</Badge>
+              </div>
+              <div className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                {ch.trader?.name || ch.trader?.email || `User #${ch.trader?.id}`} · ${ch.accountSize?.toLocaleString()} · phase {ch.currentPhase ?? 1}
+              </div>
+            </div>
+            <div className="text-[10px] text-muted-foreground shrink-0">
+              Updated {ch.updatedAt ? new Date(ch.updatedAt).toLocaleString() : "—"}
+            </div>
+          </div>
+
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <div className="rounded-md border border-border p-3">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1.5">Enforced rules</div>
+              <div className="text-xs">{ruleChips(ch.rules)}</div>
+            </div>
+            <div className="rounded-md border border-border p-3">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1.5">Latest metrics</div>
+              {ch.latestMetrics ? (
+                <div className="text-xs space-y-0.5">
+                  <div>Balance <span className="font-medium">${ch.latestMetrics.balance?.toLocaleString()}</span> · Equity <span className="font-medium">${ch.latestMetrics.equity?.toLocaleString()}</span></div>
+                  <div>Total profit <span className={ch.latestMetrics.totalProfit >= 0 ? "text-emerald-600" : "text-red-500"}>${ch.latestMetrics.totalProfit?.toLocaleString()}</span> · target {ch.latestMetrics.profitTargetProgress?.toFixed(0)}%</div>
+                  <div>Drawdown <span className="font-medium">${ch.latestMetrics.currentDrawdown?.toLocaleString()}</span> · daily ${ch.latestMetrics.dailyDrawdown?.toLocaleString()} · {ch.latestMetrics.tradingDaysCount} day(s)</div>
+                </div>
+              ) : (
+                <div className="text-xs text-muted-foreground">No sync yet</div>
+              )}
+            </div>
+          </div>
+
+          {(ch.violations || []).length > 0 && (
+            <div className="mt-3 rounded-md border border-red-500/30 bg-red-500/5 p-3">
+              <div className="text-[10px] uppercase tracking-wide text-red-500 mb-1.5 flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3" /> Violations
+              </div>
+              <div className="space-y-1">
+                {(ch.violations || []).map((v: any, i: number) => (
+                  <div key={i} className="text-xs flex items-start gap-2">
+                    <Badge variant="destructive" className="text-[10px] shrink-0">{v.code || v.type}</Badge>
+                    <span className="text-muted-foreground min-w-0">{v.message || `Rule ${v.code || v.type} violated`}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

@@ -813,7 +813,7 @@ describe("Full cycle: phase_1_passed → phase_2_passed transition", () => {
 //  VIOLATION DETECTION VIA SYNC
 // ═══════════════════════════════════════════════════════════════
 
-describe("Challenge violation detection via sync", () => {
+describe("Challenge rule enforcement is gateway-only", () => {
   let violateUserId: number;
   let violateUserCookie: string;
   let violateChallengeId: number;
@@ -888,57 +888,35 @@ describe("Challenge violation detection via sync", () => {
     );
   });
 
-  it("marks challenge as violated when max drawdown exceeded", async () => {
+  it("does not enforce rules on simulated sync (gateway-only enforcement)", async () => {
     const sqlite = getTestSqlite();
 
-    // Verify challenge is active before sync
+    // Challenge starts active despite the seeded deep-drawdown metrics row.
     const before = sqlite
       .prepare("SELECT status FROM user_challenges WHERE id = ?")
       .get(violateChallengeId) as { status: string };
     expect(before.status).toBe("active");
 
-    // Sync — should detect drawdown exceeded
     const { status } = await authPost(app, "/api/trading/sync", violateUserCookie, {});
     expect(status).toBe(200);
 
-    // Verify challenge is now violated
+    // Simulated data is demo-only — the rule engine must not terminate
+    // challenges on it (enforcement happens on real gateway syncs).
     const after = sqlite
       .prepare("SELECT status, violations FROM user_challenges WHERE id = ?")
       .get(violateChallengeId) as { status: string; violations: string | null };
-    expect(after.status).toBe("violated");
-    expect(after.violations).toBeDefined();
-    const violations = JSON.parse(after.violations!);
-    expect(violations[0].type).toBe("max_drawdown");
+    expect(after.status).toBe("active");
+    expect(after.violations).toBeNull();
   });
 
-  it("creates violation notification", async () => {
+  it("creates no violation notification in simulated mode", async () => {
     const sqlite = getTestSqlite();
 
     const notif = sqlite
       .prepare("SELECT * FROM notifications WHERE user_id = ? AND type = ?")
       .get(violateUserId, "challenge_violation") as Record<string, unknown> | undefined;
 
-    expect(notif).toBeDefined();
-    expect(notif!.title).toContain("Challenge Violation");
-    expect(notif!.message).toContain("maximum drawdown");
-    expect(notif!.link).toBe("/dashboard/challenges");
-  });
-
-  it("does not violate again on re-sync (already violated)", async () => {
-    const sqlite = getTestSqlite();
-
-    // Age and sync again — should not create duplicate violation
-    sqlite
-      .prepare("UPDATE trading_metrics SET recorded_at = ? WHERE challenge_id = ?")
-      .run(Date.now() - 25 * 60 * 60 * 1000, violateChallengeId);
-
-    await authPost(app, "/api/trading/sync", violateUserCookie, {});
-
-    const violations = sqlite
-      .prepare("SELECT violations FROM user_challenges WHERE id = ?")
-      .get(violateChallengeId) as { violations: string };
-    const parsed = JSON.parse(violations.violations);
-    expect(parsed.length).toBe(1); // Still only one violation
+    expect(notif).toBeUndefined();
   });
 });
 

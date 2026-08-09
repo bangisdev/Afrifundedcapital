@@ -5,9 +5,17 @@ import {
   mt5Accounts,
   userChallenges,
   challengeTemplates,
+  settings,
 } from "../../schema";
-import { eq, desc, and } from "drizzle-orm";
-import type { MT5Provider, ChallengeRow } from "./types";
+import { eq, desc, and, asc } from "drizzle-orm";
+import type { MT5Provider, ChallengeRow, MT5TradeRecord } from "./types";
+import {
+  rulesFromTemplate,
+  evaluateChallengeRules,
+  hasHardViolation,
+  violationReason,
+  type RuleViolation,
+} from "./rule-engine";
 import { maybeGenerateCertificate } from "../certificates";
 import { createNotification } from "../notifications";
 import { writeAuditLog } from "../audit";
@@ -141,94 +149,168 @@ export async function syncChallenge(
     }).where(eq(mt5Accounts.id, challenge.mt5AccountId)).run();
   }
 
-  // ─── Check for challenge status transitions ────────────────
-  // If profit target reached and min trading days met, advance the challenge
-  const profitTargetAmount = (challenge.profitTarget / 100) * challenge.accountSize;
-  const minDaysMet = (metrics.tradingDaysCount ?? 0) >= challenge.minTradingDays;
-  const profitReached = (metrics.totalProfit ?? 0) >= profitTargetAmount;
+  // ─── Rule engine: evaluate template rules against the sync ──
+  // Rules are only ENFORCED on real gateway data. The simulated provider
+  // generates random market movement for demos/tests — terminating real
+  // (or demo) challenges on that noise would be wrong.
+  const isGatewaySync = result.source === "gateway";
+  const template = db.select().from(challengeTemplates).where(eq(challengeTemplates.id, challenge.templateId)).get();
+  const rules = template ? rulesFromTemplate(template) : null;
 
-  if (profitReached && minDaysMet && challenge.status === "active") {
-    // Determine next status based on current phase
-    let nextStatus: string | null = null;
+  let violations: RuleViolation[] = [];
+  if (isGatewaySync && rules && challenge.status === "active") {
+    // Daily metrics history (for the consistency rule: best day vs total profit).
+    const metricsHistory = db
+      .select({
+        dailyPL: tradingMetrics.dailyPL,
+        totalProfit: tradingMetrics.totalProfit,
+        recordedAt: tradingMetrics.recordedAt,
+      })
+      .from(tradingMetrics)
+      .where(eq(tradingMetrics.challengeId, challenge.id))
+      .orderBy(asc(tradingMetrics.recordedAt))
+      .all();
 
-    if (challenge.currentPhase === 2) {
-      nextStatus = "phase_2_passed";
-    } else if (challenge.currentPhase === 1 || !challenge.currentPhase) {
-      nextStatus = "phase_1_passed";
-    } else {
-      nextStatus = "funded";
-    }
+    // Recent closed trades (gateway provider only — simulated returns []).
+    let trades: MT5TradeRecord[] = [];
+    try {
+      const since = now - 7 * 24 * 60 * 60 * 1000;
+      if (challenge.mt5AccountId) {
+        const account = db.select().from(mt5Accounts).where(eq(mt5Accounts.id, challenge.mt5AccountId)).get();
+        if (account?.login) {
+          trades = await provider.getTradeHistory(account.login, since, now);
+        }
+      }
+    } catch { /* trade history is best-effort */ }
 
-    // Update challenge status
-    db.update(userChallenges).set({
-      status: nextStatus,
-      currentPhase: nextStatus === "phase_1_passed" ? 2 : (challenge.currentPhase || 1),
-      phase1PassedAt: nextStatus === "phase_1_passed" ? now : challenge.phase1PassedAt,
-      phase2PassedAt: nextStatus === "phase_2_passed" ? now : challenge.phase2PassedAt,
-      fundedAt: nextStatus === "funded" ? now : challenge.fundedAt,
-      updatedAt: now,
-    }).where(eq(userChallenges.id, challenge.id)).run();
+    // High-impact news events from a configured feed (settings `news_calendar`).
+    let newsEvents: number[] = [];
+    try {
+      const setting = db.select().from(settings).where(eq(settings.key, "news_calendar")).get();
+      if (setting?.value) {
+        const parsed: unknown = JSON.parse(setting.value);
+        if (Array.isArray(parsed)) {
+          newsEvents = parsed
+            .filter((e: any) => e?.at && (e?.impact === undefined || e?.impact === "high"))
+            .map((e: any) => Number(e.at))
+            .filter((n: number) => Number.isFinite(n));
+        }
+      }
+    } catch { /* non-critical */ }
 
-    // Auto-generate certificate for the completed phase
-    maybeGenerateCertificate(db, challenge.id, nextStatus);
-
-    // Audit the lifecycle transition — which phase was passed (or funded),
-    // stamped with the challenge label.
-    writeLifecycleAudit(
-      db,
-      challenge,
-      nextStatus === "funded" ? "challenge.funded" : "challenge.phase_passed",
-      {
-        phase: nextStatus,
-        profitTargetAmount,
-        totalProfit: metrics.totalProfit ?? 0,
-        tradingDays: metrics.tradingDaysCount ?? 0,
-      },
-    );
+    violations = evaluateChallengeRules({ challenge, rules, metrics, metricsHistory, trades, newsEvents, now });
   }
 
-  // ─── Check for challenge violation (max drawdown exceeded) ──
-  const maxDrawdownAmount = (challenge.maxDrawdown / 100) * challenge.accountSize;
-  if ((metrics.currentDrawdown ?? 0) >= maxDrawdownAmount && challenge.status === "active") {
+  // ─── Challenge status transitions (violation wins over phase pass) ──
+  const willViolate = isGatewaySync && !!rules && hasHardViolation(violations) && challenge.status === "active";
+
+  if (willViolate) {
+    // Merge with any existing violations, deduped by rule code.
+    let stored: unknown[] = [];
+    try { stored = challenge.violations ? JSON.parse(challenge.violations) : []; } catch { stored = []; }
+    const existingCodes = new Set(stored.map((v: any) => v?.code || v?.type));
+    const merged = [
+      ...stored,
+      ...violations
+        .filter((v) => !existingCodes.has(v.code))
+        .map((v) => ({ ...v, type: v.code })), // `type` kept for legacy consumers
+    ];
+
     db.update(userChallenges).set({
       status: "violated",
-      violations: JSON.stringify([{ type: "max_drawdown", date: now, drawdown: metrics.currentDrawdown }]),
+      violations: JSON.stringify(merged),
       updatedAt: now,
     }).where(eq(userChallenges.id, challenge.id)).run();
 
+    // Suspend the live account (best-effort; simulated is a no-op).
+    if (challenge.mt5AccountId) {
+      try {
+        const account = db.select().from(mt5Accounts).where(eq(mt5Accounts.id, challenge.mt5AccountId)).get();
+        if (account?.login) {
+          await provider.suspendAccount(account.login);
+          db.update(mt5Accounts).set({ isSuspended: true }).where(eq(mt5Accounts.id, account.id)).run();
+        }
+      } catch { /* best-effort */ }
+    }
+
+    const top = violations[0];
     createNotification(db, challenge.userId, {
       type: "challenge_violation",
       title: "Challenge Violation",
-      message: `Your challenge has been violated due to exceeding the maximum drawdown limit (${challenge.maxDrawdown}%). Your account has been suspended.`,
+      message: `Your challenge has been violated due to ${violationReason(top, rules)}. Your account has been suspended.`,
       link: "/dashboard/challenges",
     });
 
-    // Audit the violation with the challenge label.
+    // Audit every rule that fired, stamped with the challenge label.
     writeLifecycleAudit(db, challenge, "challenge.violated", {
-      violationType: "max_drawdown",
-      drawdown: metrics.currentDrawdown ?? 0,
-      maxDrawdownPct: challenge.maxDrawdown,
+      violations: violations.map((v) => ({ code: v.code, message: v.message, evidence: v.evidence })),
+      totalViolations: violations.length,
     });
-  }
+  } else if (challenge.status === "active") {
+    // ── Phase completion: profit target reached + min trading days ──
+    const profitTargetAmount = (challenge.profitTarget / 100) * challenge.accountSize;
+    const minDaysMet = (metrics.tradingDaysCount ?? 0) >= challenge.minTradingDays;
+    const profitReached = (metrics.totalProfit ?? 0) >= profitTargetAmount;
 
-  // ─── Check for challenge expiry ──────────────────────────
-  if (challenge.expiresAt && challenge.expiresAt < now && challenge.status === "active") {
-    db.update(userChallenges).set({
-      status: "expired",
-      updatedAt: now,
-    }).where(eq(userChallenges.id, challenge.id)).run();
+    if (profitReached && minDaysMet) {
+      // Determine next status based on current phase
+      let nextStatus: string | null = null;
 
-    createNotification(db, challenge.userId, {
-      type: "challenge_expired",
-      title: "Challenge Expired",
-      message: `Your challenge (Account Size: $${challenge.accountSize.toLocaleString()}) has expired. You can purchase a new challenge from the dashboard.`,
-      link: "/dashboard/challenges",
-    });
+      if (challenge.currentPhase === 2) {
+        nextStatus = "phase_2_passed";
+      } else if (challenge.currentPhase === 1 || !challenge.currentPhase) {
+        nextStatus = "phase_1_passed";
+      } else {
+        nextStatus = "funded";
+      }
 
-    // Audit the expiry with the challenge label.
-    writeLifecycleAudit(db, challenge, "challenge.expired", {
-      expiresAt: challenge.expiresAt,
-    });
+      // Update challenge status
+      db.update(userChallenges).set({
+        status: nextStatus,
+        currentPhase: nextStatus === "phase_1_passed" ? 2 : (challenge.currentPhase || 1),
+        phase1PassedAt: nextStatus === "phase_1_passed" ? now : challenge.phase1PassedAt,
+        phase2PassedAt: nextStatus === "phase_2_passed" ? now : challenge.phase2PassedAt,
+        fundedAt: nextStatus === "funded" ? now : challenge.fundedAt,
+        updatedAt: now,
+      }).where(eq(userChallenges.id, challenge.id)).run();
+
+      // Auto-generate certificate for the completed phase
+      maybeGenerateCertificate(db, challenge.id, nextStatus);
+
+      // Audit the lifecycle transition — which phase was passed (or funded),
+      // stamped with the challenge label.
+      writeLifecycleAudit(
+        db,
+        challenge,
+        nextStatus === "funded" ? "challenge.funded" : "challenge.phase_passed",
+        {
+          phase: nextStatus,
+          profitTargetAmount,
+          totalProfit: metrics.totalProfit ?? 0,
+          tradingDays: metrics.tradingDaysCount ?? 0,
+        },
+      );
+    }
+
+    // ── Expiry ────────────────────────────────────────────
+    if (challenge.expiresAt && challenge.expiresAt < now) {
+      db.update(userChallenges).set({
+        status: "expired",
+        updatedAt: now,
+      }).where(eq(userChallenges.id, challenge.id)).run();
+
+      createNotification(db, challenge.userId, {
+        type: "challenge_expired",
+        title: "Challenge Expired",
+        message: `Your challenge (Account Size: $${challenge.accountSize.toLocaleString()}) has expired. You can purchase a new challenge from the dashboard.`,
+        link: "/dashboard/challenges",
+      });
+
+      // Audit the expiry with the challenge label.
+      writeLifecycleAudit(db, challenge, "challenge.expired", {
+        expiresAt: challenge.expiresAt,
+      });
+    }
   }
 
   return { synced: true, source: result.source };

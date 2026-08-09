@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { Loader2, ArrowLeft, Activity, BarChart3 } from "lucide-react";
+import { Loader2, ArrowLeft, Activity, BarChart3, AlertTriangle } from "lucide-react";
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts";
 import { useMemo } from "react";
 
@@ -75,6 +75,37 @@ export default function ChallengeDetail() {
         </div>
         <Badge variant={challenge.status === "active" ? "default" : "secondary"} className="text-[10px]">{challenge.status}</Badge>
       </div>
+
+      {(() => {
+        // Violations recorded by the rule engine (new shape: {code,message,...}
+        // legacy shape: {type,date,drawdown}).
+        let violations: any[] = [];
+        try { violations = challenge.violations ? JSON.parse(challenge.violations) : []; } catch { violations = []; }
+        if (violations.length === 0) return null;
+        return (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-red-600 dark:text-red-400 mb-2">
+              <AlertTriangle className="h-4 w-4" /> Challenge violated — {violations.length} rule breach(es)
+            </div>
+            <ul className="space-y-2">
+              {violations.map((v: any, i: number) => (
+                <li key={i} className="text-xs">
+                  <div className="flex items-start gap-2">
+                    <Badge variant="destructive" className="text-[10px] shrink-0">{(v.code || v.type || "rule").replace(/_/g, " ")}</Badge>
+                    <div className="min-w-0">
+                      <div className="text-foreground/90">{v.message || `Detected: ${v.type || v.code}`}</div>
+                      <div className="text-muted-foreground mt-0.5">
+                        {v.detectedAt ? new Date(v.detectedAt).toLocaleString() : v.date ? new Date(v.date).toLocaleString() : ""}
+                        {v.drawdown != null && ` · Drawdown $${Number(v.drawdown).toLocaleString()}`}
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })()}
 
       {metrics && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

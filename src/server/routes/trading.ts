@@ -5,6 +5,7 @@ import {
   mt5Accounts,
   drawdownHistory,
   userChallenges,
+  challengeTemplates,
   users,
   settings,
 } from "../schema";
@@ -17,6 +18,7 @@ import {
   count,
   like,
   or,
+  inArray,
   type SQL,
   type SQLWrapper,
 } from "drizzle-orm";
@@ -25,6 +27,7 @@ import { getMT5Provider } from "../lib/mt5";
 import { getMT5Config, redactMT5Config, MT5_CONFIG_SETTING, isMT5GatewayConfigured } from "../lib/mt5/config";
 import { setSecretOverride } from "../lib/secrets";
 import { syncChallenge, getActiveChallenges } from "../lib/mt5/sync-service";
+import { rulesFromTemplate } from "../lib/mt5/rule-engine";
 import {
   enqueueSyncJob,
   processSyncQueue,
@@ -529,6 +532,74 @@ app.post("/admin/test-connection", requireAuth, requireAdmin, async (c) => {
 
   const ping = await provider.ping();
   return c.json({ ...ping, mode: "gateway" });
+});
+
+// ─── Admin: Rule Engine overview ───────────────────────
+// Live challenges with their template rules + latest metrics + violations,
+// so ops can see which rules are enforced and what tripped.
+app.get("/admin/rules", requireAuth, requireAdmin, (c) => {
+  const db = getDb();
+  const activeStatuses = ["active", "phase_1_passed", "phase_2_passed", "funded", "violated"];
+
+  const rows = db.select().from(userChallenges)
+    .where(inArray(userChallenges.status, activeStatuses))
+    .orderBy(desc(userChallenges.updatedAt))
+    .limit(100)
+    .all();
+
+  // Batch-load templates + users once.
+  const templateIds = [...new Set(rows.map((r) => r.templateId))];
+  const templates = templateIds.length
+    ? db.select().from(challengeTemplates).where(inArray(challengeTemplates.id, templateIds)).all()
+    : [];
+  const templateMap = new Map(templates.map((t) => [t.id, t]));
+
+  const userIds = [...new Set(rows.map((r) => r.userId))];
+  const userRows = userIds.length
+    ? db.select().from(users).where(inArray(users.id, userIds)).all()
+    : [];
+  const userMap = new Map(userRows.map((u) => [u.id, u]));
+
+  const challenges = rows.map((ch) => {
+    const tpl = templateMap.get(ch.templateId);
+    let parsed: unknown[] = [];
+    try { parsed = ch.violations ? JSON.parse(ch.violations) : []; } catch { parsed = []; }
+
+    const latest = db.select().from(tradingMetrics)
+      .where(eq(tradingMetrics.challengeId, ch.id))
+      .orderBy(desc(tradingMetrics.recordedAt))
+      .limit(1).get();
+
+    return {
+      challengeId: ch.id,
+      status: ch.status,
+      accountSize: ch.accountSize,
+      currentPhase: ch.currentPhase,
+      label: tpl?.name ? `${tpl.name} · $${ch.accountSize.toLocaleString("en-US")}` : null,
+      trader: {
+        id: ch.userId,
+        name: userMap.get(ch.userId)?.name ?? null,
+        email: userMap.get(ch.userId)?.email ?? null,
+      },
+      rules: tpl ? rulesFromTemplate(tpl) : null,
+      violations: parsed,
+      latestMetrics: latest
+        ? {
+            balance: latest.balance,
+            equity: latest.equity,
+            totalProfit: latest.totalProfit,
+            currentDrawdown: latest.currentDrawdown,
+            dailyDrawdown: latest.dailyDrawdown,
+            profitTargetProgress: latest.profitTargetProgress,
+            tradingDaysCount: latest.tradingDaysCount,
+            recordedAt: latest.recordedAt,
+          }
+        : null,
+      updatedAt: ch.updatedAt,
+    };
+  });
+
+  return c.json({ challenges });
 });
 
 // ─── Admin: MT5 Config (read/write) ────────────────────
