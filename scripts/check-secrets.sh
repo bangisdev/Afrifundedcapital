@@ -47,7 +47,7 @@ ROOT="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
 # Vendored/build/runtime dirs, lockfiles, and intentional test mocks.
 EXCLUDE_DIRS=(node_modules dist .git .e2e test-results playwright-report .vite __tests__)
-EXCLUDE_FILES=(bun.lock package-lock.json)
+EXCLUDE_FILES=(bun.lock package-lock.json afrifundedcapital.db*)
 
 exclude_args=()
 for d in "${EXCLUDE_DIRS[@]}"; do

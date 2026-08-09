@@ -37,7 +37,7 @@ Third-party credentials are managed as **environment variables — never stored 
 
 Only the public key may be persisted (in the `flutterwave_config` setting). The secret key and hash are read from the environment at request time and never written to the database or returned to the client — the admin API exposes only `secretKeyConfigured` / `secretHashConfigured` plus a masked tail.
 
-> The Paystack tab in Admin Settings references `PAYSTACK_SECRET_KEY` under the same model: gateway secrets belong in the environment, not the database.
+> The Paystack tab in Admin Settings manages `PAYSTACK_SECRET_KEY` under the same model — it can be updated in-app (stored encrypted) or set via the environment; see [Runtime-managed secrets](#runtime-managed-secrets-admin--settings).
 
 ### Email (Resend)
 
@@ -384,7 +384,7 @@ bash scripts/check-secrets.sh   # exit 1 + prints the offending file:line list
 
 ## Runtime-managed secrets (Admin → Settings)
 
-Gateway API keys (`FLW_SECRET_KEY`, `FLW_SECRET_HASH`, `RESEND_API_KEY`) can also be updated in-app from **Admin → Settings**, without touching the deployment environment. Updates are stored in the `settings` table under `secret_override:<NAME>` keys, encrypted at rest with **AES-256-GCM**, and take effect immediately — the admin DB override resolves first, with the environment variable as the fallback, so a revoked environment key can be replaced without a redeploy.
+Gateway API keys (`FLW_SECRET_KEY`, `FLW_SECRET_HASH`, `RESEND_API_KEY`, `PAYSTACK_SECRET_KEY`, `SMTP_PASSWORD`, `MT5_GATEWAY_API_KEY`) can also be updated in-app from **Admin → Settings** (Flutterwave / Paystack / Resend / SMTP / MT5 tabs), without touching the deployment environment. Updates are stored in the `settings` table under `secret_override:<NAME>` keys, encrypted at rest with **AES-256-GCM**, and take effect immediately — the admin DB override resolves first, with the environment variable as the fallback, so a revoked environment key can be replaced without a redeploy. The MT5 gateway API key uses the same store: saving it on the Admin MT5 page or the Settings → MT5 tab writes the encrypted override, and `getMT5Config` resolves override → env → legacy stored value, so the key is never persisted in plaintext settings.
 
 - **Master key:** derived (SHA-256, domain-separated) from `APP_SECRETS_KEY` (recommended) or `JWT_PRIVATE_KEY`. Set `APP_SECRETS_KEY` in the platform Keys/API keys tab to make updates permanent. Without it, overrides still work but are encrypted with an ephemeral key and lost on restart — the settings page shows a warning banner in that case.
 - **API:** `GET /api/admin/secrets` (status + source per key), `PUT /api/admin/secrets/:name` (set), `DELETE /api/admin/secrets/:name` (clear) — all admin-only, audit-logged (`secrets.updated` / `secrets.cleared`) with values never written to the trail, and other admins are alerted via the existing security-event notifications.

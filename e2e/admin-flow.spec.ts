@@ -714,14 +714,15 @@ test.describe("Admin Dashboard E2E Flow", () => {
 
   // ─── 12. Admin Settings (runtime-managed gateway secrets) ───
   //
-  // Gateway credentials (RESEND_API_KEY, FLW_SECRET_KEY, FLW_SECRET_HASH) can
-  // be updated directly from the settings page: the value is stored encrypted
-  // at rest via PUT /api/admin/secrets/:name, takes effect immediately, and
-  // falls back to the environment variable after DELETE. The page shows a
-  // status badge per key (green "From env", blue "From database", amber
-  // "Not configured") plus an update field. In the e2e env no env vars are
-  // set, so badges deterministically render "Not configured" until a test
-  // stores an override (regexes tolerate the other states too).
+  // Gateway credentials (FLW_SECRET_KEY, FLW_SECRET_HASH, RESEND_API_KEY,
+  // PAYSTACK_SECRET_KEY, SMTP_PASSWORD, MT5_GATEWAY_API_KEY) can be updated
+  // directly from the settings page: the value is stored encrypted at rest via
+  // PUT /api/admin/secrets/:name, takes effect immediately, and falls back to
+  // the environment variable after DELETE. The page shows a status badge per
+  // key (green "From env", blue "From database", amber "Not configured") plus
+  // an update field. In the e2e env no env vars are set, so badges
+  // deterministically render "Not configured" until a test stores an override
+  // (regexes tolerate the other states too).
   test.describe("12. Admin Settings", () => {
     test.beforeEach(async ({ page }) => {
       await signInAsAdmin(page);
@@ -812,6 +813,60 @@ test.describe("Admin Dashboard E2E Flow", () => {
       await page.reload();
       await waitForAppReady(page);
       await expect(flwSecretBadge).toContainText(/Not configured/, { timeout: 20_000 });
+    });
+
+    test("Paystack, SMTP, and MT5 tabs surface their secret badges", async ({ page }) => {
+      await warmUp(page, "/admin/settings");
+      await waitForAppReady(page);
+      await expect(page.getByRole("heading", { name: "Payment Settings" })).toBeVisible({
+        timeout: 20_000,
+      });
+
+      // Paystack tab — the secret key is now an editable managed secret.
+      await page.getByRole("tab", { name: /Paystack/ }).click();
+      const paystackBadge = page.locator('[data-slot="badge"]', {
+        hasText: "PAYSTACK_SECRET_KEY",
+      });
+      await expect(paystackBadge).toBeVisible({ timeout: 20_000 });
+      await expect(paystackBadge).toContainText(/From env|From database|Not configured/);
+
+      // SMTP tab — managed SMTP relay password.
+      await page.getByRole("tab", { name: /SMTP/ }).click();
+      const smtpBadge = page.locator('[data-slot="badge"]', {
+        hasText: "SMTP_PASSWORD",
+      });
+      await expect(smtpBadge).toBeVisible({ timeout: 20_000 });
+      await expect(smtpBadge).toContainText(/From env|From database|Not configured/);
+
+      // MT5 tab — managed gateway apiKey.
+      await page.getByRole("tab", { name: /MT5/ }).click();
+      const mt5Badge = page.locator('[data-slot="badge"]', {
+        hasText: "MT5_GATEWAY_API_KEY",
+      });
+      await expect(mt5Badge).toBeVisible({ timeout: 20_000 });
+      await expect(mt5Badge).toContainText(/From env|From database|Not configured/);
+
+      // Full roundtrip on a newly managed name: PUT stores the encrypted
+      // override (masked response), DELETE clears it back to the env fallback.
+      const hex = "4d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3";
+      const newKey = `sk_live_${hex}`;
+      const putRes = await page.request.put("/api/admin/secrets/PAYSTACK_SECRET_KEY", {
+        data: { value: newKey },
+      });
+      expect(putRes.ok()).toBeTruthy();
+      const putBody = (await putRes.json()) as {
+        source: string;
+        configured: boolean;
+        masked: string;
+      };
+      expect(putBody.source).toBe("db");
+      expect(putBody.configured).toBe(true);
+      expect(putBody.masked).toContain(newKey.slice(-4));
+
+      const delRes = await page.request.delete("/api/admin/secrets/PAYSTACK_SECRET_KEY");
+      expect(delRes.ok()).toBeTruthy();
+      const delBody = (await delRes.json()) as { source: string };
+      expect(delBody.source).toBe("none");
     });
   });
 });

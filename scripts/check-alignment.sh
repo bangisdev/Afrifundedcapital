@@ -116,6 +116,7 @@ playwright-report|playwright-report/
 __tests__|__tests__/
 bun.lock|bun\.lock
 package-lock.json|package-lock\.json
+afrifundedcapital.db|afrifundedcapital\.db
 EXCLUSIONS
 
 # ── 5. documented divergence: public keys ──────────────────────────────────

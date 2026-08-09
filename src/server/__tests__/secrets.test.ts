@@ -22,6 +22,8 @@ import {
 } from "./setup";
 import { settings, auditLogs } from "../schema";
 import { eq, desc } from "drizzle-orm";
+import { getMT5Config, MT5_CONFIG_SETTING } from "../lib/mt5/config";
+import { setSecretOverride, clearSecretOverride } from "../lib/secrets";
 
 let app: Hono;
 let userCookie: string;
@@ -74,7 +76,14 @@ describe("Admin secret override API", () => {
     const { status, body } = await authGet(app, "/api/admin/secrets", adminCookie);
     expect(status).toBe(200);
     const items = (body as ApiEnvelope).items as Array<{ name: string; source: string; configured: boolean }>;
-    expect(items.map((i) => i.name).sort()).toEqual(["FLW_SECRET_HASH", "FLW_SECRET_KEY", "RESEND_API_KEY"]);
+    expect(items.map((i) => i.name).sort()).toEqual([
+      "FLW_SECRET_HASH",
+      "FLW_SECRET_KEY",
+      "MT5_GATEWAY_API_KEY",
+      "PAYSTACK_SECRET_KEY",
+      "RESEND_API_KEY",
+      "SMTP_PASSWORD",
+    ]);
     const flw = items.find((i) => i.name === "FLW_SECRET_KEY")!;
     expect(flw.source).toBe("env");
     expect(flw.configured).toBe(true);
@@ -165,5 +174,49 @@ describe("Admin secret override API", () => {
 
     // Cleanup so later tests in the same suite are unaffected.
     await authDelete(app, "/api/admin/secrets/RESEND_API_KEY", adminCookie);
+  });
+});
+
+describe("MT5 gateway apiKey resolution", () => {
+  it("resolves the gateway apiKey through the secret store (override > env > legacy JSON)", async () => {
+    const db = getTestDb();
+    db.delete(settings).where(eq(settings.key, MT5_CONFIG_SETTING)).run();
+    // These direct lib calls bind the real (non-mocked) getDb, so pass the
+    // test db explicitly — the same db getMT5Config is given.
+    clearSecretOverride("MT5_GATEWAY_API_KEY", db);
+
+    try {
+      // Environment-only: getMT5Config picks up the env var even with no row.
+      process.env.MT5_GATEWAY_API_KEY = "env-mt5-key-0001";
+      expect(getMT5Config(db).apiKey).toBe("env-mt5-key-0001");
+
+      // Admin override wins over the env var.
+      setSecretOverride("MT5_GATEWAY_API_KEY", "override-mt5-key-0002", db);
+      expect(getMT5Config(db).apiKey).toBe("override-mt5-key-0002");
+
+      // Clearing the override falls back to the env var.
+      clearSecretOverride("MT5_GATEWAY_API_KEY", db);
+      expect(getMT5Config(db).apiKey).toBe("env-mt5-key-0001");
+
+      // Legacy JSON apiKey is the final fallback when neither override nor env
+      // is present (pre-secret-store installs keep working).
+      delete process.env.MT5_GATEWAY_API_KEY;
+      db.insert(settings)
+        .values({
+          key: MT5_CONFIG_SETTING,
+          value: JSON.stringify({ enabled: true, baseUrls: ["https://gw.test:8443"], apiKey: "legacy-key-0003" }),
+          group: "mt5",
+        })
+        .run();
+      expect(getMT5Config(db).apiKey).toBe("legacy-key-0003");
+
+      // Override takes precedence over the legacy JSON value too.
+      setSecretOverride("MT5_GATEWAY_API_KEY", "override-mt5-key-0004", db);
+      expect(getMT5Config(db).apiKey).toBe("override-mt5-key-0004");
+    } finally {
+      delete process.env.MT5_GATEWAY_API_KEY;
+      clearSecretOverride("MT5_GATEWAY_API_KEY", db);
+      db.delete(settings).where(eq(settings.key, MT5_CONFIG_SETTING)).run();
+    }
   });
 });

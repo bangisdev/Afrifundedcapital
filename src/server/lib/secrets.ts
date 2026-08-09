@@ -18,12 +18,25 @@
  * `isEncryptionKeyed()` so admins know overrides will not survive a restart.
  */
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
-import { getDb } from "../db";
+import { getDb, type Db } from "../db";
 import { settings } from "../schema";
 import { eq } from "drizzle-orm";
 
-/** The env-var names admins can manage from the Settings page. */
-export const SECRET_NAMES = ["FLW_SECRET_KEY", "FLW_SECRET_HASH", "RESEND_API_KEY"] as const;
+/**
+ * The env-var names admins can manage from the Settings page.
+ *
+ * Covers the payment gateways (Flutterwave, Paystack, Resend), the SMTP relay
+ * password, and the MT5 Manager API gateway bearer token. These names are
+ * mirrored by the secret-leak guards (scripts/check-secrets.sh + .gitleaks.toml).
+ */
+export const SECRET_NAMES = [
+  "FLW_SECRET_KEY",
+  "FLW_SECRET_HASH",
+  "RESEND_API_KEY",
+  "PAYSTACK_SECRET_KEY",
+  "SMTP_PASSWORD",
+  "MT5_GATEWAY_API_KEY",
+] as const;
 export type SecretName = (typeof SECRET_NAMES)[number];
 
 export const SECRET_OVERRIDE_PREFIX = "secret_override:";
@@ -95,10 +108,10 @@ function decrypt(payload: string): string {
 }
 
 // ─── Override store ────────────────────────────────────────────
-function readOverride(name: string): string | null {
+function readOverride(name: string, db?: Db): string | null {
   try {
-    const db = getDb();
-    const row = db
+    const _db = db ?? getDb();
+    const row = _db
       .select()
       .from(settings)
       .where(eq(settings.key, SECRET_OVERRIDE_PREFIX + name))
@@ -122,31 +135,31 @@ export function isSecretOverrideKey(key: string): boolean {
  * Resolve a gateway secret at runtime: admin DB override first (so a revoked
  * env key can be replaced in-app), then the environment variable.
  */
-export function getSecret(name: string): string {
-  const override = readOverride(name);
+export function getSecret(name: string, db?: Db): string {
+  const override = readOverride(name, db);
   if (override) return override;
   return process.env[name] || "";
 }
 
 /** Store an admin-provided value as the encrypted override for a secret. */
-export function setSecretOverride(name: string, value: string): void {
-  const db = getDb();
+export function setSecretOverride(name: string, value: string, db?: Db): void {
+  const _db = db ?? getDb();
   const key = SECRET_OVERRIDE_PREFIX + name;
   const payload = encrypt(value);
-  const existing = db.select().from(settings).where(eq(settings.key, key)).get();
+  const existing = _db.select().from(settings).where(eq(settings.key, key)).get();
   if (existing) {
-    db.update(settings).set({ value: payload, group: "secrets" }).where(eq(settings.key, key)).run();
+    _db.update(settings).set({ value: payload, group: "secrets" }).where(eq(settings.key, key)).run();
   } else {
-    db.insert(settings)
+    _db.insert(settings)
       .values({ key, value: payload, group: "secrets", description: `Runtime-managed secret override for ${name}` })
       .run();
   }
 }
 
 /** Remove the override so the environment variable takes effect again. */
-export function clearSecretOverride(name: string): void {
-  const db = getDb();
-  db.delete(settings).where(eq(settings.key, SECRET_OVERRIDE_PREFIX + name)).run();
+export function clearSecretOverride(name: string, db?: Db): void {
+  const _db = db ?? getDb();
+  _db.delete(settings).where(eq(settings.key, SECRET_OVERRIDE_PREFIX + name)).run();
 }
 
 /** Whether an admin override currently exists for the secret (regardless of env). */

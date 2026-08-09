@@ -36,6 +36,11 @@ let adminCookie: string;
 let adminUserId: number;
 
 beforeAll(async () => {
+  // Stable master key so the secret-store roundtrip works across the mocked
+  // and non-mocked module contexts (see secrets.test.ts — mirrors a real
+  // deployment with APP_SECRETS_KEY set in the Keys/API keys tab).
+  process.env.APP_SECRETS_KEY = "test-master-key-0123456789abcdef";
+
   app = await buildTestApp();
 
   const { cookie: uc } = await signUp(app, {
@@ -66,6 +71,7 @@ beforeAll(async () => {
 });
 
 afterAll(() => {
+  delete process.env.APP_SECRETS_KEY;
   cleanupTestDb();
 });
 
@@ -492,6 +498,34 @@ describe("PUT /api/trading/admin/config", () => {
       .get() as { action: string } | undefined;
     expect(audit).toBeDefined();
     expect(audit!.action).toBe("mt5.config_updated");
+  });
+
+  it("stores the apiKey via the encrypted secret store, never in plaintext settings", async () => {
+    const db = getTestDb();
+    const res = await authPut(app, "/api/trading/admin/config", adminCookie, {
+      apiKey: "store-me-9999",
+    });
+    expect(res.status).toBe(200);
+    expect((res.body as ApiEnvelope).config.apiKeyLast4).toBe("9999");
+
+    // The plaintext settings row no longer carries the apiKey…
+    const row = db.select().from(settings).where(eq(settings.key, MT5_CONFIG_SETTING)).get();
+    expect(row).toBeTruthy();
+    const parsed = JSON.parse(row!.value) as Record<string, unknown>;
+    expect(parsed.apiKey).toBeUndefined();
+    expect(JSON.stringify(parsed)).not.toContain("store-me-9999");
+
+    // …it lives in the encrypted override instead (ciphertext never contains it).
+    const override = db
+      .select()
+      .from(settings)
+      .where(eq(settings.key, "secret_override:MT5_GATEWAY_API_KEY"))
+      .get();
+    expect(override).toBeTruthy();
+    expect(override!.value).not.toContain("store-me-9999");
+
+    // Cleanup so later tests see a clean secret store.
+    db.delete(settings).where(eq(settings.key, "secret_override:MT5_GATEWAY_API_KEY")).run();
   });
 
   it("returns 403 for non-admin", async () => {

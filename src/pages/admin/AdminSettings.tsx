@@ -11,7 +11,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Loader2, Save, CreditCard, Shield, Webhook,
   CheckCircle, AlertTriangle, Copy, Database, Zap, Globe, Mail, Users, Settings2, History, ArrowUpRight,
-  KeyRound, Trash2
+  KeyRound, Trash2, Server, Activity
 } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router";
@@ -764,6 +764,14 @@ export default function AdminSettings() {
             <Webhook className="h-3 w-3" />
             Webhooks
           </TabsTrigger>
+          <TabsTrigger value="smtp" className="text-xs data-[state=active]:bg-secondary gap-1.5">
+            <Server className="h-3 w-3" />
+            SMTP
+          </TabsTrigger>
+          <TabsTrigger value="mt5" className="text-xs data-[state=active]:bg-secondary gap-1.5">
+            <Activity className="h-3 w-3" />
+            MT5
+          </TabsTrigger>
         </TabsList>
 
         {/* ─── Flutterwave ──────────────────────────── */}
@@ -1021,13 +1029,17 @@ export default function AdminSettings() {
 
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Secret Key</Label>
-              <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2">
-                <Shield className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <span className="text-[11px] text-muted-foreground">
-                  Secrets are never stored in the database — provide{" "}
-                  <code className="bg-muted px-1 rounded">PAYSTACK_SECRET_KEY</code> via the platform Keys/API keys tab when the integration ships.
-                </span>
-              </div>
+              <SecretKeyField
+                envVar="PAYSTACK_SECRET_KEY"
+                status={secretStatusOf("PAYSTACK_SECRET_KEY")}
+                hint={
+                  <p className="text-[10px] text-muted-foreground pt-1">
+                    Server-side only — used for payment verification and refunds when the Paystack integration
+                    ships. Updating here takes effect immediately (stored encrypted at rest); clearing falls back
+                    to <code className="bg-muted px-1 rounded">PAYSTACK_SECRET_KEY</code> from the environment.
+                  </p>
+                }
+              />
             </div>
 
             <div className="pt-2">
@@ -1198,6 +1210,85 @@ export default function AdminSettings() {
               </div>
             </div>
           )}
+        </TabsContent>
+
+        {/* ─── SMTP ────────────────────────────────── */}
+        <TabsContent value="smtp" className="space-y-6">
+          <div className="card-subtle p-6 space-y-5">
+            <div className="flex items-center gap-2 mb-1">
+              <Server className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-medium">SMTP Relay</h3>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Optional SMTP credentials used by the email service when a direct relay is configured. The
+              password is managed as a runtime secret — updating here takes effect immediately (stored
+              encrypted at rest) and clearing falls back to the environment variable.
+            </p>
+
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">SMTP Password</Label>
+              <SecretKeyField
+                envVar="SMTP_PASSWORD"
+                status={secretStatusOf("SMTP_PASSWORD")}
+                hint={
+                  <p className="text-[10px] text-muted-foreground pt-1">
+                    The SMTP host, port, and username are connection metadata — set them via{" "}
+                    <code className="bg-muted px-1 rounded">SMTP_HOST</code>,{" "}
+                    <code className="bg-muted px-1 rounded">SMTP_PORT</code>, and{" "}
+                    <code className="bg-muted px-1 rounded">SMTP_USER</code> in the platform Keys/API keys tab.
+                  </p>
+                }
+              />
+            </div>
+
+            <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 flex items-start gap-2">
+              <Shield className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+              <span className="text-[11px] text-muted-foreground">
+                Transactional email is sent through <strong>Resend</strong> by default (see the Resend tab).
+                The SMTP password is managed here so the relay path can be activated without a redeploy.
+              </span>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ─── MT5 Gateway ────────────────────────── */}
+        <TabsContent value="mt5" className="space-y-6">
+          <div className="card-subtle p-6 space-y-5">
+            <div className="flex items-center gap-2 mb-1">
+              <Activity className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-medium">MT5 Manager API Gateway</h3>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              The bearer token the platform uses to authenticate with your MT5 Manager API gateway. It is a
+              managed runtime secret — updating here takes effect immediately (stored encrypted at rest) and
+              clearing falls back to the environment variable.
+            </p>
+
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Gateway API Key</Label>
+              <SecretKeyField
+                envVar="MT5_GATEWAY_API_KEY"
+                status={secretStatusOf("MT5_GATEWAY_API_KEY")}
+                hint={
+                  <p className="text-[10px] text-muted-foreground pt-1">
+                    Saving a key here — or on the Admin → MT5 page's API Key field — stores it encrypted and
+                    never in plaintext settings. Endpoint URLs, manager login, and leverage stay in the MT5
+                    gateway config.
+                  </p>
+                }
+              />
+            </div>
+
+            <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 flex items-start gap-2">
+              <Shield className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+              <span className="text-[11px] text-muted-foreground">
+                The Admin → MT5 page's "API Key" field saves through this same encrypted store, so the key is
+                never written to the database in plaintext.
+              </span>
+            </div>
+          </div>
         </TabsContent>
 
         {/* ─── Affiliate ──────────────────────────── */}

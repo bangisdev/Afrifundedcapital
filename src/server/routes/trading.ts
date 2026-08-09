@@ -23,6 +23,7 @@ import {
 import { requireAuth, requireAdmin } from "../middleware";
 import { getMT5Provider } from "../lib/mt5";
 import { getMT5Config, redactMT5Config, MT5_CONFIG_SETTING, isMT5GatewayConfigured } from "../lib/mt5/config";
+import { setSecretOverride } from "../lib/secrets";
 import { syncChallenge, getActiveChallenges } from "../lib/mt5/sync-service";
 import {
   enqueueSyncJob,
@@ -542,13 +543,31 @@ app.put("/admin/config", requireAuth, requireAdmin, async (c) => {
   const db = getDb();
   const current = getMT5Config(db);
 
+  // The gateway bearer token is a managed secret: a provided value is stored
+  // encrypted via the secret store (admin override) and is never written to
+  // the settings JSON. Legacy configs that predate the store keep their stored
+  // key until it is replaced, so existing installs don't break.
+  const rawApiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
+  let legacyApiKey = "";
+  if (!rawApiKey) {
+    const stored = db.select().from(settings).where(eq(settings.key, MT5_CONFIG_SETTING)).get();
+    if (stored) {
+      try {
+        legacyApiKey = (JSON.parse(stored.value) as { apiKey?: string }).apiKey ?? "";
+      } catch { /* invalid stored JSON — ignore */ }
+    }
+  }
+  if (rawApiKey) {
+    setSecretOverride("MT5_GATEWAY_API_KEY", rawApiKey);
+  }
+
   const next = {
     ...current,
     enabled: typeof body.enabled === "boolean" ? body.enabled : current.enabled,
     baseUrls: Array.isArray(body.baseUrls)
       ? body.baseUrls.map(String).map((s: string) => s.trim()).filter(Boolean)
       : current.baseUrls,
-    apiKey: typeof body.apiKey === "string" ? body.apiKey.trim() : current.apiKey,
+    apiKey: rawApiKey || legacyApiKey,
     managerLogin: typeof body.managerLogin === "string" ? body.managerLogin.trim() : current.managerLogin,
     managerPassword: typeof body.managerPassword === "string" ? body.managerPassword : current.managerPassword,
     group: typeof body.group === "string" && body.group.trim() ? body.group.trim() : current.group,
@@ -560,13 +579,16 @@ app.put("/admin/config", requireAuth, requireAdmin, async (c) => {
     reconciliationTolerance: typeof body.reconciliationTolerance === "number" ? body.reconciliationTolerance : current.reconciliationTolerance,
   };
 
+  // Never persist the apiKey in the settings table — it lives in the secret
+  // store (or the legacy fallback read above). Drop it from the payload.
+  const { apiKey: _droppedApiKey, ...persisted } = next;
   const existing = db.select().from(settings).where(eq(settings.key, MT5_CONFIG_SETTING)).get();
   if (existing) {
-    db.update(settings).set({ value: JSON.stringify(next) }).where(eq(settings.key, MT5_CONFIG_SETTING)).run();
+    db.update(settings).set({ value: JSON.stringify(persisted) }).where(eq(settings.key, MT5_CONFIG_SETTING)).run();
   } else {
     db.insert(settings).values({
       key: MT5_CONFIG_SETTING,
-      value: JSON.stringify(next),
+      value: JSON.stringify(persisted),
       group: "mt5",
       description: "MT5 Manager API gateway connection",
     }).run();
