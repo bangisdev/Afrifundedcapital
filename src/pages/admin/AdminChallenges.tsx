@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { newsBlackoutWindow } from "@/lib/utils";
+import { newsBlackoutWindow, RULE_HINTS } from "@/lib/utils";
 import {
   Loader2,
   Plus,
@@ -625,25 +625,25 @@ export default function AdminChallenges() {
                                     "Weekend Holding",
                                     tr.allowWeekendHolding !== false,
                                     ruleRowValue(tr, "allowWeekendHolding"),
-                                    "When restricted, any trade opened or closed on Saturday or Sunday is flagged as a rule violation."
+                                    RULE_HINTS.weekendHolding
                                   )}
                                   {ruleRow(
                                     "News Trading",
                                     tr.allowNewsTrading !== false,
                                     ruleRowValue(tr, "news"),
-                                    "When restricted, trades opened inside the blackout window around a high-impact news release are flagged. The window is template-configured (15 min each side by default)."
+                                    RULE_HINTS.newsTrading
                                   )}
                                   {ruleRow(
                                     "Expert Advisors",
                                     tr.allowEATrading !== false,
                                     ruleRowValue(tr, "allowEATrading"),
-                                    "When restricted, automated strategies are flagged using heuristics — high trade frequency, robotic spacing, and night trading."
+                                    RULE_HINTS.eaTrading
                                   )}
                                   {ruleRow(
                                     "Copy Trading",
                                     tr.allowCopyTrading !== false,
                                     ruleRowValue(tr, "allowCopyTrading"),
-                                    "When restricted, trades matching another account's trade signatures within a short window are flagged."
+                                    RULE_HINTS.copyTrading
                                   )}
                                 </div>
                               ) : (

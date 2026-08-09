@@ -2,7 +2,7 @@ import { motion, useScroll, useTransform, useInView, type Variants } from "frame
 import { useNavigate } from "react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect, useRef, useState, useCallback } from "react";
-import { newsBlackoutWindow } from "@/lib/utils";
+import { newsBlackoutWindow, RULE_HINTS } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -442,7 +442,7 @@ export default function Landing() {
     const bi = order.indexOf(b.type);
     return (ai === -1 ? order.length : ai) - (bi === -1 ? order.length : bi);
   });
-  const comparisonRows: Array<{ label: string; values: string[] }> = [
+  const comparisonRows: Array<{ label: string; values: string[]; hint?: string }> = [
     { label: "Evaluation Phases", values: orderedTypes.map((t) => challengePhaseLabel(t.type)) },
     { label: "Profit Target", values: orderedTypes.map((t) => `${t.profitTarget}%`) },
     { label: "Daily Drawdown", values: orderedTypes.map((t) => `${t.dailyDrawdown}%`) },
@@ -452,10 +452,10 @@ export default function Landing() {
     { label: "Duration", values: orderedTypes.map((t) => (t.durationDays ? `${t.durationDays} days` : "Unlimited")) },
     { label: "Reset Fee", values: orderedTypes.map((t) => formatNgn(t.resetFee)) },
     { label: "Consistency Rule", values: orderedTypes.map((t) => (t.consistencyTarget ? `Max ${t.consistencyTarget}% daily` : "No restriction")) },
-    { label: "Weekend Holding", values: orderedTypes.map((t) => (t.allowWeekendHolding ? "Allowed" : "Restricted")) },
-    { label: "News Trading", values: orderedTypes.map(newsTradingLabel) },
-    { label: "Expert Advisors", values: orderedTypes.map((t) => (t.allowEATrading !== false ? "Allowed" : "Blocked")) },
-    { label: "Copy Trading", values: orderedTypes.map((t) => (t.allowCopyTrading ? "Allowed" : "Blocked")) },
+    { label: "Weekend Holding", values: orderedTypes.map((t) => (t.allowWeekendHolding ? "Allowed" : "Restricted")), hint: RULE_HINTS.weekendHolding },
+    { label: "News Trading", values: orderedTypes.map(newsTradingLabel), hint: RULE_HINTS.newsTrading },
+    { label: "Expert Advisors", values: orderedTypes.map((t) => (t.allowEATrading !== false ? "Allowed" : "Blocked")), hint: RULE_HINTS.eaTrading },
+    { label: "Copy Trading", values: orderedTypes.map((t) => (t.allowCopyTrading ? "Allowed" : "Blocked")), hint: RULE_HINTS.copyTrading },
     { label: "Profit Share", values: orderedTypes.map(() => "90%") },
   ];
 
@@ -1149,7 +1149,14 @@ export default function Landing() {
                   <tbody>
                     {comparisonRows.map((row) => (
                       <tr key={row.label} className="border-b border-border/60 last:border-0">
-                        <td className="px-5 py-3 text-muted-foreground whitespace-nowrap">{row.label}</td>
+                        <td className="px-5 py-3 text-muted-foreground align-top">
+                          <div className="whitespace-nowrap">{row.label}</div>
+                          {row.hint && (
+                            <div className="mt-1 whitespace-normal text-[10px] leading-snug text-muted-foreground/70 max-w-44">
+                              {row.hint}
+                            </div>
+                          )}
+                        </td>
                         {row.values.map((v, i) => (
                           <td
                             key={i}

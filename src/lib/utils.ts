@@ -21,3 +21,23 @@ export function newsBlackoutWindow(t: {
   if (before === after) return `${before}m`;
   return `${before}m/${after}m`;
 }
+
+/**
+ * Plain-language explanations for each trading rule restriction, mirroring the
+ * enforcement logic in the MT5 rule engine. Single source of truth shared by
+ * the admin tooltips and the public landing page inline helper text.
+ */
+export const RULE_HINTS: Record<
+  "weekendHolding" | "newsTrading" | "eaTrading" | "copyTrading",
+  string
+> = {
+  weekendHolding:
+    "When restricted, any trade opened or closed on Saturday or Sunday is flagged as a rule violation.",
+  newsTrading:
+    "When restricted, trades opened inside the blackout window around a high-impact news release are flagged. The window is template-configured (15 min each side by default).",
+  eaTrading:
+    "When restricted, automated strategies are flagged using heuristics — high trade frequency, robotic spacing, and night trading.",
+  copyTrading:
+    "When restricted, trades matching another account's trade signatures within a short window are flagged.",
+};
+
