@@ -376,6 +376,10 @@ bun run check:secrets           # exit 0 when clean
 bash scripts/check-secrets.sh   # exit 1 + prints the offending file:line list
 ```
 
+### Self-test
+
+`bash scripts/gitleaks-fixture.sh` (or `bun run test:secrets-fixture`) generates a temporary fixture covering every shape both gates must catch and asserts that `check:secrets` trips on the secrets while ignoring placeholders — and, if gitleaks is installed (or `GITLEAKS_BIN` points at it), that gitleaks fires all nine custom rules on the same shapes. The fixture is built from shell fragments at runtime, so the script itself never trips either gate. Run it after changing `scripts/check-secrets.sh` or `.gitleaks.toml`.
+
 # Testing
 
 ## Unit & integration tests (Vitest)
