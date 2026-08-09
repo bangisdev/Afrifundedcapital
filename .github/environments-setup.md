@@ -177,7 +177,9 @@ Staging Environment Secrets:
 | `SMTP_PASSWORD` (or `SMTP_PASS`) | Reserved for SMTP relay should you add one for transactional email (email currently goes through Resend — see `RESEND_API_KEY`). `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` are connection metadata, not secrets, and may be set as plain variables. |
 | `MT5_GATEWAY_API_KEY` (or `MT5_API_KEY`) | The runtime MT5 gateway credentials (base URLs, API key, manager login/password) are entered in **Admin → MT5** and stored encrypted in the settings table — no env var is read at runtime. These env names exist for the CI secrets scan: committing a hardcoded value here (or anywhere) fails the `check:secrets` job. Keep them empty/unset unless you intentionally use env-driven provisioning. |
 
-> **Placeholder convention:** always use `(production key)` / `(test key)` style placeholders in documentation. The `check:secrets` scan (`.github/workflows/e2e.yml` → `secrets-scan` job) fails the build if real-looking values (Flutterwave `FLWSECK-*`, Resend `re_*`, SMTP/JWT/MT5 hardcoded assignments) are committed.
+> **Placeholder convention:** always use `(production key)` / `(test key)` style placeholders in documentation — a real-looking value anywhere in the repo fails CI. The `check:secrets` scan (`.github/workflows/e2e.yml` and `e2e-matrix.yml` → `secrets-scan` job, `scripts/check-secrets.sh`) fails the build if committed values match Flutterwave `FLWSECK-*`, Resend `re_*`, Paystack/Stripe `sk_*`, hardcoded SMTP/JWT/MT5 assignments (`JWT_PRIVATE_KEY`, `SMTP_PASS`/`SMTP_PASSWORD`, `MT5_API_KEY`/`MT5_GATEWAY_API_KEY`, MT5 `apiKey` fields), or PEM private keys.
+>
+> **gitleaks alignment:** the same patterns are enforced pre-commit by gitleaks (`.gitleaks.toml`, run in `.github/workflows/secret-scan.yml`) — keep the two configs in sync when adding a rule. gitleaks is deliberately the stricter superset: it additionally flags public keys (`FLWPUBK-*`, `pk_live_*`) and generic `api_key` / `secret_key` assignments, so the `(placeholder)` convention applies to code comments and docs as well.
 
 
 ## Best Practices
