@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,8 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Loader2, Save, CreditCard, Shield, Webhook,
-  CheckCircle, AlertTriangle, Copy, Database, Zap, Globe, Mail, Users, Settings2, History, ArrowUpRight
+  CheckCircle, AlertTriangle, Copy, Database, Zap, Globe, Mail, Users, Settings2, History, ArrowUpRight,
+  KeyRound, Trash2
 } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router";
@@ -92,36 +93,126 @@ function ViewHistoryLink({ settingKey }: { settingKey: string }) {
 }
 
 /**
- * Badge showing whether a gateway secret is configured via environment
- * variables — the only place secrets are allowed to live. Shows the masked
- * value when configured so admins can confirm which key the runtime is using.
+ * Admin-editable gateway secret: status badge (source + masked value), a
+ * password input to update the key, and a clear-override action when the
+ * value currently comes from the database.
+ *
+ * Updates go to PUT /api/admin/secrets/:envVar — the value is stored encrypted
+ * at rest (AES-256-GCM) and takes effect immediately for every consumer.
+ * Clearing the override falls back to the environment variable, which stays
+ * the deployment-level source of truth.
  */
-function EnvSecretBadge({
+function SecretKeyField({
   envVar,
-  configured,
-  masked,
+  status,
+  hint,
 }: {
   envVar: string;
-  configured: boolean;
-  masked?: string;
+  status?: { configured: boolean; source: "env" | "db" | "none"; masked: string };
+  hint?: ReactNode;
 }) {
-  if (configured) {
-    return (
-      <Badge className="border-transparent bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-        <CheckCircle className="h-3 w-3" />
-        {masked ? `From env · ${masked}` : "From env · configured"}
-      </Badge>
-    );
-  }
+  const [value, setValue] = useState("");
+
+  const updateSecret = useApiMutation<any, any>("put", `/api/admin/secrets/${envVar}`, {
+    invalidateKeys: [
+      ["admin", "secrets-status"],
+      ["admin", "flutterwave-config"],
+      ["admin", "resend-status"],
+    ],
+    onSuccess: () => {
+      setValue("");
+      toast.success(`${envVar} updated and stored securely`);
+    },
+  });
+  const clearSecret = useApiMutation<any, any>("delete", `/api/admin/secrets/${envVar}`, {
+    invalidateKeys: [
+      ["admin", "secrets-status"],
+      ["admin", "flutterwave-config"],
+      ["admin", "resend-status"],
+    ],
+    onSuccess: () => {
+      setValue("");
+      toast.success(`${envVar} cleared — falling back to the environment variable`);
+    },
+  });
+
+  const source = status?.source ?? "none";
   return (
-    <Badge
-      variant="outline"
-      className="border-amber-500/30 bg-amber-500/5 text-amber-600 dark:text-amber-400"
-      title={`Set the ${envVar} environment variable in the platform Keys/API keys tab`}
-    >
-      <AlertTriangle className="h-3 w-3" />
-      Not configured — set {envVar}
-    </Badge>
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {source === "env" && (
+          <Badge className="border-transparent bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+            <CheckCircle className="h-3 w-3" />
+            {envVar} · From env{status?.masked ? ` · ${status.masked}` : ""}
+          </Badge>
+        )}
+        {source === "db" && (
+          <Badge className="border-transparent bg-sky-500/10 text-sky-600 dark:text-sky-400">
+            <KeyRound className="h-3 w-3" />
+            {envVar} · From database{status?.masked ? ` · ${status.masked}` : ""}
+          </Badge>
+        )}
+        {source === "none" && (
+          <Badge
+            variant="outline"
+            className="border-amber-500/30 bg-amber-500/5 text-amber-600 dark:text-amber-400"
+            title={`Not configured — update ${envVar} here or set it in the platform Keys/API keys tab`}
+          >
+            <AlertTriangle className="h-3 w-3" />
+            {envVar} · Not configured
+          </Badge>
+        )}
+        {source === "db" && (
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await clearSecret.mutateAsync(undefined);
+              } catch (e: any) {
+                toast.error(e?.message || `Failed to clear ${envVar}`);
+              }
+            }}
+            disabled={clearSecret.isPending}
+            className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            title={`Clear the stored override for ${envVar} and fall back to the environment variable`}
+          >
+            <Trash2 className="h-3 w-3" />
+            {clearSecret.isPending ? "Clearing…" : "Clear override"}
+          </button>
+        )}
+      </div>
+      <div className="flex gap-2">
+        <Input
+          type="password"
+          placeholder={`Paste a new ${envVar} — stored encrypted`}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="text-xs font-mono"
+          autoComplete="off"
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          className="text-xs shrink-0"
+          onClick={async () => {
+            try {
+              await updateSecret.mutateAsync({ value });
+            } catch (e: any) {
+              toast.error(e?.message || `Failed to update ${envVar}`);
+            }
+          }}
+          disabled={updateSecret.isPending || !value.trim()}
+        >
+          {updateSecret.isPending ? (
+            <Loader2 className="h-3 w-3 animate-spin mr-1" />
+          ) : (
+            <Save className="h-3 w-3 mr-1" />
+          )}
+          Update
+        </Button>
+      </div>
+      {hint}
+    </div>
   );
 }
 
@@ -145,6 +236,13 @@ export default function AdminSettings() {
     ["admin", "resend-status"],
     "/api/test-email/status"
   );
+  // Admin-managed secret overrides — status + source for each gateway key.
+  const { data: secretsStatus } = useApiQuery<any>(
+    ["admin", "secrets-status"],
+    "/api/admin/secrets"
+  );
+  const secretStatusOf = (name: string) =>
+    (secretsStatus?.items ?? []).find((s: any) => s.name === name);
 
   // Mode state
   const [liveMode, setLiveMode] = useState(false);
@@ -496,7 +594,7 @@ export default function AdminSettings() {
         <div>
           <h1 className="text-lg font-medium tracking-tight">Payment Settings</h1>
           <p className="text-xs text-muted-foreground mt-1">
-            Configure payment providers and environment mode — gateway secrets live in environment variables
+            Configure payment providers and environment mode — gateway secrets can be updated here or set via environment variables
           </p>
         </div>
         <Button size="sm" className="text-xs" onClick={handleBulkSeed} disabled={bulkSeeding}>
@@ -504,6 +602,25 @@ export default function AdminSettings() {
           {bulkSeeding ? "Seeding..." : "Seed All Demo Data"}
         </Button>
       </div>
+
+      {/* Keys saved here are encrypted with a stable key only when
+          APP_SECRETS_KEY / JWT_PRIVATE_KEY is set — otherwise they would be
+          lost on restart, so warn the admin. */}
+      {secretsStatus && !secretsStatus.encryptionKeyed && (
+        <div className="card-subtle p-4 flex items-start gap-3 border-yellow-500/20">
+          <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5 shrink-0" />
+          <div>
+            <div className="text-xs font-medium text-yellow-600 dark:text-yellow-400">Secret overrides are not persistent</div>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              No <code className="bg-muted px-1 rounded">APP_SECRETS_KEY</code> (or{" "}
+              <code className="bg-muted px-1 rounded">JWT_PRIVATE_KEY</code>) is set, so keys saved here are
+              encrypted with an ephemeral key and will not survive a restart. Set{" "}
+              <code className="bg-muted px-1 rounded">APP_SECRETS_KEY</code> in the platform Keys/API keys tab
+              to make updates permanent.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ─── LIVE / TEST MODE TOGGLE ────────────────────── */}
       <div className={`card-subtle p-5 ${liveMode ? "border-red-500/30 bg-red-500/5" : "border-emerald-500/20 bg-emerald-500/5"}`}>
@@ -732,28 +849,32 @@ export default function AdminSettings() {
 
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Secret Key</Label>
-              <EnvSecretBadge
+              <SecretKeyField
                 envVar="FLW_SECRET_KEY"
-                configured={!!flwEnvStatus?.secretKeyConfigured}
-                masked={flwEnvStatus?.secretKey || undefined}
+                status={secretStatusOf("FLW_SECRET_KEY")}
+                hint={
+                  <p className="text-[10px] text-muted-foreground pt-1">
+                    Server-side only — used for payment verification and refunds. Updating here takes effect
+                    immediately and is stored encrypted at rest; clearing falls back to{" "}
+                    <code className="bg-muted px-1 rounded">FLW_SECRET_KEY</code> from the environment.
+                  </p>
+                }
               />
-              <p className="text-[10px] text-muted-foreground">
-                Server-side only, used for payment verification and refunds. Secrets are never stored — set{" "}
-                <code className="bg-muted px-1 rounded">FLW_SECRET_KEY</code> in the platform Keys/API keys tab.
-              </p>
             </div>
 
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Verif Hash (Webhook Signature)</Label>
-              <EnvSecretBadge
+              <SecretKeyField
                 envVar="FLW_SECRET_HASH"
-                configured={!!flwEnvStatus?.secretHashConfigured}
-                masked={flwEnvStatus?.secretHash || undefined}
+                status={secretStatusOf("FLW_SECRET_HASH")}
+                hint={
+                  <p className="text-[10px] text-muted-foreground pt-1">
+                    Found in Flutterwave Dashboard → Settings → Webhooks. Updating here takes effect immediately
+                    (stored encrypted at rest); clearing falls back to{" "}
+                    <code className="bg-muted px-1 rounded">FLW_SECRET_HASH</code> from the environment.
+                  </p>
+                }
               />
-              <p className="text-[10px] text-muted-foreground">
-                Found in Flutterwave Dashboard → Settings → Webhooks. Set it as{" "}
-                <code className="bg-muted px-1 rounded">FLW_SECRET_HASH</code> in the platform Keys/API keys tab.
-              </p>
             </div>
 
             <div className="pt-2 flex items-center gap-3">
@@ -847,8 +968,8 @@ export default function AdminSettings() {
               </div>
             </div>
             <p className="text-[10px] text-muted-foreground mt-2">
-              Secrets (FLW_SECRET_KEY / FLW_SECRET_HASH) are shared across modes and come from the environment —
-              see the badges above.
+              Secrets (FLW_SECRET_KEY / FLW_SECRET_HASH) are shared across modes and can be updated in this panel
+              or set via environment variables — see the fields above.
             </p>
           </div>
         </TabsContent>
@@ -971,16 +1092,18 @@ export default function AdminSettings() {
 
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Resend API Key</Label>
-              <EnvSecretBadge
+              <SecretKeyField
                 envVar="RESEND_API_KEY"
-                configured={!!resendEnvStatus?.apiKeyConfigured}
-                masked={resendEnvStatus?.maskedKey || undefined}
+                status={secretStatusOf("RESEND_API_KEY")}
+                hint={
+                  <p className="text-[10px] text-muted-foreground pt-1">
+                    Used for all transactional emails. Get one from{" "}
+                    <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer" className="underline">resend.com/api-keys</a>.{" "}
+                    Updating here takes effect immediately (stored encrypted at rest); clearing falls back to{" "}
+                    <code className="bg-muted px-1 rounded">RESEND_API_KEY</code> from the environment.
+                  </p>
+                }
               />
-              <p className="text-[10px] text-muted-foreground">
-                The API key is never stored in the database. Get one from{" "}
-                <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer" className="underline">resend.com/api-keys</a>{" "}
-                and set <code className="bg-muted px-1 rounded">RESEND_API_KEY</code> in the platform Keys/API keys tab.
-              </p>
             </div>
 
             <div className="space-y-2">

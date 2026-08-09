@@ -5,6 +5,7 @@ import { eq, count } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
 import { writeAuditLog, redactSetting, attachSettingsLastChanged } from "../lib/audit";
 import { notifyAdminsOfSecurityEvent } from "../lib/notifications";
+import { isSecretOverrideKey } from "../lib/secrets";
 import { scrypt, randomBytes } from "crypto";
 import { promisify } from "util";
 
@@ -159,7 +160,9 @@ app.post("/admin", async (c) => {
 // leaves the server — never return stored credentials in plaintext.
 app.get("/settings", requireAuth, (c) => {
   const db = getDb();
-  const items = db.select().from(settings).all();
+  // Secret overrides (secret_override:*) are encrypted admin-managed key
+  // material managed via /api/admin/secrets — never exposed here.
+  const items = db.select().from(settings).all().filter((s) => !isSecretOverrideKey(s.key));
   const parsed = items.map((s) => {
     let value: unknown;
     try {

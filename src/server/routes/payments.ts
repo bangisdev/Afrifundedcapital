@@ -7,6 +7,7 @@ import { notify, notifyAdminsOfSecurityEvent } from "../lib/notifications";
 import { paymentConfirmationEmail } from "../lib/email";
 import { voidRedemptionForPayment, voidStaleRedemptions, ensureRedemptionForPayment, restoreRedemptionIfValid } from "../lib/payment-sweep";
 import { writeAuditLog, redactSetting } from "../lib/audit";
+import { getSecret, getSecretStatus } from "../lib/secrets";
 
 const app = new Hono();
 
@@ -140,8 +141,8 @@ app.post("/admin/flutterwave-config", requireAuth, requireAdmin, async (c) => {
 // ─── Admin: Get full Flutterwave config (for settings page) ──
 app.get("/admin/flutterwave-config", requireAuth, requireAdmin, (c) => {
   const db = getDb();
-  const envSecretKey = process.env.FLW_SECRET_KEY || "";
-  const envSecretHash = process.env.FLW_SECRET_HASH || "";
+  const secretKeyStatus = getSecretStatus("FLW_SECRET_KEY");
+  const secretHashStatus = getSecretStatus("FLW_SECRET_HASH");
 
   let configPublicKey = "";
   let configSecretKey = "";
@@ -158,9 +159,10 @@ app.get("/admin/flutterwave-config", requireAuth, requireAdmin, (c) => {
     }
   } catch { /* non-critical */ }
 
-  // Env vars are authoritative for secrets; DB config is a legacy fallback.
-  const secretKey = envSecretKey || configSecretKey;
-  const secretHash = envSecretHash || configSecretHash;
+  // Runtime resolution: admin DB override first, then env, then legacy DB
+  // config (kept only until the boot-time scrub removes it).
+  const secretKey = secretKeyStatus.configured ? getSecret("FLW_SECRET_KEY") : configSecretKey;
+  const secretHash = secretHashStatus.configured ? getSecret("FLW_SECRET_HASH") : configSecretHash;
 
   return c.json({
     publicKey: configPublicKey || process.env.FLW_PUBLIC_KEY || "",
@@ -171,6 +173,9 @@ app.get("/admin/flutterwave-config", requireAuth, requireAdmin, (c) => {
     // source of truth; the legacy DB config counts until scrubbed at boot.
     secretKeyConfigured: !!secretKey,
     secretHashConfigured: !!secretHash,
+    // Where the runtime resolves each secret from — "env" | "db" | "none".
+    secretKeySource: secretKeyStatus.source,
+    secretHashSource: secretHashStatus.source,
     isEnabled: configIsEnabled || !!process.env.FLW_PUBLIC_KEY,
   });
 });
@@ -282,9 +287,9 @@ app.post("/verify", requireAuth, async (c) => {
   if (payment.userId !== userId) return c.json({ error: "Unauthorized" }, 403);
   if (payment.status === "completed") return c.json({ status: "completed", message: "Already processed" });
 
-  // Verify with Flutterwave API — the secret key comes from the environment
-  // ONLY (FLW_SECRET_KEY). It is never read from or stored in the database.
-  const secretKey = process.env.FLW_SECRET_KEY || "";
+  // Verify with Flutterwave API — the secret key resolves at runtime: the
+  // admin-managed encrypted override first, then the FLW_SECRET_KEY env var.
+  const secretKey = getSecret("FLW_SECRET_KEY");
   let verificationResult: FlutterwaveVerifyResponse;
 
   try {
@@ -487,9 +492,9 @@ app.post("/webhook/flutterwave", async (c) => {
   const db = getDb();
   const now = Date.now();
 
-  // Verify webhook signature (verif-hash) — the hash comes from the
-  // environment ONLY (FLW_SECRET_HASH). Never read from / stored in the DB.
-  const secretHash = process.env.FLW_SECRET_HASH || "";
+  // Verify webhook signature (verif-hash) — the hash resolves at runtime: the
+  // admin-managed encrypted override first, then the FLW_SECRET_HASH env var.
+  const secretHash = getSecret("FLW_SECRET_HASH");
   const signature = c.req.header("verif-hash") || "";
   if (secretHash && signature !== secretHash) {
     return c.json({ error: "Invalid signature" }, 401);
@@ -905,8 +910,8 @@ app.post("/admin/test-webhook", requireAuth, requireAdmin, async (c) => {
 
   // Resolve the currently configured secret hash so the sample is signed
   // exactly the way Flutterwave's dashboard would sign a real webhook.
-  // Env-only (FLW_SECRET_HASH) — never read from the DB.
-  const secretHash = process.env.FLW_SECRET_HASH || "";
+  // Resolve via the runtime secret store (admin override, then env).
+  const secretHash = getSecret("FLW_SECRET_HASH");
 
   const now = Date.now();
   let paymentId: number | null = null;
@@ -984,9 +989,8 @@ app.post("/admin/:id/refund", requireAuth, requireAdmin, async (c) => {
   // challenge), but the response + audit log report whether the money moved.
   let refundGateway: { status: string; error?: string; amountRefunded?: number } = { status: "skipped" };
   try {
-    // The secret key comes from the environment ONLY (FLW_SECRET_KEY) — never
-    // from the database.
-    const secretKey = process.env.FLW_SECRET_KEY || "";
+    // Resolve via the runtime secret store (admin override, then env).
+    const secretKey = getSecret("FLW_SECRET_KEY");
 
     // Find the Flutterwave transaction stored for this payment
     const flwTx = db

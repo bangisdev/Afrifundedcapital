@@ -10,6 +10,7 @@ import { Resend } from "resend";
 import { getDb } from "../db";
 import { settings } from "../schema";
 import { eq } from "drizzle-orm";
+import { getSecret } from "./secrets";
 
 const FROM_EMAIL_FALLBACK = "AfriFundedCapital <onboarding@resend.dev>";
 const APP_URL = process.env.APP_URL || "https://beige-crews-rescue.freebuff.dev";
@@ -20,7 +21,8 @@ let _resend: Resend | null = null;
 let _resendKey: string = "";
 
 function getResendClient(): Resend | null {
-  const envKey = process.env.RESEND_API_KEY || "";
+  // Resolves at runtime: admin-managed encrypted override first, then env.
+  const envKey = getSecret("RESEND_API_KEY");
   if (!envKey) return null;
   if (envKey !== _resendKey) {
     _resendKey = envKey;

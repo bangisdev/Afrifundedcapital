@@ -382,6 +382,14 @@ bash scripts/check-secrets.sh   # exit 1 + prints the offending file:line list
 
 `bash scripts/check-alignment.sh` (or `bun run test:secrets-alignment`) statically asserts the two configs stay in sync: the same 9 hardcoded env-var names, byte-identical shared regexes (Flutterwave, Resend, `sk_*`, PEM), matching 16+/8+ token thresholds and matching exclusions, plus the documented public-key divergence. It also runs automatically as stage 2 of `bun run check:secrets` when scanning the repo. Run both after changing `scripts/check-secrets.sh` or `.gitleaks.toml`.
 
+## Runtime-managed secrets (Admin → Settings)
+
+Gateway API keys (`FLW_SECRET_KEY`, `FLW_SECRET_HASH`, `RESEND_API_KEY`) can also be updated in-app from **Admin → Settings**, without touching the deployment environment. Updates are stored in the `settings` table under `secret_override:<NAME>` keys, encrypted at rest with **AES-256-GCM**, and take effect immediately — the admin DB override resolves first, with the environment variable as the fallback, so a revoked environment key can be replaced without a redeploy.
+
+- **Master key:** derived (SHA-256, domain-separated) from `APP_SECRETS_KEY` (recommended) or `JWT_PRIVATE_KEY`. Set `APP_SECRETS_KEY` in the platform Keys/API keys tab to make updates permanent. Without it, overrides still work but are encrypted with an ephemeral key and lost on restart — the settings page shows a warning banner in that case.
+- **API:** `GET /api/admin/secrets` (status + source per key), `PUT /api/admin/secrets/:name` (set), `DELETE /api/admin/secrets/:name` (clear) — all admin-only, audit-logged (`secrets.updated` / `secrets.cleared`) with values never written to the trail, and other admins are alerted via the existing security-event notifications.
+- The generic `GET /api/seed/settings` endpoint never returns override rows, and the boot-time `scrubStoredSecrets` pass leaves them untouched (they hold ciphertext only).
+
 # Testing
 
 ## Unit & integration tests (Vitest)

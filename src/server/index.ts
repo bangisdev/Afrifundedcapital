@@ -29,6 +29,7 @@ import certificatesRouter from "./routes/certificates";
 import payoutsRouter from "./routes/payouts";
 import seedRouter from "./routes/seed";
 import testEmailRouter from "./routes/test-email";
+import secretsRouter from "./routes/secrets";
 import { startMT5Scheduler } from "./lib/mt5/scheduler";
 
 // Initialize database
@@ -746,6 +747,7 @@ app.route("/api/certificates", certificatesRouter);
 app.route("/api/payouts", payoutsRouter);
 app.route("/api/seed", seedRouter);
 app.route("/api/test-email", testEmailRouter);
+app.route("/api/admin/secrets", secretsRouter);
 
 // ═══════════════════════════════════════════════
 //  VITE PLUGIN — mounts Hono into dev server

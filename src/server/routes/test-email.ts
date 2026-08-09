@@ -4,13 +4,14 @@ import { getDb } from "../db";
 import { settings } from "../schema";
 import { eq } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
+import { getSecretStatus } from "../lib/secrets";
 
 const app = new Hono();
 
 // GET /api/test-email/status — env-var credential status for the admin UI.
 // The API key itself is never returned, only whether it is configured.
 app.get("/status", requireAuth, requireAdmin, (c) => {
-  const envKey = process.env.RESEND_API_KEY || "";
+  const keyStatus = getSecretStatus("RESEND_API_KEY");
   let fromEmail = process.env.RESEND_EMAIL_FROM || "AfriFundedCapital <onboarding@resend.dev>";
   try {
     const db = getDb();
@@ -21,8 +22,10 @@ app.get("/status", requireAuth, requireAdmin, (c) => {
     }
   } catch { /* non-critical */ }
   return c.json({
-    apiKeyConfigured: !!envKey,
-    maskedKey: envKey ? "••••••" + envKey.slice(-4) : "",
+    apiKeyConfigured: keyStatus.configured,
+    maskedKey: keyStatus.masked,
+    // Where the runtime resolves the key from — "env" | "db" | "none".
+    source: keyStatus.source,
     fromEmail,
   });
 });
@@ -120,7 +123,7 @@ app.post("/send-test", async (c) => {
     return c.json({
       success: true,
       message: apiKey
-        ? "Test email sent using the provided key (not stored). Set RESEND_API_KEY in the environment for production sending."
+        ? "Test email sent using the provided key (not stored). Set RESEND_API_KEY in the environment or update it in Admin → Settings for production sending."
         : "Test email sent successfully",
     });
   } else {

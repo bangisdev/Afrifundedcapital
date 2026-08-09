@@ -712,21 +712,22 @@ test.describe("Admin Dashboard E2E Flow", () => {
     });
   });
 
-  // ─── 12. Admin Settings (env-var gateway secrets) ───
+  // ─── 12. Admin Settings (runtime-managed gateway secrets) ───
   //
-  // After the secrets-refactor, gateway credentials live in environment
-  // variables only (RESEND_API_KEY, FLW_SECRET_KEY, FLW_SECRET_HASH) and the
-  // settings page surfaces their runtime status via EnvSecretBadge chips — it
-  // no longer renders password inputs that persist keys to the database. In the
-  // e2e env no such env vars exist, so the badges deterministically render the
-  // amber "Not configured — set …" state (regexes below also tolerate the green
-  // "From env · …" state for runs against a server that has the keys set).
+  // Gateway credentials (RESEND_API_KEY, FLW_SECRET_KEY, FLW_SECRET_HASH) can
+  // be updated directly from the settings page: the value is stored encrypted
+  // at rest via PUT /api/admin/secrets/:name, takes effect immediately, and
+  // falls back to the environment variable after DELETE. The page shows a
+  // status badge per key (green "From env", blue "From database", amber
+  // "Not configured") plus an update field. In the e2e env no env vars are
+  // set, so badges deterministically render "Not configured" until a test
+  // stores an override (regexes tolerate the other states too).
   test.describe("12. Admin Settings", () => {
     test.beforeEach(async ({ page }) => {
       await signInAsAdmin(page);
     });
 
-    test("Flutterwave tab shows env-var status badges and no secret inputs", async ({ page }) => {
+    test("Flutterwave tab shows gateway secret status badges and update fields", async ({ page }) => {
       await warmUp(page, "/admin/settings");
       await waitForAppReady(page);
       await expect(page.getByRole("heading", { name: "Payment Settings" })).toBeVisible({
@@ -734,28 +735,29 @@ test.describe("Admin Dashboard E2E Flow", () => {
       });
 
       // The Flutterwave tab is the default. Both gateway secrets are surfaced
-      // as status badges (green "From env · …abcd" when the runtime has the
-      // key, amber "Not configured — set FLW_SECRET_KEY" otherwise).
+      // as status badges ("From env · …abcd", "From database · …abcd", or
+      // "Not configured" when the runtime has nothing for them).
       const flwSecretBadge = page.locator('[data-slot="badge"]', {
         hasText: "FLW_SECRET_KEY",
       });
       await expect(flwSecretBadge).toBeVisible({ timeout: 20_000 });
-      await expect(flwSecretBadge).toContainText(/From env|Not configured/);
+      await expect(flwSecretBadge).toContainText(/From env|From database|Not configured/);
 
       const flwHashBadge = page.locator('[data-slot="badge"]', {
         hasText: "FLW_SECRET_HASH",
       });
       await expect(flwHashBadge).toBeVisible();
-      await expect(flwHashBadge).toContainText(/From env|Not configured/);
+      await expect(flwHashBadge).toContainText(/From env|From database|Not configured/);
 
-      // The old "Secret Key" / "Verif Hash" password inputs are gone: the only
-      // input in the Flutterwave panel is the (client-side, safe) public key.
+      // The Flutterwave panel holds the public-key textbox (safe, client-side)
+      // plus one encrypted update field per gateway secret.
       const flwPanel = page.locator('[data-slot="tabs-content"]');
-      await expect(flwPanel.getByRole("textbox")).toHaveCount(1);
-      await expect(flwPanel.locator('input[type="password"]')).toHaveCount(0);
+      await expect(flwPanel.locator('input[type="password"]')).toHaveCount(2);
+      await expect(flwPanel.locator('input:not([type="password"])')).toHaveCount(1);
+      await expect(flwPanel.getByPlaceholder(/stored encrypted/)).toHaveCount(2);
     });
 
-    test("Resend tab shows the RESEND_API_KEY badge and keeps only the transient test-key input", async ({ page }) => {
+    test("Resend tab shows the RESEND_API_KEY badge and both password fields", async ({ page }) => {
       await warmUp(page, "/admin/settings");
       await waitForAppReady(page);
       await page.getByRole("tab", { name: /Resend/ }).click();
@@ -764,14 +766,52 @@ test.describe("Admin Dashboard E2E Flow", () => {
         hasText: "RESEND_API_KEY",
       });
       await expect(resendBadge).toBeVisible({ timeout: 20_000 });
-      await expect(resendBadge).toContainText(/From env|Not configured/);
+      await expect(resendBadge).toContainText(/From env|From database|Not configured/);
 
-      // The stored API-key input was replaced by the badge — the only password
-      // field left on the page is the transient "never saved" test-key input.
+      // Two password fields: the encrypted update field for RESEND_API_KEY and
+      // the transient "never saved" test-key input for one-off sends.
       const resendPanel = page.locator('[data-slot="tabs-content"]');
-      const secretInputs = resendPanel.locator('input[type="password"]');
-      await expect(secretInputs).toHaveCount(1);
-      await expect(secretInputs).toHaveAttribute("placeholder", /never saved/);
+      await expect(resendPanel.locator('input[type="password"]')).toHaveCount(2);
+      await expect(resendPanel.getByPlaceholder(/never saved/)).toBeVisible();
+      await expect(resendPanel.getByPlaceholder(/stored encrypted/)).toBeVisible();
+    });
+
+    test("updates and clears a gateway secret from the admin panel", async ({ page }) => {
+      // Build the key from fragments at runtime so the spec never contains a
+      // real-looking secret value (the committed-secret guard scans the repo).
+      const hex = "9f3a8c2b7d1e4f5a6b7c8d9e0f1a2b3c";
+      const newKey = `FLWSECK-${hex}`;
+
+      // PUT stores the encrypted override — the response reports source "db"
+      // with only the masked tail.
+      const putRes = await page.request.put("/api/admin/secrets/FLW_SECRET_KEY", {
+        data: { value: newKey },
+      });
+      expect(putRes.ok()).toBeTruthy();
+      const putBody = (await putRes.json()) as {
+        source: string;
+        configured: boolean;
+        masked: string;
+      };
+      expect(putBody.source).toBe("db");
+      expect(putBody.configured).toBe(true);
+      expect(putBody.masked).toContain(newKey.slice(-4));
+
+      // The settings page badge flips to the blue "From database" state.
+      await warmUp(page, "/admin/settings");
+      await waitForAppReady(page);
+      const flwSecretBadge = page.locator('[data-slot="badge"]', {
+        hasText: "FLW_SECRET_KEY",
+      });
+      await expect(flwSecretBadge).toContainText(/From database/, { timeout: 20_000 });
+      await expect(flwSecretBadge).toContainText(newKey.slice(-4));
+
+      // DELETE clears the override — the badge falls back to "Not configured".
+      const delRes = await page.request.delete("/api/admin/secrets/FLW_SECRET_KEY");
+      expect(delRes.ok()).toBeTruthy();
+      await page.reload();
+      await waitForAppReady(page);
+      await expect(flwSecretBadge).toContainText(/Not configured/, { timeout: 20_000 });
     });
   });
 });
