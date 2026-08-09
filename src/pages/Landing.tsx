@@ -202,6 +202,8 @@ interface ChallengeTemplate {
   allowNewsTrading?: boolean;
   allowEATrading?: boolean;
   allowCopyTrading?: boolean;
+  newsBlackoutBeforeMinutes?: number | null;
+  newsBlackoutAfterMinutes?: number | null;
   resetFee?: number | null;
   extensionFee?: number | null;
   consistencyTarget?: number | null;
@@ -232,6 +234,8 @@ const FALLBACK_TYPES: ChallengeTemplate[] = [
     allowNewsTrading: true,
     allowEATrading: true,
     allowCopyTrading: false,
+    newsBlackoutBeforeMinutes: 15,
+    newsBlackoutAfterMinutes: 15,
     resetFee: 8000,
     extensionFee: 4000,
     consistencyTarget: 20,
@@ -254,6 +258,8 @@ const FALLBACK_TYPES: ChallengeTemplate[] = [
     allowNewsTrading: true,
     allowEATrading: true,
     allowCopyTrading: false,
+    newsBlackoutBeforeMinutes: 15,
+    newsBlackoutAfterMinutes: 15,
     resetFee: 10000,
     extensionFee: 5000,
     consistencyTarget: 20,
@@ -276,6 +282,8 @@ const FALLBACK_TYPES: ChallengeTemplate[] = [
     allowNewsTrading: true,
     allowEATrading: true,
     allowCopyTrading: true,
+    newsBlackoutBeforeMinutes: 15,
+    newsBlackoutAfterMinutes: 15,
     resetFee: 16000,
     extensionFee: 8000,
     consistencyTarget: null,
@@ -323,6 +331,22 @@ function formatNgn(price: number | string | null | undefined) {
   const n = typeof price === "number" ? price : parseFloat(String(price));
   if (Number.isNaN(n) || n <= 0) return "N/A";
   return `₦${n.toLocaleString()}`;
+}
+
+/**
+ * Public-facing news-trading rule label. When a template allows news trading
+ * it reads "Allowed"; when restricted it surfaces the template's configured
+ * blackout window (falling back to the rule engine's default ±15 min, and
+ * honoring an explicit 0 to disable a side). Mirrors the "No news 30m/5m"
+ * chips on the admin MT5 page.
+ */
+function newsTradingLabel(t: ChallengeTemplate) {
+  if (t.allowNewsTrading !== false) return "Allowed";
+  const before = t.newsBlackoutBeforeMinutes ?? 15;
+  const after = t.newsBlackoutAfterMinutes ?? 15;
+  if (before <= 0 && after <= 0) return "Restricted · no blackout";
+  if (before === after) return `Restricted · ${before}m`;
+  return `Restricted · ${before}m/${after}m`;
 }
 
 function ruleRow(ok: boolean, label: string, value: string) {
@@ -432,7 +456,7 @@ export default function Landing() {
     { label: "Reset Fee", values: orderedTypes.map((t) => formatNgn(t.resetFee)) },
     { label: "Consistency Rule", values: orderedTypes.map((t) => (t.consistencyTarget ? `Max ${t.consistencyTarget}% daily` : "No restriction")) },
     { label: "Weekend Holding", values: orderedTypes.map((t) => (t.allowWeekendHolding ? "Allowed" : "Restricted")) },
-    { label: "News Trading", values: orderedTypes.map((t) => (t.allowNewsTrading !== false ? "Allowed" : "Restricted")) },
+    { label: "News Trading", values: orderedTypes.map(newsTradingLabel) },
     { label: "Expert Advisors", values: orderedTypes.map((t) => (t.allowEATrading !== false ? "Allowed" : "Blocked")) },
     { label: "Copy Trading", values: orderedTypes.map((t) => (t.allowCopyTrading ? "Allowed" : "Blocked")) },
     { label: "Profit Share", values: orderedTypes.map(() => "90%") },
@@ -1004,7 +1028,7 @@ export default function Landing() {
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3">
                 {ruleRow(!!activeType.allowWeekendHolding, "Weekend Holding", activeType.allowWeekendHolding ? "Allowed" : "Restricted")}
-                {ruleRow(activeType.allowNewsTrading !== false, "News Trading", activeType.allowNewsTrading !== false ? "Allowed" : "Restricted")}
+                {ruleRow(activeType.allowNewsTrading !== false, "News Trading", newsTradingLabel(activeType))}
                 {ruleRow(activeType.allowEATrading !== false, "Expert Advisors", activeType.allowEATrading !== false ? "Allowed" : "Blocked")}
                 {ruleRow(!!activeType.allowCopyTrading, "Copy Trading", activeType.allowCopyTrading ? "Allowed" : "Blocked")}
               </div>
