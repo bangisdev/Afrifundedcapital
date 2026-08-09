@@ -270,13 +270,28 @@ app.get("/my/:id", requireAuth, (c) => {
     .get();
   if (!challenge) return c.json(null);
 
-  // Stamp the template name for the detail header (e.g. "Two-Step Evaluation · $50,000").
+  // Stamp the template name for the detail header (e.g. "Two-Step Evaluation · $50,000")
+  // plus the template's rule set, so the detail page can render the trading rules
+  // (weekend/news/EA/copy + the configured news blackout window).
   const template = db
     .select()
     .from(challengeTemplates)
     .where(eq(challengeTemplates.id, challenge.templateId))
     .get();
-  return c.json({ ...challenge, templateName: template?.name || null });
+  return c.json({
+    ...challenge,
+    templateName: template?.name || null,
+    templateRules: template
+      ? {
+          allowNewsTrading: template.allowNewsTrading,
+          allowWeekendHolding: template.allowWeekendHolding,
+          allowEATrading: template.allowEATrading,
+          allowCopyTrading: template.allowCopyTrading,
+          newsBlackoutBeforeMinutes: template.newsBlackoutBeforeMinutes,
+          newsBlackoutAfterMinutes: template.newsBlackoutAfterMinutes,
+        }
+      : null,
+  });
 });
 
 // Get dashboard metrics (aggregated)

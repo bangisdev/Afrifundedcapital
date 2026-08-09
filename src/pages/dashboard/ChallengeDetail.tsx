@@ -5,9 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { Loader2, ArrowLeft, Activity, BarChart3, AlertTriangle } from "lucide-react";
+import { Loader2, ArrowLeft, Activity, BarChart3, AlertTriangle, Check, X } from "lucide-react";
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts";
 import { useMemo } from "react";
+import { newsBlackoutWindow } from "@/lib/utils";
 
 const chartConfig = {
   balance: { label: "Balance", color: "var(--chart-1)" },
@@ -17,6 +18,32 @@ const chartConfig = {
 
 function formatDate(ts: number) {
   return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+/**
+ * News-trading rule value: "Yes" when allowed, otherwise the template's
+ * configured blackout window ("No · 15m", "No · 30m/5m", "No · no blackout").
+ */
+function newsTradingLabel(t: any): string {
+  if (t.allowNewsTrading !== false) return "Yes";
+  const win = newsBlackoutWindow(t);
+  return win ? `No · ${win}` : "No · no blackout";
+}
+
+function ruleRow(label: string, allowed: boolean, value?: string) {
+  return (
+    <div className="flex items-center gap-1.5 text-xs">
+      {allowed ? (
+        <Check className="h-3 w-3 text-brand shrink-0" />
+      ) : (
+        <X className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+      )}
+      <span className="text-muted-foreground">{label}</span>
+      <span className={`ml-auto font-medium tabular-nums ${allowed ? "text-foreground" : "text-muted-foreground"}`}>
+        {value ?? (allowed ? "Yes" : "No")}
+      </span>
+    </div>
+  );
 }
 
 export default function ChallengeDetail() {
@@ -75,6 +102,18 @@ export default function ChallengeDetail() {
         </div>
         <Badge variant={challenge.status === "active" ? "default" : "secondary"} className="text-[10px]">{challenge.status}</Badge>
       </div>
+
+      {challenge.templateRules && (
+        <div className="card-subtle p-5">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-3">Trading Rules</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-2.5">
+            {ruleRow("Weekend Holding", challenge.templateRules.allowWeekendHolding ?? false)}
+            {ruleRow("News Trading", challenge.templateRules.allowNewsTrading !== false, newsTradingLabel(challenge.templateRules))}
+            {ruleRow("Expert Advisors", challenge.templateRules.allowEATrading !== false)}
+            {ruleRow("Copy Trading", !!challenge.templateRules.allowCopyTrading)}
+          </div>
+        </div>
+      )}
 
       {(() => {
         // Violations recorded by the rule engine (new shape: {code,message,...}

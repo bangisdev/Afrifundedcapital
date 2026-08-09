@@ -2,6 +2,7 @@ import { motion, useScroll, useTransform, useInView, type Variants } from "frame
 import { useNavigate } from "react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect, useRef, useState, useCallback } from "react";
+import { newsBlackoutWindow } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -336,17 +337,13 @@ function formatNgn(price: number | string | null | undefined) {
 /**
  * Public-facing news-trading rule label. When a template allows news trading
  * it reads "Allowed"; when restricted it surfaces the template's configured
- * blackout window (falling back to the rule engine's default ±15 min, and
- * honoring an explicit 0 to disable a side). Mirrors the "No news 30m/5m"
- * chips on the admin MT5 page.
+ * blackout window via the shared newsBlackoutWindow formatter (mirroring the
+ * "No news 30m/5m" chips on the admin MT5 page).
  */
 function newsTradingLabel(t: ChallengeTemplate) {
   if (t.allowNewsTrading !== false) return "Allowed";
-  const before = t.newsBlackoutBeforeMinutes ?? 15;
-  const after = t.newsBlackoutAfterMinutes ?? 15;
-  if (before <= 0 && after <= 0) return "Restricted · no blackout";
-  if (before === after) return `Restricted · ${before}m`;
-  return `Restricted · ${before}m/${after}m`;
+  const win = newsBlackoutWindow(t);
+  return win ? `Restricted · ${win}` : "Restricted · no blackout";
 }
 
 function ruleRow(ok: boolean, label: string, value: string) {
