@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
+import { readResponseBody, errorMessageOf } from "@/lib/api";
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -144,13 +145,13 @@ export default function AdminChallenges() {
 
   const apiPut = async (path: string, body: any) => {
     const res = await fetch(path, { method: "PUT", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(body) });
-    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || "Request failed"); }
-    return res.json();
+    if (!res.ok) { throw new Error(errorMessageOf(await readResponseBody(res), res.status)); }
+    return readResponseBody(res);
   };
   const apiDelete = async (path: string) => {
     const res = await fetch(path, { method: "DELETE", credentials: "include" });
-    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || "Request failed"); }
-    return res.json();
+    if (!res.ok) { throw new Error(errorMessageOf(await readResponseBody(res), res.status)); }
+    return readResponseBody(res);
   };
 
   const [expandedTemplate, setExpandedTemplate] = useState<number | null>(null);
@@ -193,7 +194,7 @@ export default function AdminChallenges() {
   const loadSizes = async (templateId: number) => {
     try {
       const res = await fetch(`/api/challenges/templates/${templateId}/sizes`, { credentials: "include" });
-      const data = await res.json();
+      const data = await readResponseBody(res);
       // Guard against non-array responses so sizes.map never crashes
       setSizesCache((prev) => ({ ...prev, [templateId]: Array.isArray(data) ? data : [] }));
     } catch {

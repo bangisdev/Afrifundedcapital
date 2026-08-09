@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery } from "@/hooks/use-api";
+import { readResponseBody } from "@/lib/api";
 import { useState } from "react";
 import { Loader2, Users, BarChart3, DollarSign, Award, TrendingUp, Database, CheckCircle, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -37,7 +38,7 @@ export default function AdminOverview() {
         credentials: "include",
         body: JSON.stringify({}),
       });
-      const data = await res.json();
+      const data = await readResponseBody(res);
       setBulkSeedResult(data);
       if (data.success) {
         toast.success("All demo data seeded successfully!");
@@ -64,7 +65,7 @@ export default function AdminOverview() {
         headers: { "Content-Type": "application/json" },
         credentials: "include",
       });
-      const data = await res.json();
+      const data = await readResponseBody(res);
       setUserSeedResult(data);
       if (data.success) {
         toast.success(data.message || "Demo users seeded successfully!");

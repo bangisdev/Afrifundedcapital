@@ -453,7 +453,9 @@ describe("Auth Page", () => {
     it("shows default error when fetch body cannot be parsed", async () => {
       vi.spyOn(global, "fetch").mockResolvedValueOnce({
         ok: false,
+        status: 500,
         json: async () => { throw new Error("bad json"); },
+        text: async () => "",
       } as unknown as Response);
       const user = userEvent.setup();
       render(<AuthPage />);
@@ -465,7 +467,7 @@ describe("Auth Page", () => {
       await user.click(screen.getByRole("button", { name: /Create Account/ }));
 
       await waitFor(() => {
-        expect(screen.getByText("Sign up failed")).toBeTruthy();
+        expect(screen.getByText("Request failed (HTTP 500)")).toBeTruthy();
       });
     });
 

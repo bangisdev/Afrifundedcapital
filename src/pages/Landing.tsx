@@ -40,6 +40,7 @@ import {
   Headphones,
 } from "lucide-react";
 import { LogoDropdown } from "@/components/LogoDropdown";
+import { readResponseBody } from "@/lib/api";
 
 // ─── Animation Variants ───
 
@@ -373,7 +374,7 @@ export default function Landing() {
     let cancelled = false;
     if (typeof fetch !== "function") return;
     fetch("/api/challenges/templates", { headers: { Accept: "application/json" } })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("fetch failed"))))
+      .then((r) => (r.ok ? readResponseBody(r) : Promise.reject(new Error("fetch failed"))))
       .then((data: unknown) => {
         if (cancelled || !Array.isArray(data) || data.length === 0) return;
         setChallengeTypes(data as ChallengeTemplate[]);
@@ -391,7 +392,7 @@ export default function Landing() {
     if (!selectedTypeId || typeof fetch !== "function") return;
     let cancelled = false;
     fetch(`/api/challenges/templates/${selectedTypeId}/sizes`, { headers: { Accept: "application/json" } })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("fetch failed"))))
+      .then((r) => (r.ok ? readResponseBody(r) : Promise.reject(new Error("fetch failed"))))
       .then((data: unknown) => {
         if (cancelled || !Array.isArray(data)) return;
         setSizesByType((prev) => ({ ...prev, [selectedTypeId]: data as AccountSizeRow[] }));

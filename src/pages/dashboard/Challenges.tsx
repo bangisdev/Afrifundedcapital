@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
+import { readResponseBody } from "@/lib/api";
 import { useEffect, useRef, useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useAuth } from "@/hooks/use-auth";
@@ -297,7 +298,7 @@ export default function Challenges() {
         credentials: "include",
         body: JSON.stringify({ code: couponCode.trim(), amount: selectedAccountSize.price }),
       });
-      const data = await res.json();
+      const data = await readResponseBody(res);
       if (data.valid) {
         setCouponResult(data);
         toast.success(`Coupon applied! You save ₦${data.discount?.toLocaleString()}`);

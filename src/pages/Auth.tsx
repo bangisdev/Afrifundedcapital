@@ -10,6 +10,7 @@ import {
 import { Input } from "@/components/ui/input";
 
 import { useAuth } from "@/hooks/use-auth";
+import { readResponseBody, errorMessageOf } from "@/lib/api";
 import logo from "@/assets/logo.svg";
 import { ArrowRight, Loader2, Mail, Lock, UserIcon, AlertCircle } from "lucide-react";
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -87,8 +88,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: "Sign up failed" }));
-        throw new Error(err.message || err.error || "Sign up failed");
+        throw new Error(errorMessageOf(await readResponseBody(res), res.status));
       }
 
       // Auto sign in after sign up

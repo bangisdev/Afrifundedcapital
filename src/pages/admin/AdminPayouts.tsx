@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
+import { readResponseBody } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -70,7 +71,7 @@ export default function AdminPayouts() {
     userSearchTimeout.current = setTimeout(async () => {
       try {
         const res = await fetch(`/api/payouts/admin/search-users?q=${encodeURIComponent(userSearch)}`);
-        const data = await res.json();
+        const data = await readResponseBody(res);
         setUserSearchResults(data);
         setShowUserDropdown(true);
       } catch { /* ignore */ }
@@ -575,7 +576,7 @@ export default function AdminPayouts() {
                       if (userFilter?.id === p.userId) return;
                       try {
                         const res = await fetch(`/api/payouts/admin/search-users?q=${p.userId}`);
-                        const users = await res.json();
+                        const users = await readResponseBody(res);
                         const match = users.find((u: any) => u.id === p.userId);
                         if (match) setUserFilter(match);
                       } catch { /* ignore */ }

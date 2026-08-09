@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery } from "@/hooks/use-api";
+import { readResponseBody, errorMessageOf } from "@/lib/api";
 import { useState, useEffect, useMemo } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useNow } from "@/hooks/use-now";
@@ -196,8 +197,8 @@ export default function AdminUsers() {
       credentials: "include",
       body: JSON.stringify(body),
     });
-    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || "Request failed"); }
-    return res.json();
+    if (!res.ok) { throw new Error(errorMessageOf(await readResponseBody(res), res.status)); }
+    return readResponseBody(res);
   };
 
   const apiDelete = async (path: string) => {
@@ -205,8 +206,8 @@ export default function AdminUsers() {
       method: "DELETE",
       credentials: "include",
     });
-    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || "Request failed"); }
-    return res.json();
+    if (!res.ok) { throw new Error(errorMessageOf(await readResponseBody(res), res.status)); }
+    return readResponseBody(res);
   };
 
   const handleUpdateRole = async (userId: number, newRole: string) => {

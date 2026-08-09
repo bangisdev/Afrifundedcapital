@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery } from "@/hooks/use-api";
+import { readResponseBody } from "@/lib/api";
 import { useState, useEffect, useCallback } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
@@ -176,7 +177,7 @@ export default function AdminKyc() {
     try {
       const res = await fetch(`/api/kyc/admin/${doc.id}`, { credentials: "include" });
       if (res.ok) {
-        const data = await res.json();
+        const data = await readResponseBody(res);
         setFullDoc(data);
       } else {
         setFullDoc(doc);

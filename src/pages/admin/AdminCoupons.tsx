@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
+import { readResponseBody, errorMessageOf } from "@/lib/api";
 import { useState } from "react";
 import { useNow } from "@/hooks/use-now";
 import { Button } from "@/components/ui/button";
@@ -95,8 +96,7 @@ export default function AdminCoupons() {
         credentials: "include",
       });
       if (!res.ok) {
-        const e = await res.json().catch(() => ({}));
-        throw new Error(e.error || "Failed to delete coupon");
+        throw new Error(errorMessageOf(await readResponseBody(res), res.status));
       }
       toast.success("Coupon deleted");
       refetch();
