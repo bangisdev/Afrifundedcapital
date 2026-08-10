@@ -1,5 +1,5 @@
 import { motion, useScroll, useTransform, useInView, type Variants } from "framer-motion";
-import { useNavigate } from "react-router";
+import { useNavigate, Link } from "react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { newsBlackoutWindow, RULE_HINTS } from "@/lib/utils";
@@ -39,6 +39,7 @@ import {
   CreditCard,
   ShieldCheck,
   Headphones,
+  ExternalLink,
 } from "lucide-react";
 import { LogoDropdown } from "@/components/LogoDropdown";
 import { readResponseBody } from "@/lib/api";
@@ -1274,6 +1275,11 @@ export default function Landing() {
                   a: "Yes. After becoming funded, you can grow your account through our scaling plan. Every profitable quarter demonstrates your consistency and unlocks additional capital, allowing you to scale up to $5M.",
                 },
                 {
+                  q: "What trading rules apply to my challenge?",
+                  a: "Every challenge template ships with automatically enforced rules — weekend holding, news trading (with a configured blackout window), expert advisors, and copy trading. The exact rules for your template are shown on the challenge card before you buy.",
+                  docLink: true,
+                },
+                {
                   q: "Can I trade news or hold positions over weekends?",
                   a: "Holding over weekends and trading during news events depends on the challenge type. Our standard challenges restrict news trading and weekend holding. Instant funding accounts offer more flexibility with these rules.",
                 },
@@ -1292,6 +1298,19 @@ export default function Landing() {
                   </AccordionTrigger>
                   <AccordionContent className="text-xs text-muted-foreground leading-relaxed pb-5">
                     {faq.a}
+                    {"docLink" in faq && faq.docLink && (
+                      <span className="block mt-2">
+                        <Link
+                          to="/docs/trading-rules"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 font-medium text-foreground hover:text-brand transition-colors duration-150"
+                        >
+                          Full trading rules
+                          <ExternalLink className="h-3 w-3" />
+                        </Link>
+                      </span>
+                    )}
                   </AccordionContent>
                 </AccordionItem>
               ))}
