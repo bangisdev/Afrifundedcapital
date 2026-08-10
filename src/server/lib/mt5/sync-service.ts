@@ -18,7 +18,7 @@ import {
   type RuleViolation,
 } from "./rule-engine";
 import { maybeGenerateCertificate } from "../certificates";
-import { createNotification, notify } from "../notifications";
+import { createNotification, notify, notifyAdminsOfChallengeViolation } from "../notifications";
 import { challengeWarningEmail, challengeViolationEmail } from "../email";
 import { writeAuditLog } from "../audit";
 
@@ -40,12 +40,20 @@ interface StoredViolation {
   [key: string]: unknown;
 }
 
-/** Best-effort display name for the challenge owner (email fallback). */
-function ownerName(db: Db, userId: number): string {
+interface OwnerInfo {
+  name: string;
+  email: string | null;
+}
+
+/** Best-effort display name + email for the challenge owner. */
+function ownerInfo(db: Db, userId: number): OwnerInfo {
   try {
     const user = db.select().from(users).where(eq(users.id, userId)).get();
-    return user?.name || user?.email || "there";
-  } catch { return "there"; }
+    return {
+      name: user?.name || user?.email || "there",
+      email: user?.email ?? null,
+    };
+  } catch { return { name: "there", email: null }; }
 }
 
 /**
@@ -254,7 +262,7 @@ export async function syncChallenge(
           link: "/dashboard/challenges",
           // Email fires only on first detection (same rule code), matching the
           // notification — repeat syncs refresh the stored entry, no spam.
-          email: challengeWarningEmail(ownerName(db, challenge.userId), resolveChallengeLabel(db, challenge), reason),
+          email: challengeWarningEmail(ownerInfo(db, challenge.userId).name, resolveChallengeLabel(db, challenge), reason),
         });
         notified++;
       }
@@ -310,14 +318,25 @@ export async function syncChallenge(
       } catch { /* best-effort */ }
     }
 
+    const owner = ownerInfo(db, challenge.userId);
     const top = violations[0];
     const reason = violationReason(top, rules);
+    const challengeLabel = resolveChallengeLabel(db, challenge);
     await notify(db, challenge.userId, {
       type: "challenge_violation",
       title: "Challenge Violation",
       message: `Your challenge has been violated due to ${reason}. Your account has been suspended.`,
       link: "/dashboard/challenges",
-      email: challengeViolationEmail(ownerName(db, challenge.userId), resolveChallengeLabel(db, challenge), reason),
+      email: challengeViolationEmail(owner.name, challengeLabel, reason),
+    });
+
+    // Ops alert: email + notify every admin (best-effort, never throws).
+    notifyAdminsOfChallengeViolation(db, {
+      traderName: owner.name,
+      traderEmail: owner.email,
+      challengeLabel,
+      reason,
+      challengeId: challenge.id,
     });
 
     // Audit every rule that fired, stamped with the challenge label.

@@ -229,6 +229,35 @@ describe("syncChallenge rule enforcement", () => {
     expect(call[0].html).toContain("suspended");
   });
 
+  it("emails every admin when a trader's challenge is hard-violated", async () => {
+    const adminId = fixture.db
+      .insert(users)
+      .values({ name: "Ops Admin", email: "admin-ops@test.dev", role: "super_admin", createdAt: NOW, updatedAt: NOW })
+      .returning({ id: users.id })
+      .get()!.id;
+
+    fixture.provider.metrics = makeMetrics({ balance: 90_000, equity: 90_000, currentDrawdown: 10_000, totalProfit: -10_000 });
+    fixture.provider.account = { balance: 90_000, equity: 90_000 };
+
+    await syncChallenge(fixture.db, fixture.provider, fixture.challenge);
+
+    // One email to the trader + one to the admin.
+    expect(sendEmailMock).toHaveBeenCalledTimes(2);
+    const calls = sendEmailMock.mock.calls.map((c) => c[0]);
+    const adminCall = calls.find((c) => c.to === "admin-ops@test.dev");
+    const traderCall = calls.find((c) => c.to !== "admin-ops@test.dev");
+
+    expect(adminCall?.subject).toMatch(/Trader Challenge Violated/i);
+    expect(adminCall?.html).toContain("Trader One");
+    expect(adminCall?.html).toContain("Two-Step Evaluation");
+    expect(traderCall?.subject).toMatch(/Challenge Violated/i);
+
+    // The admin also gets an in-app notification pointing at the admin page.
+    const adminNotes = notificationsFor(fixture.db, adminId);
+    expect(adminNotes.filter((n) => n.type === "challenge_violation").length).toBe(1);
+    expect(adminNotes[0].link).toBe("/admin/challenges");
+  });
+
   it("skips the violation email when the user disabled email notifications", async () => {
     fixture.db.update(users).set({ emailNotifications: false }).where(eq(users.id, fixture.challenge.userId)).run();
     fixture.provider.metrics = makeMetrics({ balance: 90_000, equity: 90_000, currentDrawdown: 10_000, totalProfit: -10_000 });

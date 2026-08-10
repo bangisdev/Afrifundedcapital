@@ -523,6 +523,41 @@ export function challengeWarningEmail(
   };
 }
 
+// Ops alert: sent to every admin when a trader's challenge is hard-violated.
+// Bypasses user email preferences — admins must always see these.
+export function adminChallengeViolationEmail(
+  adminName: string,
+  traderName: string,
+  traderEmail: string | null,
+  challengeLabel: string | null,
+  reason: string,
+): SendEmailParams & { subject: string; html: string } {
+  const label = challengeLabel ?? "a challenge";
+  return {
+    to: "",
+    subject: "Trader Challenge Violated — AfriFundedCapital",
+    html: wrapLayout(`
+      <h2 style="font-size: 18px; font-weight: 600; margin: 0 0 12px;">Trader Challenge Violated</h2>
+      <p style="font-size: 14px; color: #444;">Hi ${adminName},</p>
+      <p style="font-size: 14px; color: #444;">
+        A trader's challenge has been automatically terminated by the rule engine.
+      </p>
+      <div style="background: #f5f5f5; border-radius: 6px; padding: 12px 16px; margin: 16px 0;">
+        <p style="font-size: 13px; color: #333; margin: 0;"><strong>Trader:</strong> ${traderName}${traderEmail ? ` (${traderEmail})` : ""}</p>
+        <p style="font-size: 13px; color: #333; margin: 4px 0 0;"><strong>Challenge:</strong> ${label}</p>
+      </div>
+      <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 12px 16px; margin: 16px 0;">
+        <p style="font-size: 13px; color: #dc2626; margin: 0;"><strong>Reason:</strong> ${reason}.</p>
+      </div>
+      <p style="font-size: 14px; color: #444;">
+        The trader's account has been suspended. Review the challenge if the trader
+        believes this is a mistake.
+      </p>
+      ${button(`${APP_URL}/admin/challenges`, "Review Challenges")}
+    `),
+  };
+}
+
 // Terminal: a hard rule breach ended the challenge and suspended the account.
 export function challengeViolationEmail(
   userName: string,

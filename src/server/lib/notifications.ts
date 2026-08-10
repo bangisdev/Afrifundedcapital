@@ -1,6 +1,6 @@
 import { notifications, users, ROLES } from "../schema";
 import { eq, sql } from "drizzle-orm";
-import { sendEmail, securityAlertEmail, type SendEmailParams } from "./email";
+import { sendEmail, securityAlertEmail, adminChallengeViolationEmail, type SendEmailParams } from "./email";
 import type { Db } from "../db";
 
 /**
@@ -189,6 +189,72 @@ export function notifyAdminsOfSecurityEvent(
     return notified;
   } catch (e) {
     console.warn("[Notification] Failed to alert admins of security event:", e);
+    return 0;
+  }
+}
+
+/**
+ * Alert every admin when a trader's challenge is hard-violated by the MT5 rule
+ * engine.
+ *
+ * - Creates a "challenge_violation" dashboard notification for each admin
+ *   (same type the trader sees, so the bell renders the red alert icon),
+ *   linking to the admin challenges page.
+ * - Emails them too. Like security alerts, admin violation emails bypass the
+ *   per-user email-preference gate — they are ops-critical.
+ *
+ * Never throws — alerting must never break the sync loop.
+ */
+export function notifyAdminsOfChallengeViolation(
+  db: Db,
+  opts: {
+    traderName: string;
+    traderEmail: string | null;
+    challengeLabel: string | null;
+    reason: string;
+    challengeId: number;
+  },
+): number {
+  try {
+    const admins = db
+      .select()
+      .from(users)
+      .where(
+        sql`${users.role} IS NOT NULL AND ${users.role} != ${ROLES.USER}`,
+      )
+      .all();
+
+    const label = opts.challengeLabel ?? "a challenge";
+    const traderContact = opts.traderEmail || "no email on file";
+    let notified = 0;
+
+    for (const admin of admins) {
+      createNotification(db, admin.id, {
+        type: "challenge_violation",
+        title: "Trader Challenge Violated",
+        message: `${opts.traderName} (${traderContact}) violated ${label} — ${opts.reason}. Review the challenge.`,
+        link: "/admin/challenges",
+        metadata: { challengeId: opts.challengeId, reason: opts.reason },
+      });
+      notified++;
+
+      if (admin.email) {
+        // Fire and forget — never block the sync on email delivery. Templates
+        // ship with `to: ""`; the recipient is filled in here (like
+        // `sendEmailToUser` does for trader emails).
+        const emailParams = adminChallengeViolationEmail(
+          admin.name || admin.email,
+          opts.traderName,
+          opts.traderEmail,
+          opts.challengeLabel,
+          opts.reason,
+        );
+        sendEmail({ ...emailParams, to: admin.email }).catch(() => {});
+      }
+    }
+    return notified;
+  } catch (e) {
+    console.warn("[Notification] Failed to alert admins of challenge violation:", e);
     return 0;
   }
 }
