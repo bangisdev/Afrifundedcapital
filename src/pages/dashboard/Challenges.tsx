@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { readResponseBody } from "@/lib/api";
-import { newsBlackoutWindow } from "@/lib/utils";
+import { newsBlackoutWindow, RULE_HINTS } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useAuth } from "@/hooks/use-auth";
@@ -261,17 +261,26 @@ export default function Challenges() {
     );
   }
 
-  const ruleFlag = (label: string, allowed: boolean, value?: string) => (
-    <div className="flex items-center gap-1.5 text-xs">
+  const ruleFlag = (label: string, allowed: boolean, value?: string, hint?: string) => (
+    <div className="flex items-start gap-1.5 text-xs">
       {allowed ? (
-        <Check className="h-3 w-3 text-brand shrink-0" />
+        <Check className="h-3 w-3 text-brand shrink-0 mt-0.5" />
       ) : (
-        <X className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+        <X className="h-3 w-3 text-muted-foreground/50 shrink-0 mt-0.5" />
       )}
-      <span className="text-muted-foreground">{label}</span>
-      <span className={`ml-auto font-medium tabular-nums ${allowed ? "text-foreground" : "text-muted-foreground"}`}>
-        {value ?? (allowed ? "Yes" : "No")}
-      </span>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-muted-foreground">{label}</span>
+          <span className={`font-medium tabular-nums ${allowed ? "text-foreground" : "text-muted-foreground"}`}>
+            {value ?? (allowed ? "Yes" : "No")}
+          </span>
+        </div>
+        {hint && (
+          <div className="mt-0.5 whitespace-normal text-[10px] leading-snug text-muted-foreground/70">
+            {hint}
+          </div>
+        )}
+      </div>
     </div>
   );
 
@@ -431,10 +440,10 @@ export default function Challenges() {
                 <div className="mt-4 pt-4 border-t border-border">
                   <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Trading Rules</div>
                   <div className="space-y-1.5">
-                    {ruleFlag("Weekend Holding", template.allowWeekendHolding ?? false)}
-                    {ruleFlag("News Trading", template.allowNewsTrading !== false, newsTradingLabel(template))}
-                    {ruleFlag("Expert Advisors", template.allowEATrading !== false)}
-                    {ruleFlag("Copy Trading", !!template.allowCopyTrading)}
+                    {ruleFlag("Weekend Holding", template.allowWeekendHolding ?? false, undefined, RULE_HINTS.weekendHolding)}
+                    {ruleFlag("News Trading", template.allowNewsTrading !== false, newsTradingLabel(template), RULE_HINTS.newsTrading)}
+                    {ruleFlag("Expert Advisors", template.allowEATrading !== false, undefined, RULE_HINTS.eaTrading)}
+                    {ruleFlag("Copy Trading", !!template.allowCopyTrading, undefined, RULE_HINTS.copyTrading)}
                   </div>
                 </div>
                 <Button variant="outline" size="sm" className="w-full mt-4 text-xs"

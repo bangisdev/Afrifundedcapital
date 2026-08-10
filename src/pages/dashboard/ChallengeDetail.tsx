@@ -8,7 +8,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { Loader2, ArrowLeft, Activity, BarChart3, AlertTriangle, Check, X } from "lucide-react";
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts";
 import { useMemo } from "react";
-import { newsBlackoutWindow } from "@/lib/utils";
+import { newsBlackoutWindow, RULE_HINTS } from "@/lib/utils";
 
 const chartConfig = {
   balance: { label: "Balance", color: "var(--chart-1)" },
@@ -30,18 +30,27 @@ function newsTradingLabel(t: any): string {
   return win ? `No · ${win}` : "No · no blackout";
 }
 
-function ruleRow(label: string, allowed: boolean, value?: string) {
+function ruleRow(label: string, allowed: boolean, value?: string, hint?: string) {
   return (
-    <div className="flex items-center gap-1.5 text-xs">
+    <div className="flex items-start gap-1.5 text-xs">
       {allowed ? (
-        <Check className="h-3 w-3 text-brand shrink-0" />
+        <Check className="h-3 w-3 text-brand shrink-0 mt-0.5" />
       ) : (
-        <X className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+        <X className="h-3 w-3 text-muted-foreground/50 shrink-0 mt-0.5" />
       )}
-      <span className="text-muted-foreground">{label}</span>
-      <span className={`ml-auto font-medium tabular-nums ${allowed ? "text-foreground" : "text-muted-foreground"}`}>
-        {value ?? (allowed ? "Yes" : "No")}
-      </span>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-muted-foreground">{label}</span>
+          <span className={`font-medium tabular-nums ${allowed ? "text-foreground" : "text-muted-foreground"}`}>
+            {value ?? (allowed ? "Yes" : "No")}
+          </span>
+        </div>
+        {hint && (
+          <div className="mt-0.5 whitespace-normal text-[10px] leading-snug text-muted-foreground/70">
+            {hint}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -107,10 +116,10 @@ export default function ChallengeDetail() {
         <div className="card-subtle p-5">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-3">Trading Rules</div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-2.5">
-            {ruleRow("Weekend Holding", challenge.templateRules.allowWeekendHolding ?? false)}
-            {ruleRow("News Trading", challenge.templateRules.allowNewsTrading !== false, newsTradingLabel(challenge.templateRules))}
-            {ruleRow("Expert Advisors", challenge.templateRules.allowEATrading !== false)}
-            {ruleRow("Copy Trading", !!challenge.templateRules.allowCopyTrading)}
+            {ruleRow("Weekend Holding", challenge.templateRules.allowWeekendHolding ?? false, undefined, RULE_HINTS.weekendHolding)}
+            {ruleRow("News Trading", challenge.templateRules.allowNewsTrading !== false, newsTradingLabel(challenge.templateRules), RULE_HINTS.newsTrading)}
+            {ruleRow("Expert Advisors", challenge.templateRules.allowEATrading !== false, undefined, RULE_HINTS.eaTrading)}
+            {ruleRow("Copy Trading", !!challenge.templateRules.allowCopyTrading, undefined, RULE_HINTS.copyTrading)}
           </div>
         </div>
       )}
