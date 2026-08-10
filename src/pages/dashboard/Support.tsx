@@ -6,8 +6,25 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Ticket, Plus, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Link } from "react-router";
+import { Loader2, Ticket, Plus, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown, ExternalLink, HelpCircle } from "lucide-react";
 import { toast } from "sonner";
+
+const QUICK_ANSWERS = [
+  {
+    q: "What trading rules apply to my challenge?",
+    a: "Every challenge template ships with a set of automatically enforced rules — weekend holding, news trading (with a configured blackout window), expert advisors, and copy trading. The exact rules for your template are shown on the challenge card, and each restriction is explained in full on the trading rules page.",
+    docLink: true,
+  },
+  {
+    q: "How do I get a payout?",
+    a: "Payouts are requested from the Payouts tab in your dashboard. Once your funded account is in profit and passes compliance checks, you can request a withdrawal and it will be processed through the payment rails.",
+  },
+  {
+    q: "My challenge was flagged as violated — what now?",
+    a: "You can purchase a reset at a reduced fee to restart the challenge from your Challenges page. If you believe the flag was incorrect, open a support ticket with the challenge ID and our team will review it.",
+  },
+];
 
 interface SupportResponse {
   tickets: any[];
@@ -115,6 +132,33 @@ export default function Support() {
         <div className="flex items-center gap-3">
           {total > 0 && <span className="text-xs text-muted-foreground">{total} ticket{total === 1 ? "" : "s"}</span>}
           <Button size="sm" className="text-xs" onClick={() => setShowCreate(true)}><Plus className="h-3 w-3 mr-1" /> New Ticket</Button>
+        </div>
+      </div>
+
+      {/* ─── Quick answers ─── */}
+      <div className="card-subtle p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <HelpCircle className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-medium tracking-tight">Quick answers</h2>
+        </div>
+        <div className="grid gap-5 sm:grid-cols-3">
+          {QUICK_ANSWERS.map((item) => (
+            <div key={item.q}>
+              <h3 className="text-xs font-medium leading-snug">{item.q}</h3>
+              <p className="text-[11px] text-muted-foreground leading-relaxed mt-1.5">{item.a}</p>
+              {"docLink" in item && item.docLink && (
+                <Link
+                  to="/docs/trading-rules"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-foreground hover:text-brand transition-colors duration-150"
+                >
+                  Full trading rules
+                  <ExternalLink className="h-3 w-3" />
+                </Link>
+              )}
+            </div>
+          ))}
         </div>
       </div>
 
