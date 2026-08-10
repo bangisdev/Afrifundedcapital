@@ -5,7 +5,7 @@
  * gateway provider, so the rule-enforcement pipeline (warnings → notifications,
  * hard violations → terminate + suspend + notify) is exercised end to end.
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { eq } from "drizzle-orm";
@@ -16,6 +16,16 @@ import { users, challengeTemplates, accountSizes, mt5Accounts, userChallenges, n
 import { syncChallenge } from "../lib/mt5/sync-service";
 import type { MT5Provider, MT5AccountInfo, MT5SyncResult, MT5TradeRecord, SyncMetrics } from "../lib/mt5/types";
 import { NOW, makeMetrics } from "./helpers/mt5-fixtures";
+
+// Capture email sends without ever hitting Resend. The sync service emails the
+// trader via `notify` → `sendEmailToUser` → `sendEmail`; stubbing the one
+// side-effecting export (while spreading the real templates) records calls and
+// keeps the whole preference/delivery flow intact.
+const sendEmailMock = vi.hoisted(() => vi.fn().mockResolvedValue({ ok: true }));
+vi.mock("../lib/email", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/email")>();
+  return { ...actual, sendEmail: sendEmailMock };
+});
 
 /** Fake gateway provider — deterministic metrics/trades, records suspensions. */
 class FakeProvider implements MT5Provider {
@@ -159,6 +169,7 @@ let fixture: Fixture;
 
 describe("syncChallenge rule enforcement", () => {
   beforeEach(async () => {
+    sendEmailMock.mockClear();
     fixture = await makeFixture();
   });
 
@@ -179,6 +190,56 @@ describe("syncChallenge rule enforcement", () => {
     expect(notes.filter((n) => n.type === "challenge_warning").length).toBe(1);
     expect(notes[0].message).toContain("approaching");
     expect(fixture.provider.suspended).toEqual([]);
+  });
+
+  it("emails the trader a drawdown warning on first detection, once per rule code", async () => {
+    fixture.provider.metrics = makeMetrics({ balance: 91_000, equity: 91_000, currentDrawdown: 9_000, totalProfit: -9_000 });
+    fixture.provider.account = { balance: 91_000, equity: 91_000 };
+
+    await syncChallenge(fixture.db, fixture.provider, fixture.challenge);
+
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    const [call] = sendEmailMock.mock.calls;
+    expect(call[0].subject).toMatch(/Drawdown Warning/i);
+    expect(call[0].to).toMatch(/trader-/); // the challenge owner's email
+    expect(call[0].html).toContain("approaching");
+
+    // A later sync still warning on the SAME rule code must not email again.
+    fixture.db.update(schema.tradingMetrics).set({ recordedAt: NOW - 24 * 60 * 60 * 1000 }).run();
+    const row = reload(fixture.db, fixture.challenge.id);
+    const provider2 = new FakeProvider();
+    provider2.metrics = makeMetrics({ balance: 91_500, equity: 91_500, currentDrawdown: 8_500, totalProfit: -8_500 });
+    provider2.account = { balance: 91_500, equity: 91_500 };
+    await syncChallenge(fixture.db, provider2, row);
+
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("emails the trader when a hard violation terminates the challenge", async () => {
+    fixture.provider.metrics = makeMetrics({ balance: 90_000, equity: 90_000, currentDrawdown: 10_000, totalProfit: -10_000 });
+    fixture.provider.account = { balance: 90_000, equity: 90_000 };
+
+    await syncChallenge(fixture.db, fixture.provider, fixture.challenge);
+
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    const [call] = sendEmailMock.mock.calls;
+    expect(call[0].subject).toMatch(/Challenge Violated/i);
+    expect(call[0].to).toMatch(/trader-/);
+    expect(call[0].html).toContain("Two-Step Evaluation"); // challenge label in the email
+    expect(call[0].html).toContain("suspended");
+  });
+
+  it("skips the violation email when the user disabled email notifications", async () => {
+    fixture.db.update(users).set({ emailNotifications: false }).where(eq(users.id, fixture.challenge.userId)).run();
+    fixture.provider.metrics = makeMetrics({ balance: 90_000, equity: 90_000, currentDrawdown: 10_000, totalProfit: -10_000 });
+    fixture.provider.account = { balance: 90_000, equity: 90_000 };
+
+    await syncChallenge(fixture.db, fixture.provider, fixture.challenge);
+
+    expect(sendEmailMock).not.toHaveBeenCalled();
+    // The in-app notification is still created — email is the only thing gated.
+    const notes = notificationsFor(fixture.db, fixture.challenge.userId);
+    expect(notes.filter((n) => n.type === "challenge_violation").length).toBe(1);
   });
 
   it("a hard drawdown violation terminates the challenge, suspends the account, and notifies", async () => {

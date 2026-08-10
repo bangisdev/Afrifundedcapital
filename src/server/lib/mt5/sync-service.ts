@@ -6,6 +6,7 @@ import {
   userChallenges,
   challengeTemplates,
   settings,
+  users,
 } from "../../schema";
 import { eq, desc, and, asc } from "drizzle-orm";
 import type { MT5Provider, ChallengeRow, MT5TradeRecord } from "./types";
@@ -17,7 +18,8 @@ import {
   type RuleViolation,
 } from "./rule-engine";
 import { maybeGenerateCertificate } from "../certificates";
-import { createNotification } from "../notifications";
+import { createNotification, notify } from "../notifications";
+import { challengeWarningEmail, challengeViolationEmail } from "../email";
 import { writeAuditLog } from "../audit";
 
 export interface SyncOutcome {
@@ -38,9 +40,17 @@ interface StoredViolation {
   [key: string]: unknown;
 }
 
+/** Best-effort display name for the challenge owner (email fallback). */
+function ownerName(db: Db, userId: number): string {
+  try {
+    const user = db.select().from(users).where(eq(users.id, userId)).get();
+    return user?.name || user?.email || "there";
+  } catch { return "there"; }
+}
+
 /**
  * Resolve the purchase label ("Two-Step Evaluation · $50,000") for a
- * challenge row, for stamping audit entries.
+ * challenge row, for stamping audit entries and email copy.
  */
 export function resolveChallengeLabel(db: Db, challenge: ChallengeRow): string | null {
   try {
@@ -236,11 +246,15 @@ export async function syncChallenge(
       } else {
         mergedWarnings.push(entry);
         knownCodes.add(w.code);
-        createNotification(db, challenge.userId, {
+        const reason = violationReason(w, rules);
+        await notify(db, challenge.userId, {
           type: "challenge_warning",
           title: "Drawdown Warning",
-          message: `Heads up — ${violationReason(w, rules)}. Consider reducing risk before the limit is hit.`,
+          message: `Heads up — ${reason}. Consider reducing risk before the limit is hit.`,
           link: "/dashboard/challenges",
+          // Email fires only on first detection (same rule code), matching the
+          // notification — repeat syncs refresh the stored entry, no spam.
+          email: challengeWarningEmail(ownerName(db, challenge.userId), resolveChallengeLabel(db, challenge), reason),
         });
         notified++;
       }
@@ -297,11 +311,13 @@ export async function syncChallenge(
     }
 
     const top = violations[0];
-    createNotification(db, challenge.userId, {
+    const reason = violationReason(top, rules);
+    await notify(db, challenge.userId, {
       type: "challenge_violation",
       title: "Challenge Violation",
-      message: `Your challenge has been violated due to ${violationReason(top, rules)}. Your account has been suspended.`,
+      message: `Your challenge has been violated due to ${reason}. Your account has been suspended.`,
       link: "/dashboard/challenges",
+      email: challengeViolationEmail(ownerName(db, challenge.userId), resolveChallengeLabel(db, challenge), reason),
     });
 
     // Audit every rule that fired, stamped with the challenge label.

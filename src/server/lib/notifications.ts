@@ -67,6 +67,10 @@ export async function sendEmailToUser(
         if (subjectLower.includes("payment") && emailPrefs.payments === false) return false;
         if (subjectLower.includes("support") && emailPrefs.support === false) return false;
         if (subjectLower.includes("payout") && emailPrefs.payouts === false) return false;
+        // MT5 rule alerts — drawdown warnings and challenge violations. Gated by
+        // the "challenges" email preference so users can opt out of lifecycle
+        // email alerts while keeping in-app notifications.
+        if ((subjectLower.includes("violat") || subjectLower.includes("warning")) && emailPrefs.challenges === false) return false;
       } catch {
         // Invalid JSON — proceed with email
       }

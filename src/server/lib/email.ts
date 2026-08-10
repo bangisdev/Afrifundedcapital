@@ -488,3 +488,68 @@ export function referralPurchaseEmail(referrerName: string, referredName: string
     `),
   };
 }
+
+// ─── MT5 Rule Violation Emails ─────────────────────────
+
+// Non-terminal heads-up: a drawdown rule is 80%+ breached. Fired once per rule
+// code on first detection, mirroring the dashboard notification. The challenge
+// is still active — the email urges the trader to reduce risk.
+export function challengeWarningEmail(
+  userName: string,
+  challengeLabel: string | null,
+  reason: string,
+): SendEmailParams & { subject: string; html: string } {
+  const target = challengeLabel
+    ? `Your <strong>${challengeLabel}</strong> challenge`
+    : "Your challenge";
+  return {
+    to: "",
+    subject: "Drawdown Warning — AfriFundedCapital",
+    html: wrapLayout(`
+      <h2 style="font-size: 18px; font-weight: 600; margin: 0 0 12px;">Drawdown Warning</h2>
+      <p style="font-size: 14px; color: #444;">Hi ${userName},</p>
+      <p style="font-size: 14px; color: #444;">
+        ${target} is approaching a trading limit.
+      </p>
+      <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 12px 16px; margin: 16px 0;">
+        <p style="font-size: 13px; color: #b45309; margin: 0;"><strong>Heads up:</strong> ${reason}.</p>
+      </div>
+      <p style="font-size: 14px; color: #444;">
+        Consider reducing risk before the limit is hit. Drawdown limits are enforced
+        automatically — breaching one will end the challenge.
+      </p>
+      ${button(`${APP_URL}/dashboard/challenges`, "View My Challenge")}
+    `),
+  };
+}
+
+// Terminal: a hard rule breach ended the challenge and suspended the account.
+export function challengeViolationEmail(
+  userName: string,
+  challengeLabel: string | null,
+  reason: string,
+): SendEmailParams & { subject: string; html: string } {
+  const target = challengeLabel
+    ? `Your <strong>${challengeLabel}</strong> challenge`
+    : "Your challenge";
+  return {
+    to: "",
+    subject: "Challenge Violated — AfriFundedCapital",
+    html: wrapLayout(`
+      <h2 style="font-size: 18px; font-weight: 600; margin: 0 0 12px;">Challenge Violated</h2>
+      <p style="font-size: 14px; color: #444;">Hi ${userName},</p>
+      <p style="font-size: 14px; color: #444;">
+        Unfortunately, ${target} has been violated.
+      </p>
+      <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 12px 16px; margin: 16px 0;">
+        <p style="font-size: 13px; color: #dc2626; margin: 0;"><strong>Reason:</strong> ${reason}.</p>
+      </div>
+      <p style="font-size: 14px; color: #444;">
+        Your trading account has been suspended and the challenge is now closed.
+        You can purchase a new challenge, or contact our support team if you
+        believe this is a mistake.
+      </p>
+      ${button(`${APP_URL}/dashboard/challenges`, "View My Challenges")}
+    `),
+  };
+}
