@@ -15,6 +15,7 @@ const AuthPage = lazy(() => import("./pages/Auth.tsx"));
 const Dashboard = lazy(() => import("./pages/dashboard/Dashboard.tsx"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard.tsx"));
 const VerifyCertificate = lazy(() => import("./pages/VerifyCertificate.tsx"));
+const TradingRulesDocs = lazy(() => import("./pages/TradingRulesDocs.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 const queryClient = new QueryClient({
@@ -96,6 +97,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="/dashboard/*" element={<Dashboard />} />
                 <Route path="/admin/*" element={<AdminDashboard />} />
                 <Route path="/verify/:verificationCode" element={<VerifyCertificate />} />
+                <Route path="/docs/trading-rules" element={<TradingRulesDocs />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>

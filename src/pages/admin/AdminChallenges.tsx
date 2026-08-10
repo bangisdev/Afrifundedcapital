@@ -24,6 +24,7 @@ import {
   History,
   Check,
   Info,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router";
@@ -133,8 +134,17 @@ function ruleRow(label: string, allowed: boolean, value: string, hint?: string) 
                 <Info className="h-3 w-3 text-muted-foreground/50" />
               </span>
             </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-64 text-xs leading-relaxed">
-              {hint}
+            <TooltipContent side="top" className="max-w-72 text-xs leading-relaxed">
+              <p>{hint}</p>
+              <Link
+                to="/docs/trading-rules"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-flex items-center gap-1 font-medium text-foreground hover:text-brand transition-colors duration-150"
+              >
+                Full trading rules docs
+                <ExternalLink className="h-3 w-3" />
+              </Link>
             </TooltipContent>
           </Tooltip>
         ) : (

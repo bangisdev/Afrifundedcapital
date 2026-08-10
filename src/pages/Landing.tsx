@@ -1348,6 +1348,12 @@ export default function Landing() {
               <span className="text-xs text-muted-foreground">© 2026</span>
             </div>
             <div className="flex items-center gap-6 text-xs text-muted-foreground">
+              <button
+                onClick={() => navigate("/docs/trading-rules")}
+                className="hover:text-foreground transition-colors duration-200"
+              >
+                Trading Rules
+              </button>
               <a href="#" className="hover:text-foreground transition-colors duration-200">Terms</a>
               <a href="#" className="hover:text-foreground transition-colors duration-200">Privacy</a>
               <a href="#" className="hover:text-foreground transition-colors duration-200">Contact</a>
