@@ -14,7 +14,7 @@ import {
   authDelete,
   getTestDb,
 } from "./setup";
-import { users, auditLogs } from "../schema";
+import { users, auditLogs, userChallenges } from "../schema";
 import { eq, desc } from "drizzle-orm";
 
 let app: Hono;
@@ -456,5 +456,130 @@ describe("DELETE /api/challenges/admin/templates/:id", () => {
     expect(audit).toBeTruthy();
     expect(audit?.entityId).toBe(String(templateId));
     expect(audit?.details).toContain("Delete Me");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  ADMIN: RESET VIOLATED CHALLENGE (digest action)
+// ═══════════════════════════════════════════════════════════════
+
+describe("POST /api/challenges/admin/:id/reset", () => {
+  // User lookup happens at call time (describe bodies run before beforeAll).
+  // Earlier tests may have deleted sizes, so find a template that still has
+  // one (creating one as a fallback) instead of assuming sizes[0] exists.
+  const ensureTemplateSize = async () => {
+    const { body: templates } = await authGet(app, "/api/challenges/templates", adminCookie);
+    const all = templates as Record<string, unknown>[];
+    for (const template of all) {
+      const { body: sizes } = await authGet(app, `/api/challenges/templates/${template.id}/sizes`, adminCookie);
+      if ((sizes as Record<string, unknown>[]).length > 0) return { template, size: (sizes as Record<string, unknown>[])[0] };
+    }
+    const template = all[0];
+    const { body: created } = await authPost(app, "/api/challenges/admin/sizes", adminCookie, {
+      label: "$50,000",
+      size: 50000,
+      templateId: template.id,
+      price: 50000,
+      sortOrder: 0,
+    });
+    return { template, size: created as Record<string, unknown> };
+  };
+  const createChallengeForUser = async () => {
+    const user = getTestDb().select().from(users).where(eq(users.email, "challenge-trader@test.com")).get();
+    const { template, size } = await ensureTemplateSize();
+    const created = await authPost(app, "/api/challenges/demo-purchase", adminCookie, {
+      templateId: template.id,
+      accountSizeId: size.id,
+      userId: user!.id,
+    });
+    return (created.body as Record<string, unknown>).challengeId as number;
+  };
+
+  it("resets a violated challenge to an active phase-1 attempt", async () => {
+    const challengeId = await createChallengeForUser();
+    await authPut(app, `/api/challenges/admin/${challengeId}/status`, adminCookie, { status: "violated" });
+
+    const { status, body } = await authPost(app, `/api/challenges/admin/${challengeId}/reset`, adminCookie, {});
+    expect(status).toBe(200);
+    expect((body as Record<string, unknown>).newStatus).toBe("active");
+
+    const db = getTestDb();
+    const row = db.select().from(userChallenges).where(eq(userChallenges.id, challengeId)).get()!;
+    expect(row.status).toBe("active");
+    expect(row.currentPhase).toBe(1);
+    expect(row.violations).toBeNull();
+    expect(row.startedAt).toBeGreaterThan(0);
+  });
+
+  it("rejects resetting a challenge that is not violated or expired", async () => {
+    const challengeId = await createChallengeForUser(); // status is "active"
+    const { status } = await authPost(app, `/api/challenges/admin/${challengeId}/reset`, adminCookie, {});
+    expect(status).toBe(400);
+  });
+
+  it("returns 404 for an unknown challenge", async () => {
+    const { status } = await authPost(app, "/api/challenges/admin/999999/reset", adminCookie, {});
+    expect(status).toBe(404);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  ADMIN: REPURCHASE VIOLATED CHALLENGE (digest action)
+// ═══════════════════════════════════════════════════════════════
+
+describe("POST /api/challenges/admin/:id/repurchase", () => {
+  it("creates a fresh challenge for the same user, template and size", async () => {
+    const db = getTestDb();
+    const user = db.select().from(users).where(eq(users.email, "challenge-trader@test.com")).get();
+
+    // Reuse the same robust template/size resolution as the reset suite.
+    const { body: templates } = await authGet(app, "/api/challenges/templates", adminCookie);
+    const all = templates as Record<string, unknown>[];
+    let template = all[0];
+    let size: Record<string, unknown> | undefined;
+    for (const t of all) {
+      const { body: sizes } = await authGet(app, `/api/challenges/templates/${t.id}/sizes`, adminCookie);
+      if ((sizes as Record<string, unknown>[]).length > 0) {
+        template = t;
+        size = (sizes as Record<string, unknown>[])[0];
+        break;
+      }
+    }
+    if (!size) {
+      const { body: created } = await authPost(app, "/api/challenges/admin/sizes", adminCookie, {
+        label: "$50,000",
+        size: 50000,
+        templateId: template.id,
+        price: 50000,
+        sortOrder: 0,
+      });
+      size = created as Record<string, unknown>;
+    }
+
+    const created = await authPost(app, "/api/challenges/demo-purchase", adminCookie, {
+      templateId: template.id,
+      accountSizeId: size.id,
+      userId: user!.id,
+    });
+    const oldChallengeId = (created.body as Record<string, unknown>).challengeId as number;
+
+    const { status, body } = await authPost(app, `/api/challenges/admin/${oldChallengeId}/repurchase`, adminCookie, {});
+    expect(status).toBe(200);
+    const newChallengeId = (body as Record<string, unknown>).challengeId as number;
+    expect(newChallengeId).not.toBe(oldChallengeId);
+
+    // The original stays on record; the new one is active for the same user.
+    const oldRow = db.select().from(userChallenges).where(eq(userChallenges.id, oldChallengeId)).get()!;
+    const newRow = db.select().from(userChallenges).where(eq(userChallenges.id, newChallengeId)).get()!;
+    expect(oldRow).toBeTruthy();
+    expect(newRow.userId).toBe(user!.id);
+    expect(newRow.templateId).toBe(oldRow.templateId);
+    expect(newRow.accountSizeId).toBe(oldRow.accountSizeId);
+    expect(newRow.status).toBe("active");
+  });
+
+  it("returns 404 for an unknown challenge", async () => {
+    const { status } = await authPost(app, "/api/challenges/admin/999999/repurchase", adminCookie, {});
+    expect(status).toBe(404);
   });
 });

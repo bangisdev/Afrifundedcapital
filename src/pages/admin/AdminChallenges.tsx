@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { useNow } from "@/hooks/use-now";
+import { useQueryClient } from "@tanstack/react-query";
 import { readResponseBody, errorMessageOf } from "@/lib/api";
 import { useState, useMemo, Fragment } from "react";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,8 @@ import {
   Info,
   ExternalLink,
   AlertTriangle,
+  RotateCcw,
+  ShoppingCart,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router";
@@ -281,6 +284,36 @@ export default function AdminChallenges() {
   const [deleteTarget, setDeleteTarget] = useState<{ type: "template" | "size"; id: number; label: string } | null>(null);
   const [tab, setTab] = useState<"templates" | "challenges" | "violations">("templates");
   const [expandedViolation, setExpandedViolation] = useState<number | null>(null);
+
+  // Admin actions on violated challenges (digest tab).
+  const queryClient = useQueryClient();
+  const [confirmAction, setConfirmAction] = useState<{ type: "reset" | "repurchase"; challenge: any } | null>(null);
+  const [acting, setActing] = useState(false);
+
+  const runViolationAction = async () => {
+    if (!confirmAction) return;
+    setActing(true);
+    try {
+      const res = await fetch(`/api/challenges/admin/${confirmAction.challenge.id}/${confirmAction.type}`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) throw new Error(errorMessageOf(await readResponseBody(res), res.status));
+      toast.success(
+        confirmAction.type === "reset"
+          ? "Challenge reset — the trader can retry"
+          : "New challenge issued to the trader"
+      );
+      queryClient.invalidateQueries({ queryKey: ["admin", "allChallenges"] });
+      setConfirmAction(null);
+    } catch (e: any) {
+      toast.error(e.message || "Action failed");
+    } finally {
+      setActing(false);
+    }
+  };
 
   // Create template form
   const [newTemplate, setNewTemplate] = useState({
@@ -849,6 +882,26 @@ export default function AdminChallenges() {
                       </div>
                     </button>
 
+                    {/* Admin actions */}
+                    <div className="flex items-center gap-2 px-4 pb-3">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs h-7"
+                        onClick={() => setConfirmAction({ type: "reset", challenge: ch })}
+                      >
+                        <RotateCcw className="h-3 w-3 mr-1" /> Reset
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs h-7"
+                        onClick={() => setConfirmAction({ type: "repurchase", challenge: ch })}
+                      >
+                        <ShoppingCart className="h-3 w-3 mr-1" /> Repurchase
+                      </Button>
+                    </div>
+
                     {isOpen && (
                       <div className="border-t border-border px-4 py-3 space-y-2.5 bg-muted/20">
                         {stored.length === 0 ? (
@@ -1236,6 +1289,50 @@ export default function AdminChallenges() {
               }}
             >
               Delete
+            </AlertDialogAction>            </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Reset / Repurchase confirm dialog (violations digest) */}
+      <AlertDialog
+        open={!!confirmAction}
+        onOpenChange={(open) => {
+          if (!open && !acting) setConfirmAction(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmAction?.type === "reset" ? "Reset this challenge?" : "Reissue this challenge?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmAction?.type === "reset" ? (
+                <>
+                  <strong>{confirmAction?.challenge?.userName || `User ${confirmAction?.challenge?.userId}`}</strong>
+                  {'\u2019'}s {confirmAction?.challenge?.templateName || "challenge"} (${(confirmAction?.challenge?.accountSize || 0).toLocaleString()})
+                  {" "}will restart at phase 1 with a clean account, cleared violations, and fresh metrics.
+                  The MT5 account is re-activated and the trader is notified.
+                </>
+              ) : (
+                <>
+                  A brand-new <strong>{confirmAction?.challenge?.templateName || "challenge"}</strong> (${(confirmAction?.challenge?.accountSize || 0).toLocaleString()})
+                  {" "}will be created for <strong>{confirmAction?.challenge?.userName || `user ${confirmAction?.challenge?.userId}`}</strong> at no cost.
+                  The violated challenge stays on record.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={acting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={acting}
+              onClick={(e) => {
+                e.preventDefault();
+                void runViolationAction();
+              }}
+            >
+              {acting && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
+              {confirmAction?.type === "reset" ? "Reset Challenge" : "Create New Challenge"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

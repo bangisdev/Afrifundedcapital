@@ -5,6 +5,7 @@ import {
   accountSizes,
   userChallenges,
   tradingMetrics,
+  drawdownHistory,
   payments,
   mt5Accounts,
   users,
@@ -15,6 +16,7 @@ import { createNotification } from "../lib/notifications";
 import { maybeGenerateCertificate } from "../lib/certificates";
 import { writeAuditLog } from "../lib/audit";
 import { resolveChallengeLabel } from "../lib/mt5/sync-service";
+import { getMT5Provider } from "../lib/mt5";
 
 let seeded = false;
 
@@ -670,27 +672,33 @@ app.delete("/admin/templates/:id", requireAuth, requireAdmin, async (c) => {
 });
 
 // Admin: Demo purchase (create challenge without payment)
-app.post("/demo-purchase", requireAuth, requireAdmin, async (c) => {
-  const userId = c.get("userId");
-  const body = await c.req.json();
-  const db = getDb();
+/**
+ * Create an active challenge (plus zero-amount payment record + MT5 account)
+ * for a user, admin-triggered. Shared by the demo-purchase route and the
+ * digest's repurchase action — `kind` only changes the audit trail copy and
+ * the notification sent to the trader.
+ */
+function createChallengeForUser(
+  db: Db,
+  opts: {
+    templateId: number;
+    accountSizeId: number;
+    targetUserId: number;
+    kind: "demo" | "repurchase";
+  },
+):
+  | { ok: true; challenge: typeof userChallenges.$inferSelect; mt5Login: string; template: typeof challengeTemplates.$inferSelect; size: typeof accountSizes.$inferSelect }
+  | { ok: false; status: 400 | 404; error: string } {
   const now = Date.now();
-
-  const templateId = parseInt(body.templateId);
-  const accountSizeId = parseInt(body.accountSizeId);
-  const targetUserId = body.userId ? parseInt(body.userId) : userId;
-
-  if (!templateId || !accountSizeId) {
-    return c.json({ error: "templateId and accountSizeId are required" }, 400);
-  }
+  const { templateId, accountSizeId, targetUserId, kind } = opts;
 
   const template = db.select().from(challengeTemplates).where(eq(challengeTemplates.id, templateId)).get();
   const size = db.select().from(accountSizes).where(eq(accountSizes.id, accountSizeId)).get();
-  if (!template) return c.json({ error: "Template not found" }, 404);
-  if (!size) return c.json({ error: "Account size not found" }, 404);
+  if (!template) return { ok: false, status: 404, error: "Template not found" };
+  if (!size) return { ok: false, status: 404, error: "Account size not found" };
 
-  // Create a completed payment record for audit trail
-  const reference = `DEMO-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+  // Create a completed zero-amount payment record for audit trail
+  const reference = `${kind === "repurchase" ? "REPUR" : "DEMO"}-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
   const payment = db.insert(payments).values({
     userId: targetUserId,
     amount: 0,
@@ -698,7 +706,10 @@ app.post("/demo-purchase", requireAuth, requireAdmin, async (c) => {
     provider: "demo",
     status: "completed",
     reference,
-    description: `Demo: ${template.name} — ${size.label}`,
+    description:
+      kind === "repurchase"
+        ? `Admin repurchase: ${template.name} — ${size.label}`
+        : `Demo: ${template.name} — ${size.label}`,
     templateId,
     accountSizeId,
     createdAt: now,
@@ -727,7 +738,7 @@ app.post("/demo-purchase", requireAuth, requireAdmin, async (c) => {
     updatedAt: now,
   }).returning().get();
 
-  // Create MT5 demo account
+  // Create MT5 account
   const login = "AFC" + Math.floor(100000 + Math.random() * 900000);
   const mt5Account = db.insert(mt5Accounts).values({
     userId: targetUserId,
@@ -748,16 +759,38 @@ app.post("/demo-purchase", requireAuth, requireAdmin, async (c) => {
   // Notify user
   createNotification(db, targetUserId, {
     type: "payment",
-    title: "Demo Challenge Created",
-    message: `A demo ${template.name} challenge (${size.label}) has been created for your account.`,
+    title: kind === "repurchase" ? "Challenge Reissued" : "Demo Challenge Created",
+    message:
+      kind === "repurchase"
+        ? `Your ${template.name} challenge (${size.label}) was reissued after a violation. Best of luck with your new attempt.`
+        : `A demo ${template.name} challenge (${size.label}) has been created for your account.`,
     link: "/dashboard/challenges",
   });
 
+  return { ok: true, challenge, mt5Login: login, template, size };
+}
+
+app.post("/demo-purchase", requireAuth, requireAdmin, async (c) => {
+  const userId = c.get("userId");
+  const body = await c.req.json();
+  const db = getDb();
+
+  const templateId = parseInt(body.templateId);
+  const accountSizeId = parseInt(body.accountSizeId);
+  const targetUserId = body.userId ? parseInt(body.userId) : userId;
+
+  if (!templateId || !accountSizeId) {
+    return c.json({ error: "templateId and accountSizeId are required" }, 400);
+  }
+
+  const result = createChallengeForUser(db, { templateId, accountSizeId, targetUserId, kind: "demo" });
+  if (!result.ok) return c.json({ error: result.error }, result.status);
+
   return c.json({
     success: true,
-    challengeId: challenge.id,
-    mt5Login: login,
-    message: `Demo challenge created: ${template.name} — ${size.label}`,
+    challengeId: result.challenge.id,
+    mt5Login: result.mt5Login,
+    message: `Demo challenge created: ${result.template.name} — ${result.size.label}`,
   });
 });
 
@@ -823,6 +856,131 @@ app.put("/admin/:id/status", requireAuth, requireAdmin, async (c) => {
     challengeId: id,
     newStatus,
     certificateGenerated: cert ? { id: cert.id, number: cert.certificateNumber } : null,
+  });
+});
+
+// Admin: Reset a violated (or expired) challenge to a fresh active attempt.
+// Restarts phase 1, clears violations + metrics history, re-activates the MT5
+// account, and notifies the trader. Audited with the admin as the actor.
+app.post("/admin/:id/reset", requireAuth, requireAdmin, async (c) => {
+  const id = parseInt(c.req.param("id"));
+  const db = getDb();
+  const now = Date.now();
+
+  const challenge = db.select().from(userChallenges).where(eq(userChallenges.id, id)).get();
+  if (!challenge) return c.json({ error: "Challenge not found" }, 404);
+  if (challenge.status !== "violated" && challenge.status !== "expired") {
+    return c.json({ error: "Only violated or expired challenges can be reset" }, 400);
+  }
+
+  const template = db.select().from(challengeTemplates).where(eq(challengeTemplates.id, challenge.templateId)).get();
+  const durationDays = template?.durationDays || 30;
+
+  db.update(userChallenges).set({
+    status: "active",
+    currentPhase: 1,
+    violations: null,
+    phase1PassedAt: null,
+    phase2PassedAt: null,
+    fundedAt: null,
+    startedAt: now,
+    expiresAt: now + durationDays * 86400000,
+    updatedAt: now,
+  }).where(eq(userChallenges.id, id)).run();
+
+  // Fresh attempt: wipe the metrics/drawdown history so the next sync has a
+  // clean base (stale history would skew the consistency rule and the 23h
+  // dedup window would skip the first sync).
+  db.delete(tradingMetrics).where(eq(tradingMetrics.challengeId, id)).run();
+  db.delete(drawdownHistory).where(eq(drawdownHistory.challengeId, id)).run();
+
+  // Re-activate the MT5 account: DB state first, then a best-effort gateway
+  // call when a live connector is configured (simulated is a no-op).
+  if (challenge.mt5AccountId) {
+    const account = db.select().from(mt5Accounts).where(eq(mt5Accounts.id, challenge.mt5AccountId)).get();
+    if (account) {
+      db.update(mt5Accounts).set({
+        isSuspended: false,
+        balance: challenge.accountSize,
+        equity: challenge.accountSize,
+        lastSyncAt: null,
+      }).where(eq(mt5Accounts.id, account.id)).run();
+      if (account.login) {
+        try {
+          const provider = getMT5Provider(db);
+          if (provider.configured) await provider.activateAccount(account.login);
+        } catch { /* best-effort */ }
+      }
+    }
+  }
+
+  createNotification(db, challenge.userId, {
+    type: "challenge_reset",
+    title: "Challenge Reset",
+    message: `Your ${template?.name || "challenge"} has been reset by an admin — you can start trading again.`,
+    link: "/dashboard/challenges",
+  });
+
+  try {
+    writeAuditLog(db, {
+      userId: c.get("userId"),
+      action: "challenge.reset",
+      entity: "challenge",
+      entityId: id,
+      details: {
+        challengeLabel: resolveChallengeLabel(db, challenge),
+        fromStatus: challenge.status,
+        toStatus: "active",
+      },
+      ipAddress: c.req.header("x-forwarded-for") || undefined,
+    });
+  } catch (e) {
+    console.warn("[Audit] Failed to log challenge reset:", e);
+  }
+
+  return c.json({ success: true, challengeId: id, newStatus: "active" });
+});
+
+// Admin: Reissue a fresh challenge for the same user/template/account size
+// after a violation. Leaves the violated challenge on record and creates a
+// brand-new active attempt (no payment required).
+app.post("/admin/:id/repurchase", requireAuth, requireAdmin, async (c) => {
+  const id = parseInt(c.req.param("id"));
+  const db = getDb();
+
+  const challenge = db.select().from(userChallenges).where(eq(userChallenges.id, id)).get();
+  if (!challenge) return c.json({ error: "Challenge not found" }, 404);
+
+  const result = createChallengeForUser(db, {
+    templateId: challenge.templateId,
+    accountSizeId: challenge.accountSizeId,
+    targetUserId: challenge.userId,
+    kind: "repurchase",
+  });
+  if (!result.ok) return c.json({ error: result.error }, result.status);
+
+  try {
+    writeAuditLog(db, {
+      userId: c.get("userId"),
+      action: "challenge.repurchased",
+      entity: "challenge",
+      entityId: id,
+      details: {
+        challengeLabel: resolveChallengeLabel(db, challenge),
+        fromStatus: challenge.status,
+        newChallengeId: result.challenge.id,
+      },
+      ipAddress: c.req.header("x-forwarded-for") || undefined,
+    });
+  } catch (e) {
+    console.warn("[Audit] Failed to log challenge repurchase:", e);
+  }
+
+  return c.json({
+    success: true,
+    challengeId: result.challenge.id,
+    mt5Login: result.mt5Login,
+    message: `New challenge created: ${result.template.name} — ${result.size.label}`,
   });
 });
 
