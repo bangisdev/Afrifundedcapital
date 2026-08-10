@@ -651,6 +651,15 @@ export default function Challenges() {
                   <p className="text-xs text-muted-foreground mt-1">
                     Reference: {paymentState.reference?.slice(0, 16)}...
                   </p>
+                  <Link
+                    to="/docs/trading-rules"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-foreground hover:text-brand transition-colors duration-150"
+                  >
+                    Review your trading rules
+                    <ExternalLink className="h-3 w-3" />
+                  </Link>
                 </div>
               </div>
               <Button className="w-full text-xs" size="sm" onClick={() => { resetPayment(); setShowPurchase(false); }}>
@@ -696,6 +705,16 @@ export default function Challenges() {
                   </div>
                 );
               })()}
+
+              <Link
+                to="/docs/trading-rules"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-brand transition-colors duration-150"
+              >
+                Review this challenge's trading rules before you pay
+                <ExternalLink className="h-3 w-3" />
+              </Link>
 
               <div className="grid grid-cols-2 gap-2">
                 {sizes.map((size: Doc) => (
