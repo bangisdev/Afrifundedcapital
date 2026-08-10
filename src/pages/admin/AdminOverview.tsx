@@ -1,10 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery } from "@/hooks/use-api";
 import { readResponseBody } from "@/lib/api";
-import { useState } from "react";
-import { Loader2, Users, BarChart3, DollarSign, Award, TrendingUp, Database, CheckCircle, AlertTriangle } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Loader2, Users, BarChart3, DollarSign, Award, TrendingUp, Database, CheckCircle, AlertTriangle, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { Link } from "react-router";
+import { parseStoredViolations, ruleCodeLabel, timeAgo } from "@/lib/challenge-violations";
 
 function StatCard({ label, value, icon }: { label: string; value: string | number; icon: React.ReactNode }) {
   return (
@@ -22,6 +24,17 @@ export default function AdminOverview() {
   const { data: payoutStats, refetch: refetchPayouts } = useApiQuery<any>(["admin", "payoutStats"], "/api/payouts/admin/stats");
   const { data: userGrowth } = useApiQuery<any>(["admin", "userGrowth"], "/api/users/growth");
   const { data: revenueGrowth } = useApiQuery<any>(["admin", "revenueGrowth"], "/api/payments/admin/revenue-growth");
+  const { data: allChallenges } = useApiQuery<any[]>(["admin", "allChallenges"], "/api/challenges/admin/all?sortBy=createdAt&sortOrder=desc");
+
+  // Recent violations snapshot — newest first, capped at 5 rows so the
+  // overview stays scannable. Full detail + recovery actions live on the
+  // digest tab (/admin/challenges?tab=violations).
+  const recentViolations = useMemo(() => {
+    return (allChallenges || [])
+      .filter((c: any) => c.status === "violated")
+      .sort((a: any, b: any) => (b.updatedAt || 0) - (a.updatedAt || 0))
+      .slice(0, 5);
+  }, [allChallenges]);
 
   const [bulkSeeding, setBulkSeeding] = useState(false);
   const [bulkSeedResult, setBulkSeedResult] = useState<any>(null);
@@ -218,6 +231,70 @@ export default function AdminOverview() {
           </div>
         </div>
       )}
+
+      {/* Recent violations digest snapshot */}
+      <div className="card-subtle p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-medium inline-flex items-center gap-2">
+            <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+            Recent Violations
+          </h2>
+          <Link
+            to="/admin/challenges?tab=violations"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            View all
+            <ChevronRight className="h-3 w-3" />
+          </Link>
+        </div>
+        {recentViolations.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            No violations recorded yet — the rule engine hasn't flagged any challenges.
+          </p>
+        ) : (
+          <div className="divide-y divide-border">
+            {recentViolations.map((ch: any) => {
+              const stored = parseStoredViolations(ch.violations);
+              const hard = stored.filter((v) => v.severity !== "warning").slice(0, 2);
+              const extra = stored.filter((v) => v.severity !== "warning").length - hard.length;
+              const initials = (ch.userName || "U")
+                .split(" ")
+                .filter(Boolean)
+                .slice(0, 2)
+                .map((p: string) => p[0])
+                .join("")
+                .toUpperCase();
+              return (
+                <div key={ch.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                  <div className="h-8 w-8 rounded-full bg-red-500/10 text-red-600 flex items-center justify-center text-[10px] font-medium shrink-0">
+                    {initials || "U"}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium truncate">{ch.userName || `User ${ch.userId}`}</span>
+                      <span className="text-[10px] text-muted-foreground shrink-0">{timeAgo(ch.updatedAt)}</span>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground truncate mt-0.5">
+                      {ch.templateName || "Challenge"} · ${(ch.accountSize || 0).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {hard.map((v, i) => (
+                      <span
+                        key={i}
+                        className="inline-flex items-center rounded-full border border-red-500/20 bg-red-500/10 px-1.5 py-0.5 text-[9px] text-red-600"
+                      >
+                        {ruleCodeLabel(v.code || v.type)}
+                      </span>
+                    ))}
+                    {extra > 0 && <span className="text-[9px] text-muted-foreground">+{extra}</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

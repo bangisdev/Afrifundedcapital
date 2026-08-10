@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { newsBlackoutWindow, RULE_HINTS } from "@/lib/utils";
+import { parseStoredViolations, ruleCodeLabel, timeAgo } from "@/lib/challenge-violations";
 import {
   Loader2,
   Plus,
@@ -32,7 +33,7 @@ import {
   ShoppingCart,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -96,50 +97,6 @@ const TEMPLATE_TYPES = [
 
 function formatNgn(n: number) {
   return `₦${n.toLocaleString()}`;
-}
-
-// Human-readable labels for stored violation rule codes (rule-engine `RuleCode`s).
-const RULE_CODE_LABELS: Record<string, string> = {
-  max_drawdown: "Max drawdown",
-  daily_drawdown: "Daily drawdown",
-  consistency: "Consistency rule",
-  max_position_size: "Max position size",
-  weekend_holding: "Weekend holding",
-  news_trading: "News trading",
-  ea_detected: "EA trading",
-  copy_trading_detected: "Copy trading",
-  max_drawdown_warning: "Max drawdown (approaching)",
-  daily_drawdown_warning: "Daily drawdown (approaching)",
-};
-
-/** Parse the stored `user_challenges.violations` JSON blob. */
-function parseStoredViolations(raw: string | null | undefined): Array<{
-  code?: string;
-  type?: string;
-  severity?: string;
-  message?: string;
-  detectedAt?: number;
-}> {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-/** Compact relative timestamp for the digest (e.g. "3h ago"). */
-function timeAgo(ts: number | null | undefined): string {
-  if (!ts) return "—";
-  const mins = Math.floor((Date.now() - ts) / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(ts).toLocaleDateString();
 }
 
 // Compact news-trading rule label for the challenges table — mirrors the
@@ -282,7 +239,18 @@ export default function AdminChallenges() {
   const [addingSizeTo, setAddingSizeTo] = useState<number | null>(null);
   const [editingSize, setEditingSize] = useState<AccountSize | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ type: "template" | "size"; id: number; label: string } | null>(null);
-  const [tab, setTab] = useState<"templates" | "challenges" | "violations">("templates");
+  // Deep-linkable tab (e.g. /admin/challenges?tab=violations) so the admin
+  // overview's digest snapshot can jump straight to the violations list. The
+  // active tab is derived from the URL — clicking a tab rewrites the params
+  // and the UI follows, with no duplicated state to keep in sync.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const tab: "templates" | "challenges" | "violations" =
+    tabParam === "challenges" || tabParam === "violations" ? tabParam : "templates";
+
+  const handleTabChange = (t: "templates" | "challenges" | "violations") => {
+    setSearchParams(t === "templates" ? {} : { tab: t }, { replace: true });
+  };
   const [expandedViolation, setExpandedViolation] = useState<number | null>(null);
 
   // Admin actions on violated challenges (digest tab).
@@ -455,7 +423,7 @@ export default function AdminChallenges() {
                 ? "border-foreground text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
-            onClick={() => setTab(t)}
+            onClick={() => handleTabChange(t)}
           >
             {t === "templates"
               ? "Templates & Sizes"
@@ -794,7 +762,7 @@ export default function AdminChallenges() {
               { label: "Traders Affected", value: violationDigest.traders, icon: Users, danger: false },
               {
                 label: "Top Rule",
-                value: violationDigest.topRule ? (RULE_CODE_LABELS[violationDigest.topRule] || violationDigest.topRule) : "—",
+                value: violationDigest.topRule ? ruleCodeLabel(violationDigest.topRule) : "—",
                 icon: Info,
                 danger: false,
               },
@@ -867,7 +835,7 @@ export default function AdminChallenges() {
                               className="inline-flex items-center gap-1 rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[10px] text-red-600"
                             >
                               <AlertTriangle className="h-2.5 w-2.5" />
-                              {RULE_CODE_LABELS[v.code || v.type || "unknown"] || v.code || v.type || "unknown"}
+                              {ruleCodeLabel(v.code || v.type)}
                               {v.detectedAt ? ` · ${timeAgo(v.detectedAt)}` : ""}
                             </span>
                           ))}
@@ -917,7 +885,7 @@ export default function AdminChallenges() {
                               </Badge>
                               <div className="min-w-0">
                                 <div className="text-xs font-medium">
-                                  {RULE_CODE_LABELS[v.code || v.type || "unknown"] || v.code || v.type || "unknown"}
+                                  {ruleCodeLabel(v.code || v.type)}
                                 </div>
                                 {v.message && <div className="text-xs text-muted-foreground mt-0.5">{v.message}</div>}
                                 {v.detectedAt && (
