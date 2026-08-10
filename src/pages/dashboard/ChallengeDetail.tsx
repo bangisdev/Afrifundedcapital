@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery } from "@/hooks/use-api";
-import { useParams, useNavigate } from "react-router";
+import { useParams, useNavigate, Link } from "react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { Loader2, ArrowLeft, Activity, BarChart3, AlertTriangle, Check, X } from "lucide-react";
+import { Loader2, ArrowLeft, Activity, BarChart3, AlertTriangle, Check, X, ExternalLink } from "lucide-react";
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts";
 import { useMemo } from "react";
 import { newsBlackoutWindow, RULE_HINTS } from "@/lib/utils";
@@ -47,7 +47,16 @@ function ruleRow(label: string, allowed: boolean, value?: string, hint?: string)
         </div>
         {hint && (
           <div className="mt-0.5 whitespace-normal text-[10px] leading-snug text-muted-foreground/70">
-            {hint}
+            {hint}{" "}
+            <Link
+              to="/docs/trading-rules"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-0.5 font-medium text-foreground hover:text-brand transition-colors duration-150"
+            >
+              Learn more
+              <ExternalLink className="h-2.5 w-2.5" />
+            </Link>
           </div>
         )}
       </div>

@@ -21,8 +21,8 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@/components/ui/tabs";
-import { useNavigate, useSearchParams } from "react-router";
-import { Loader2, CheckCircle, XCircle, ChevronRight, ChevronLeft, ArrowUp, ArrowDown, ArrowUpDown, Gift, Check, X } from "lucide-react";
+import { useNavigate, useSearchParams, Link } from "react-router";
+import { Loader2, CheckCircle, XCircle, ChevronRight, ChevronLeft, ArrowUp, ArrowDown, ArrowUpDown, Gift, Check, X, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 
 type Doc = Record<string, any>;
@@ -277,7 +277,16 @@ export default function Challenges() {
         </div>
         {hint && (
           <div className="mt-0.5 whitespace-normal text-[10px] leading-snug text-muted-foreground/70">
-            {hint}
+            {hint}{" "}
+            <Link
+              to="/docs/trading-rules"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-0.5 font-medium text-foreground hover:text-brand transition-colors duration-150"
+            >
+              Learn more
+              <ExternalLink className="h-2.5 w-2.5" />
+            </Link>
           </div>
         )}
       </div>
