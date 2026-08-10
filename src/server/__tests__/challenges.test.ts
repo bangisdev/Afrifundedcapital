@@ -299,6 +299,40 @@ describe("POST /api/challenges/demo-purchase", () => {
 });
 
 // ═══════════════════════════════════════════════════════════════
+//  ADMIN: ALL CHALLENGES (violations digest data)
+// ═══════════════════════════════════════════════════════════════
+
+describe("GET /api/challenges/admin/all", () => {
+  it("stamps template name and owner identity onto each challenge row", async () => {
+    const db = getTestDb();
+    const user = db.select().from(users).where(eq(users.email, "challenge-trader@test.com")).get();
+
+    // Create a challenge for the user so the row carries owner identity to join.
+    const { body: templates } = await authGet(app, "/api/challenges/templates", adminCookie);
+    const template = (templates as Record<string, unknown>[])[0];
+    const { body: sizes } = await authGet(app, `/api/challenges/templates/${template.id}/sizes`, adminCookie);
+    const size = (sizes as Record<string, unknown>[])[0];
+    await authPost(app, "/api/challenges/demo-purchase", adminCookie, {
+      templateId: template.id,
+      accountSizeId: size.id,
+      userId: user!.id,
+    });
+
+    const { status, body } = await authGet(app, "/api/challenges/admin/all", adminCookie);
+    expect(status).toBe(200);
+    const rows = body as Array<Record<string, unknown>>;
+    expect(Array.isArray(rows)).toBe(true);
+
+    const row = rows.find((r) => r.userId === user!.id);
+    expect(row).toBeDefined();
+    expect(row!.userName).toBe(user!.name);
+    expect(row!.userEmail).toBe(user!.email);
+    expect(row!.templateName).toBeTruthy();
+    expect(row!.templateRules).toBeTruthy();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 //  ADMIN: CHALLENGE STATUS UPDATE (uses PUT)
 // ═══════════════════════════════════════════════════════════════
 

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
+import { useNow } from "@/hooks/use-now";
 import { readResponseBody, errorMessageOf } from "@/lib/api";
 import { useState, useMemo, Fragment } from "react";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ import {
   Check,
   Info,
   ExternalLink,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router";
@@ -91,6 +93,50 @@ const TEMPLATE_TYPES = [
 
 function formatNgn(n: number) {
   return `₦${n.toLocaleString()}`;
+}
+
+// Human-readable labels for stored violation rule codes (rule-engine `RuleCode`s).
+const RULE_CODE_LABELS: Record<string, string> = {
+  max_drawdown: "Max drawdown",
+  daily_drawdown: "Daily drawdown",
+  consistency: "Consistency rule",
+  max_position_size: "Max position size",
+  weekend_holding: "Weekend holding",
+  news_trading: "News trading",
+  ea_detected: "EA trading",
+  copy_trading_detected: "Copy trading",
+  max_drawdown_warning: "Max drawdown (approaching)",
+  daily_drawdown_warning: "Daily drawdown (approaching)",
+};
+
+/** Parse the stored `user_challenges.violations` JSON blob. */
+function parseStoredViolations(raw: string | null | undefined): Array<{
+  code?: string;
+  type?: string;
+  severity?: string;
+  message?: string;
+  detectedAt?: number;
+}> {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Compact relative timestamp for the digest (e.g. "3h ago"). */
+function timeAgo(ts: number | null | undefined): string {
+  if (!ts) return "—";
+  const mins = Math.floor((Date.now() - ts) / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(ts).toLocaleDateString();
 }
 
 // Compact news-trading rule label for the challenges table — mirrors the
@@ -233,7 +279,8 @@ export default function AdminChallenges() {
   const [addingSizeTo, setAddingSizeTo] = useState<number | null>(null);
   const [editingSize, setEditingSize] = useState<AccountSize | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ type: "template" | "size"; id: number; label: string } | null>(null);
-  const [tab, setTab] = useState<"templates" | "challenges">("templates");
+  const [tab, setTab] = useState<"templates" | "challenges" | "violations">("templates");
+  const [expandedViolation, setExpandedViolation] = useState<number | null>(null);
 
   // Create template form
   const [newTemplate, setNewTemplate] = useState({
@@ -300,6 +347,31 @@ export default function AdminChallenges() {
     };
   }, [templates, allChallenges]);
 
+  // Violations digest: terminated challenges + parsed rule breaches, newest first.
+  const now = useNow();
+  const violationDigest = useMemo(() => {
+    const list = (allChallenges || [])
+      .filter((c: any) => c.status === "violated")
+      .sort((a: any, b: any) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
+    const hard = list.flatMap((c: any) =>
+      parseStoredViolations(c.violations).filter((v) => v.severity !== "warning")
+    );
+    const byCode = new Map<string, number>();
+    hard.forEach((v) => {
+      const code = v.code || v.type || "unknown";
+      byCode.set(code, (byCode.get(code) || 0) + 1);
+    });
+    const topRule = [...byCode.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+    return {
+      list,
+      total: list.length,
+      thisWeek: list.filter((c: any) => (c.updatedAt || 0) >= weekAgo).length,
+      traders: new Set(list.map((c: any) => c.userId)).size,
+      topRule,
+    };
+  }, [allChallenges, now]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -342,7 +414,7 @@ export default function AdminChallenges() {
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-border">
-        {(["templates", "challenges"] as const).map((t) => (
+        {(["templates", "challenges", "violations"] as const).map((t) => (
           <button
             key={t}
             className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
@@ -352,7 +424,11 @@ export default function AdminChallenges() {
             }`}
             onClick={() => setTab(t)}
           >
-            {t === "templates" ? "Templates & Sizes" : `All Challenges (${allChallenges?.length || 0})`}
+            {t === "templates"
+              ? "Templates & Sizes"
+              : t === "challenges"
+              ? `All Challenges (${allChallenges?.length || 0})`
+              : `Violations (${violationDigest.total})`}
           </button>
         ))}
       </div>
@@ -669,6 +745,142 @@ export default function AdminChallenges() {
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Violations Digest Tab */}
+      {tab === "violations" && (
+        <div className="space-y-4">
+          {/* Digest summary */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: "Total Violations", value: violationDigest.total, icon: AlertTriangle, danger: true },
+              { label: "This Week", value: violationDigest.thisWeek, icon: History, danger: false },
+              { label: "Traders Affected", value: violationDigest.traders, icon: Users, danger: false },
+              {
+                label: "Top Rule",
+                value: violationDigest.topRule ? (RULE_CODE_LABELS[violationDigest.topRule] || violationDigest.topRule) : "—",
+                icon: Info,
+                danger: false,
+              },
+            ].map((s) => (
+              <div key={s.label} className="card-subtle p-3 flex items-center gap-3">
+                <div className={`h-8 w-8 rounded-md flex items-center justify-center ${s.danger ? "bg-red-500/10" : "bg-secondary"}`}>
+                  <s.icon className={`h-4 w-4 ${s.danger ? "text-red-500" : "text-muted-foreground"}`} />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-lg font-medium truncate">{s.value}</div>
+                  <div className="text-[10px] text-muted-foreground">{s.label}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {violationDigest.list.length === 0 ? (
+            <div className="card-subtle p-8 text-center text-sm text-muted-foreground">
+              No violations recorded yet — the rule engine hasn't flagged any challenges.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {violationDigest.list.map((ch: any) => {
+                const isOpen = expandedViolation === ch.id;
+                const stored = parseStoredViolations(ch.violations);
+                const hard = stored.filter((v) => v.severity !== "warning");
+                const initials = (ch.userName || "U")
+                  .split(" ")
+                  .filter(Boolean)
+                  .slice(0, 2)
+                  .map((p: string) => p[0])
+                  .join("")
+                  .toUpperCase();
+                return (
+                  <div key={ch.id} className={`card-subtle overflow-hidden transition-colors ${isOpen ? "ring-1 ring-red-500/30" : ""}`}>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedViolation((prev) => (prev === ch.id ? null : ch.id))}
+                      aria-expanded={isOpen}
+                      className="w-full p-4 text-left hover:bg-muted/30 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-9 w-9 rounded-full bg-red-500/10 text-red-600 flex items-center justify-center text-xs font-medium shrink-0">
+                            {initials || "U"}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium truncate">{ch.userName || `User ${ch.userId}`}</div>
+                            <div className="text-xs text-muted-foreground truncate">
+                              {ch.userEmail || "no email on file"}
+                            </div>
+                            <div className="text-xs mt-0.5 truncate">
+                              <span className="font-medium">{ch.templateName || "Challenge"}</span>
+                              <span className="text-muted-foreground"> · ${(ch.accountSize || 0).toLocaleString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="text-[10px] text-muted-foreground">{timeAgo(ch.updatedAt)}</div>
+                          <Badge variant="destructive" className="text-[10px] mt-1">violated</Badge>
+                        </div>
+                      </div>
+
+                      {/* Breached rules */}
+                      {hard.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {hard.map((v, i) => (
+                            <span
+                              key={i}
+                              className="inline-flex items-center gap-1 rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[10px] text-red-600"
+                            >
+                              <AlertTriangle className="h-2.5 w-2.5" />
+                              {RULE_CODE_LABELS[v.code || v.type || "unknown"] || v.code || v.type || "unknown"}
+                              {v.detectedAt ? ` · ${timeAgo(v.detectedAt)}` : ""}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="mt-2 flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <ChevronRight
+                          className={`h-3 w-3 transition-transform duration-200 ${isOpen ? "rotate-90" : ""}`}
+                        />
+                        {isOpen ? "Hide details" : `${stored.length} stored violation${stored.length === 1 ? "" : "s"}`}
+                      </div>
+                    </button>
+
+                    {isOpen && (
+                      <div className="border-t border-border px-4 py-3 space-y-2.5 bg-muted/20">
+                        {stored.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">No stored violation detail for this challenge.</p>
+                        ) : (
+                          stored.map((v, i) => (
+                            <div key={i} className="flex gap-2.5 items-start">
+                              <Badge
+                                variant={v.severity === "warning" ? "secondary" : "destructive"}
+                                className="text-[10px] shrink-0 mt-0.5"
+                              >
+                                {v.severity || "hard"}
+                              </Badge>
+                              <div className="min-w-0">
+                                <div className="text-xs font-medium">
+                                  {RULE_CODE_LABELS[v.code || v.type || "unknown"] || v.code || v.type || "unknown"}
+                                </div>
+                                {v.message && <div className="text-xs text-muted-foreground mt-0.5">{v.message}</div>}
+                                {v.detectedAt && (
+                                  <div className="text-[10px] text-muted-foreground mt-0.5">
+                                    {new Date(v.detectedAt).toLocaleString()}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

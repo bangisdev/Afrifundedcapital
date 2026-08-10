@@ -7,6 +7,7 @@ import {
   tradingMetrics,
   payments,
   mt5Accounts,
+  users,
 } from "../schema";
 import { eq, desc, asc, count, and, inArray, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
@@ -387,18 +388,24 @@ app.get("/admin/all", requireAuth, requireAdmin, (c) => {
     .orderBy(sortOrder)
     .all();
 
-  // Stamp the template name + rule set (news blackout window etc.) onto each
-  // row so the admin challenges table can show trading-rule details inline,
+  // Stamp the template name + rule set (news blackout window etc.) and the
+  // owner's name/email onto each row so the admin challenges table and the
+  // violations digest can show trading-rule details and trader identity inline,
   // mirroring the /my/:id detail stamp.
   const templates = db.select().from(challengeTemplates).all();
   const templateById = new Map(templates.map((t) => [t.id, t]));
+  const owners = db.select().from(users).all();
+  const ownerById = new Map(owners.map((u) => [u.id, u]));
 
   return c.json(
     challenges.map((ch) => {
       const template = templateById.get(ch.templateId);
+      const owner = ownerById.get(ch.userId);
       return {
         ...ch,
         templateName: template?.name || null,
+        userName: owner?.name || null,
+        userEmail: owner?.email || null,
         templateRules: template
           ? {
               allowNewsTrading: template.allowNewsTrading,
