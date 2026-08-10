@@ -6,9 +6,12 @@ import {
   drawdownHistory,
   userChallenges,
   challengeTemplates,
+  accountSizes,
   users,
   settings,
+  notifications,
 } from "../schema";
+import type { MT5Provider } from "../lib/mt5/types";
 import {
   eq,
   desc,
@@ -869,6 +872,201 @@ app.post("/admin/scheduler/e2e-setup", requireAuth, requireAdmin, async (c) => {
     queueJobId,
     enqueued: enqueue && !!mt5AccountId,
     stats: getQueueStats(db),
+  });
+});
+
+// ─── Admin: Challenge Violation (E2E test hook) ─────────
+//
+// Test-only. Serves 404 unless the server runs with E2E_TESTING=1 (the
+// Playwright web server always sets it). Drives the REAL sync + rule-engine +
+// notification pipeline against a gateway-sourced metrics snapshot that
+// breaches the challenge template's max drawdown, so the violations digest,
+// trader email, admin bell alert, and audit entries are exercised end-to-end
+// without a live MT5 gateway.
+//
+//   1. reuses the caller's most recent active challenge bound to an MT5
+//      account AND a real template (the rule engine needs template rules);
+//      creates one otherwise,
+//   2. wipes metrics/drawdown history so the sync isn't deduped,
+//   3. syncs through a stub `MT5Provider` whose `syncDaily` reports
+//      `source: "gateway"` with current drawdown at 150% of the template
+//      limit → hard `max_drawdown` violation → status flip, account
+//      suspension, trader + admin notifications, audit trail.
+app.post("/admin/violations/e2e-setup", requireAuth, requireAdmin, async (c) => {
+  if (process.env.E2E_TESTING !== "1") {
+    return c.json({ error: "E2E violation test hook is disabled" }, 404);
+  }
+  const db = getDb();
+  const userId = c.get("userId");
+  const now = Date.now();
+
+  // 1. Reuse an active challenge bound to an MT5 account and a real template;
+  //    create one from the first template with a max drawdown otherwise.
+  let challenge = db
+    .select()
+    .from(userChallenges)
+    .where(and(
+      eq(userChallenges.userId, userId),
+      eq(userChallenges.status, "active"),
+      sql`${userChallenges.mt5AccountId} IS NOT NULL`,
+      sql`${userChallenges.templateId} != 0`,
+    ))
+    .orderBy(desc(userChallenges.createdAt))
+    .limit(1)
+    .get();
+
+  let created = false;
+  if (!challenge) {
+    const template = db
+      .select()
+      .from(challengeTemplates)
+      .where(sql`${challengeTemplates.maxDrawdown} > 0`)
+      .orderBy(asc(challengeTemplates.id))
+      .limit(1)
+      .get();
+    if (!template) {
+      return c.json({ error: "No challenge template with a max drawdown rule exists" }, 409);
+    }
+    // Real account size row (repurchase/digest actions resolve sizes by id).
+    const size = db
+      .select()
+      .from(accountSizes)
+      .where(eq(accountSizes.templateId, template.id))
+      .orderBy(asc(accountSizes.sortOrder))
+      .limit(1)
+      .get();
+    const accountSize = size?.size || 10000;
+    const account = db.insert(mt5Accounts).values({
+      userId,
+      login: "AFC" + Math.floor(100000 + Math.random() * 900000),
+      password: "E2E@Demo123",
+      investorPassword: "E2E@Demo123",
+      server: "AfriFundedCapital-Demo",
+      group: "DEMO\\AFC",
+      leverage: template.maxLeverage || 100,
+      balance: accountSize,
+      equity: accountSize,
+      currency: "NGN",
+      createdAt: now,
+    }).returning().get();
+    challenge = db.insert(userChallenges).values({
+      userId,
+      templateId: template.id,
+      accountSizeId: size?.id ?? 0,
+      status: "active",
+      accountSize,
+      currency: "NGN",
+      profitTarget: template.profitTarget,
+      dailyDrawdown: template.dailyDrawdown,
+      maxDrawdown: template.maxDrawdown,
+      maxLeverage: template.maxLeverage,
+      minTradingDays: template.minTradingDays,
+      maxTradingDays: template.maxTradingDays || null,
+      startedAt: now,
+      expiresAt: now + 30 * 86400000,
+      amountPaid: 0,
+      currentPhase: 1,
+      mt5AccountId: account.id,
+      createdAt: now,
+      updatedAt: now,
+    }).returning().get();
+    created = true;
+  }
+
+  const template = db
+    .select()
+    .from(challengeTemplates)
+    .where(eq(challengeTemplates.id, challenge.templateId))
+    .get();
+  const maxDd = template?.maxDrawdown ?? 10;
+  const limit = (maxDd / 100) * challenge.accountSize;
+  const breach = Math.round(limit * 1.5); // 150% of the limit → hard breach
+  const balance = challenge.accountSize - breach;
+
+  // 2. Fresh history: wipe metrics/drawdown so the sync isn't deduped.
+  db.delete(tradingMetrics).where(eq(tradingMetrics.challengeId, challenge.id)).run();
+  db.delete(drawdownHistory).where(eq(drawdownHistory.challengeId, challenge.id)).run();
+
+  // 3. Stub gateway provider — drawdown breach fires before any trade-based
+  //    rule, so getTradeHistory is never consulted; suspend is a no-op.
+  const provider: MT5Provider = {
+    mode: "gateway",
+    configured: true,
+    async ping() {
+      return { ok: true, latencyMs: 1, message: "e2e stub" };
+    },
+    async createAccount() {
+      throw new Error("not implemented");
+    },
+    async getAccountInfo() {
+      throw new Error("not implemented");
+    },
+    async getTradeHistory() {
+      return [];
+    },
+    async syncDaily() {
+      return {
+        source: "gateway",
+        accountUpdate: { balance, equity: balance },
+        metrics: {
+          balance,
+          equity: balance,
+          floatingPL: 0,
+          dailyPL: -breach,
+          totalProfit: -breach,
+          currentDrawdown: breach,
+          dailyDrawdown: 0,
+          trailingDrawdown: breach,
+          relativeDrawdown: breach,
+          absoluteDrawdown: breach,
+          remainingDrawdown: 0,
+          profitTargetProgress: 0,
+          tradingDaysCount: 1,
+          openPositions: 0,
+          closedTrades: 0,
+        },
+      };
+    },
+    async suspendAccount() {},
+    async activateAccount() {},
+    async changePassword() {},
+    async changeInvestorPassword() {},
+  };
+
+  await syncChallenge(db, provider, challenge);
+
+  // 4. Read back the outcome for assertions.
+  const fresh = db
+    .select()
+    .from(userChallenges)
+    .where(eq(userChallenges.id, challenge.id))
+    .get();
+  const alerts = db
+    .select({ count: count() })
+    .from(notifications)
+    .where(and(
+      eq(notifications.userId, userId),
+      eq(notifications.type, "challenge_violation"),
+    ))
+    .get();
+
+  let parsedViolations: unknown[] = [];
+  try {
+    parsedViolations = fresh?.violations ? (JSON.parse(fresh.violations) as unknown[]) : [];
+  } catch {
+    parsedViolations = [];
+  }
+
+  return c.json({
+    success: true,
+    created,
+    challengeId: challenge.id,
+    status: fresh?.status,
+    accountSize: challenge.accountSize,
+    maxDrawdownPct: maxDd,
+    breachDrawdown: breach,
+    violations: parsedViolations,
+    adminViolationAlerts: alerts?.count ?? 0,
   });
 });
 
