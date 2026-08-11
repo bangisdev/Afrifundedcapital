@@ -35,6 +35,7 @@ import testEmailRouter from "./routes/test-email";
 import secretsRouter from "./routes/secrets";
 import securityRouter from "./routes/security";
 import { startMT5Scheduler } from "./lib/mt5/scheduler";
+import { startViolationDigestScheduler } from "./lib/violation-digest";
 
 // Initialize database
 initDatabase();
@@ -851,6 +852,8 @@ export function honoPlugin(): Plugin {
     configureServer(devServer) {
       // Background MT5 sync + retry-queue scheduler (no-op without a gateway).
       startMT5Scheduler(getDb());
+      // Weekly violation summary email to admins (idempotent, dedup'd).
+      startViolationDigestScheduler(getDb());
 
       devServer.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith("/api/")) {

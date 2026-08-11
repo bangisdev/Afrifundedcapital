@@ -489,6 +489,8 @@ export function referralPurchaseEmail(referrerName: string, referredName: string
   };
 }
 
+import type { DigestSummary } from "./violation-digest";
+
 // ─── MT5 Rule Violation Emails ─────────────────────────
 
 // Non-terminal heads-up: a drawdown rule is 80%+ breached. Fired once per rule
@@ -556,6 +558,91 @@ export function adminChallengeViolationEmail(
       ${button(`${APP_URL}/admin/challenges`, "Review Challenges")}
     `),
   };
+}
+
+// Weekly ops digest: a single at-a-glance recap of every challenge that was
+// hard-violated by the rule engine in the past 7 days, sent to every admin.
+// Complements the per-violation ops alert (`adminChallengeViolationEmail`)
+// with period stats, the most common rules breached, and one row per
+// violation. Deep-links straight into the admin violations digest tab.
+export function adminViolationDigestEmail(
+  adminName: string,
+  summary: DigestSummary,
+): SendEmailParams & { subject: string; html: string } {
+  const periodLabel = `${formatDigestDate(summary.periodStart)} – ${formatDigestDate(summary.periodEnd)}`;
+
+  const statsCell = (value: number, label: string, accent: "red" | "dark") => `
+    <td style="width: 33%; text-align: center; background: ${accent === "red" ? "#fef2f2" : "#f5f5f5"}; border: 1px solid ${accent === "red" ? "#fecaca" : "#e5e5e5"}; border-radius: 6px; padding: 12px;">
+      <p style="font-size: 24px; font-weight: 700; color: ${accent === "red" ? "#dc2626" : "#1a1a1a"}; margin: 0;">${value}</p>
+      <p style="font-size: 12px; color: #666; margin: 4px 0 0;">${label}</p>
+    </td>`;
+
+  const topRules = summary.topRules.length > 0
+    ? `
+      <p style="font-size: 13px; color: #666; margin: 12px 0 0;">
+        <strong>Most common rule breaches:</strong>
+        ${summary.topRules.map((r) => `${r.label} (${r.count})`).join(" · ")}
+      </p>`
+    : "";
+
+  const rows = summary.entries.length > 0
+    ? `
+      <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+        <thead>
+          <tr>
+            <th style="text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: #888; padding: 8px;">Trader</th>
+            <th style="text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: #888; padding: 8px;">Challenge</th>
+            <th style="text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: #888; padding: 8px;">Rule breached</th>
+            <th style="text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: #888; padding: 8px;">Detected</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${summary.entries.map((e) => `
+            <tr>
+              <td style="font-size: 13px; color: #333; padding: 8px; border-top: 1px solid #eee;">
+                <strong>${e.traderName}</strong>${e.traderEmail ? `<br><span style="color: #888;">${e.traderEmail}</span>` : ""}
+              </td>
+              <td style="font-size: 13px; color: #333; padding: 8px; border-top: 1px solid #eee;">${e.challengeLabel || "Challenge #" + e.challengeId}</td>
+              <td style="font-size: 13px; color: #b45309; padding: 8px; border-top: 1px solid #eee;">${e.ruleLabelText}</td>
+              <td style="font-size: 13px; color: #666; padding: 8px; border-top: 1px solid #eee;">${formatDigestDate(e.detectedAt)}</td>
+            </tr>`).join("")}
+        </tbody>
+      </table>`
+    : `
+      <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 12px 16px; margin: 16px 0;">
+        <p style="font-size: 13px; color: #166534; margin: 0;">
+          <strong>All clear ✓</strong> — no challenges were violated this week.
+        </p>
+      </div>`;
+
+  return {
+    to: "", // filled by caller
+    subject: `Weekly Violation Summary — ${periodLabel}`,
+    html: wrapLayout(`
+      <h2 style="font-size: 18px; font-weight: 600; margin: 0 0 12px;">Weekly Challenge Violation Summary</h2>
+      <p style="font-size: 14px; color: #444;">Hi ${adminName},</p>
+      <p style="font-size: 14px; color: #444;">
+        Here is the AfriFundedCapital rule-engine summary for <strong>${periodLabel}</strong>.
+      </p>
+      <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+        <tr>
+          ${statsCell(summary.totalViolations, "Violations", "red")}
+          ${statsCell(summary.totalChallenges, "Challenges affected", "dark")}
+          ${statsCell(summary.uniqueTraders, "Traders", "dark")}
+        </tr>
+      </table>
+      ${topRules}
+      ${rows}
+      <p style="font-size: 14px; color: #444;">
+        Review the full list, reset, or reissue violated challenges directly from the admin panel.
+      </p>
+      ${button(`${APP_URL}/admin/challenges?tab=violations`, "Review Violations")}
+    `),
+  };
+}
+
+function formatDigestDate(ms: number): string {
+  return new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 // Terminal: a hard rule breach ended the challenge and suspended the account.

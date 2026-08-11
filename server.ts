@@ -25,12 +25,15 @@ import certificatesRouter from "./src/server/routes/certificates";
 import payoutsRouter from "./src/server/routes/payouts";
 import seedRouter from "./src/server/routes/seed";
 import { startMT5Scheduler } from "./src/server/lib/mt5/scheduler";
+import { startViolationDigestScheduler } from "./src/server/lib/violation-digest";
 
 // Initialize database + migrations
 initDatabase();
 
 // Background MT5 sync + retry-queue scheduler (no-op without a gateway).
 startMT5Scheduler(getDb());
+// Weekly violation summary email to admins (idempotent, dedup'd).
+startViolationDigestScheduler(getDb());
 
 const COOKIE_NAME = "afc_session";
 const PORT = parseInt(process.env.PORT || "5173", 10);
