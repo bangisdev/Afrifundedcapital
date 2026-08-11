@@ -2,7 +2,7 @@
 import { useApiQuery } from "@/hooks/use-api";
 import { readResponseBody } from "@/lib/api";
 import { useState, useMemo } from "react";
-import { Loader2, Users, BarChart3, DollarSign, Award, TrendingUp, Database, CheckCircle, AlertTriangle, ChevronRight, Mail } from "lucide-react";
+import { Loader2, Users, BarChart3, DollarSign, Award, TrendingUp, Database, CheckCircle, AlertTriangle, ChevronRight, Mail, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Link } from "react-router";
@@ -25,7 +25,7 @@ export default function AdminOverview() {
   const { data: userGrowth } = useApiQuery<any>(["admin", "userGrowth"], "/api/users/growth");
   const { data: revenueGrowth } = useApiQuery<any>(["admin", "revenueGrowth"], "/api/payments/admin/revenue-growth");
   const { data: allChallenges } = useApiQuery<any[]>(["admin", "allChallenges"], "/api/challenges/admin/all?sortBy=createdAt&sortOrder=desc");
-  const { data: digestStatus } = useApiQuery<any>(["admin", "digestStatus"], "/api/challenges/admin/digest-status");
+  const { data: digestStatus, refetch: refetchDigestStatus } = useApiQuery<any>(["admin", "digestStatus"], "/api/challenges/admin/digest-status");
 
   // Recent violations snapshot — newest first, capped at 5 rows so the
   // overview stays scannable. Full detail + recovery actions live on the
@@ -41,6 +41,7 @@ export default function AdminOverview() {
   const [bulkSeedResult, setBulkSeedResult] = useState<any>(null);
   const [seedingUsers, setSeedingUsers] = useState(false);
   const [userSeedResult, setUserSeedResult] = useState<any>(null);
+  const [sendingDigest, setSendingDigest] = useState(false);
 
   const handleBulkSeed = async () => {
     setBulkSeeding(true);
@@ -91,6 +92,29 @@ export default function AdminOverview() {
       toast.error(e?.message || "Failed to seed demo users");
     }
     setSeedingUsers(false);
+  };
+
+  const handleSendDigest = async () => {
+    setSendingDigest(true);
+    try {
+      const res = await fetch("/api/challenges/admin/digest-send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({}),
+      });
+      const data = await readResponseBody(res);
+      if (data.success) {
+        toast.success(data.message || "Digest sent");
+        // Refresh the status card so the "last sent" timestamp updates inline.
+        refetchDigestStatus();
+      } else {
+        toast.warning(data.message || data.error || "Digest send failed");
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to send digest");
+    }
+    setSendingDigest(false);
   };
 
   const hasNoData = !userStats?.totalUsers && !challengeStats?.total;
@@ -217,18 +241,34 @@ export default function AdminOverview() {
 
       {/* Weekly violation digest status — when the recap email last went out */}
       <div className="card-subtle p-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 gap-3">
           <h2 className="text-sm font-medium inline-flex items-center gap-2">
             <Mail className="h-3.5 w-3.5 text-blue-500" />
             Weekly Violation Digest
           </h2>
-          <Link
-            to="/admin/challenges?tab=violations"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            View digest
-            <ChevronRight className="h-3 w-3" />
-          </Link>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs"
+              onClick={handleSendDigest}
+              disabled={sendingDigest}
+            >
+              {sendingDigest ? (
+                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+              ) : (
+                <Send className="h-3 w-3 mr-1" />
+              )}
+              {sendingDigest ? "Sending…" : "Send digest now"}
+            </Button>
+            <Link
+              to="/admin/challenges?tab=violations"
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              View digest
+              <ChevronRight className="h-3 w-3" />
+            </Link>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <div

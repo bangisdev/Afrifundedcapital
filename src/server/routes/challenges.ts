@@ -17,7 +17,11 @@ import { maybeGenerateCertificate } from "../lib/certificates";
 import { writeAuditLog } from "../lib/audit";
 import { resolveChallengeLabel } from "../lib/mt5/sync-service";
 import { getMT5Provider } from "../lib/mt5";
-import { getViolationDigestLastSent } from "../lib/violation-digest";
+import {
+  getViolationDigestLastSent,
+  recordViolationDigestSent,
+  sendWeeklyViolationDigest,
+} from "../lib/violation-digest";
 
 let seeded = false;
 
@@ -451,6 +455,46 @@ app.get("/admin/stats", requireAuth, requireAdmin, (c) => {
 app.get("/admin/digest-status", requireAuth, requireAdmin, (c) => {
   const db = getDb();
   return c.json({ lastSentAt: getViolationDigestLastSent(db) });
+});
+
+// Admin: Send the weekly violation digest immediately, bypassing the weekly
+// cadence. Emails go to every admin; the last-sent timestamp is recorded only
+// when at least one email actually delivered (so a missing Resend key still
+// lets the weekly scheduler fire later). Audited with the admin as the actor.
+app.post("/admin/digest-send", requireAuth, requireAdmin, async (c) => {
+  const db = getDb();
+
+  const result = await sendWeeklyViolationDigest(db);
+  const sentAt = result.sent > 0 ? Date.now() : null;
+  if (sentAt) recordViolationDigestSent(db, sentAt);
+
+  try {
+    writeAuditLog(db, {
+      userId: c.get("userId"),
+      action: "violation_digest.sent",
+      entity: "violation_digest",
+      entityId: "weekly",
+      details: {
+        sent: result.sent,
+        admins: result.admins,
+        violations: result.violations,
+        challenges: result.challenges,
+        ...(sentAt ? { sentAt } : {}),
+      },
+      ipAddress: c.req.header("x-forwarded-for") || undefined,
+    });
+  } catch (e) {
+    console.warn("[Audit] Failed to log manual digest send:", e);
+  }
+
+  return c.json({
+    success: true,
+    ...result,
+    sentAt,
+    message: sentAt
+      ? `Digest sent to ${result.sent}/${result.admins} admin(s)`
+      : "Digest prepared but no emails were delivered — check the Resend key",
+  });
 });
 
 // Admin: Create challenge template

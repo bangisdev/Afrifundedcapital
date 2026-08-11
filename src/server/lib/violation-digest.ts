@@ -240,6 +240,33 @@ export function getViolationDigestLastSent(db: Db): number | null {
 }
 
 /**
+ * Record a successful digest send (emails actually delivered) so the weekly
+ * scheduler's dedup window restarts from `now`. Used by the scheduler tick
+ * and by the admin "Send digest now" endpoint — a manual send that delivers
+ * also re-anchors the weekly cadence. Never throws; returns true when the
+ * timestamp was written.
+ */
+export function recordViolationDigestSent(db: Db, now: number = Date.now()): boolean {
+  try {
+    const existing = db.select().from(settings).where(eq(settings.key, LAST_SENT_KEY)).get();
+    if (existing) {
+      db.update(settings).set({ value: String(now) }).where(eq(settings.key, LAST_SENT_KEY)).run();
+    } else {
+      db.insert(settings).values({
+        key: LAST_SENT_KEY,
+        value: String(now),
+        group: "general",
+        description: "Last time the weekly violation digest was emailed to admins (epoch ms)",
+      }).run();
+    }
+    return true;
+  } catch (e) {
+    console.warn("[Digest] Failed to record last-sent timestamp:", e);
+    return false;
+  }
+}
+
+/**
  * One scheduler tick: skip when the interval hasn't elapsed since the last
  * send; otherwise send the digest and record `violation_digest_last_sent` —
  * but only when at least one email actually delivered (see module docs).
@@ -257,21 +284,7 @@ export async function runViolationDigestTick(
 
   const result = await sendWeeklyViolationDigest(db, { now, windowMs: DIGEST_WINDOW_MS });
   if (result.sent > 0) {
-    try {
-      const existing = db.select().from(settings).where(eq(settings.key, LAST_SENT_KEY)).get();
-      if (existing) {
-        db.update(settings).set({ value: String(now) }).where(eq(settings.key, LAST_SENT_KEY)).run();
-      } else {
-        db.insert(settings).values({
-          key: LAST_SENT_KEY,
-          value: String(now),
-          group: "general",
-          description: "Last time the weekly violation digest was emailed to admins (epoch ms)",
-        }).run();
-      }
-    } catch (e) {
-      console.warn("[Digest] Failed to record last-sent timestamp:", e);
-    }
+    recordViolationDigestSent(db, now);
     console.log(
       `[Digest] Weekly violation digest sent to ${result.sent}/${result.admins} admin(s) — ` +
         `${result.violations} violation(s) across ${result.challenges} challenge(s)`,
