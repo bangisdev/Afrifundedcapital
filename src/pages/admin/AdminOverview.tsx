@@ -2,7 +2,7 @@
 import { useApiQuery } from "@/hooks/use-api";
 import { readResponseBody } from "@/lib/api";
 import { useState, useMemo } from "react";
-import { Loader2, Users, BarChart3, DollarSign, Award, TrendingUp, Database, CheckCircle, AlertTriangle, ChevronRight } from "lucide-react";
+import { Loader2, Users, BarChart3, DollarSign, Award, TrendingUp, Database, CheckCircle, AlertTriangle, ChevronRight, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Link } from "react-router";
@@ -25,6 +25,7 @@ export default function AdminOverview() {
   const { data: userGrowth } = useApiQuery<any>(["admin", "userGrowth"], "/api/users/growth");
   const { data: revenueGrowth } = useApiQuery<any>(["admin", "revenueGrowth"], "/api/payments/admin/revenue-growth");
   const { data: allChallenges } = useApiQuery<any[]>(["admin", "allChallenges"], "/api/challenges/admin/all?sortBy=createdAt&sortOrder=desc");
+  const { data: digestStatus } = useApiQuery<any>(["admin", "digestStatus"], "/api/challenges/admin/digest-status");
 
   // Recent violations snapshot — newest first, capped at 5 rows so the
   // overview stays scannable. Full detail + recovery actions live on the
@@ -212,6 +213,54 @@ export default function AdminOverview() {
         <StatCard label="Completed Payments" value={paymentStats?.completed || 0} icon={<DollarSign className="h-3.5 w-3.5" />} />
         <StatCard label="Total Paid Out" value={`₦${(payoutStats?.totalPaid || 0).toLocaleString()}`} icon={<TrendingUp className="h-3.5 w-3.5" />} />
         <StatCard label="Pending Payouts" value={payoutStats?.pending || 0} icon={<BarChart3 className="h-3.5 w-3.5" />} />
+      </div>
+
+      {/* Weekly violation digest status — when the recap email last went out */}
+      <div className="card-subtle p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-medium inline-flex items-center gap-2">
+            <Mail className="h-3.5 w-3.5 text-blue-500" />
+            Weekly Violation Digest
+          </h2>
+          <Link
+            to="/admin/challenges?tab=violations"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            View digest
+            <ChevronRight className="h-3 w-3" />
+          </Link>
+        </div>
+        <div className="flex items-center gap-3">
+          <div
+            className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 ${
+              digestStatus?.lastSentAt
+                ? "bg-emerald-500/10 text-emerald-600"
+                : "bg-blue-500/10 text-blue-600"
+            }`}
+          >
+            {digestStatus?.lastSentAt ? (
+              <CheckCircle className="h-4 w-4" />
+            ) : (
+              <Mail className="h-4 w-4" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <div className="text-xs font-medium">
+              {digestStatus === undefined
+                ? "Loading…"
+                : digestStatus.lastSentAt
+                  ? `Last sent ${timeAgo(digestStatus.lastSentAt)}`
+                  : "Never sent yet"}
+            </div>
+            <div className="text-[10px] text-muted-foreground mt-0.5">
+              {digestStatus === undefined
+                ? "Checking the last digest send…"
+                : digestStatus.lastSentAt
+                  ? `${new Date(digestStatus.lastSentAt).toLocaleString()} — a recap email goes to every admin every 7 days`
+                  : "The first recap fires shortly after the server starts, then every 7 days when violations are detected"}
+            </div>
+          </div>
+        </div>
       </div>
       {userGrowth && (
         <div className="card-subtle p-6">

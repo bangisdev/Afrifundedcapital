@@ -17,6 +17,7 @@ import { maybeGenerateCertificate } from "../lib/certificates";
 import { writeAuditLog } from "../lib/audit";
 import { resolveChallengeLabel } from "../lib/mt5/sync-service";
 import { getMT5Provider } from "../lib/mt5";
+import { getViolationDigestLastSent } from "../lib/violation-digest";
 
 let seeded = false;
 
@@ -443,6 +444,13 @@ app.get("/admin/stats", requireAuth, requireAdmin, (c) => {
     active: active?.count || 0,
     funded: funded?.count || 0,
   });
+});
+
+// Admin: Weekly violation digest status (last time the summary email went out).
+// Powers the "Last digest sent" card on the admin overview.
+app.get("/admin/digest-status", requireAuth, requireAdmin, (c) => {
+  const db = getDb();
+  return c.json({ lastSentAt: getViolationDigestLastSent(db) });
 });
 
 // Admin: Create challenge template

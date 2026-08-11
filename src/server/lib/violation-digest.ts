@@ -225,6 +225,21 @@ export function shouldSendDigest(lastSent: number, now: number, intervalMs: numb
 }
 
 /**
+ * Epoch ms of the last successful digest send (emails actually delivered),
+ * or `null` when the digest has never gone out. Read by the admin overview
+ * "Last digest sent" status card and by the scheduler tick itself.
+ */
+export function getViolationDigestLastSent(db: Db): number | null {
+  try {
+    const setting = db.select().from(settings).where(eq(settings.key, LAST_SENT_KEY)).get();
+    const value = setting ? Number(setting.value) : 0;
+    return Number.isFinite(value) && value > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * One scheduler tick: skip when the interval hasn't elapsed since the last
  * send; otherwise send the digest and record `violation_digest_last_sent` —
  * but only when at least one email actually delivered (see module docs).
@@ -234,13 +249,7 @@ export async function runViolationDigestTick(
   now: number = Date.now(),
   intervalMs: number = DIGEST_INTERVAL_MS,
 ): Promise<{ skipped: boolean; sent: number }> {
-  let lastSent = 0;
-  try {
-    const setting = db.select().from(settings).where(eq(settings.key, LAST_SENT_KEY)).get();
-    lastSent = setting ? Number(setting.value) : 0;
-  } catch {
-    lastSent = 0;
-  }
+  const lastSent = getViolationDigestLastSent(db) ?? 0;
 
   if (!shouldSendDigest(lastSent, now, intervalMs)) {
     return { skipped: true, sent: 0 };
