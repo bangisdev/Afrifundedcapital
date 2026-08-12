@@ -224,6 +224,85 @@ describe("collectWeekViolations", () => {
 
     expect(digest.collectWeekViolations(db, NOW, WEEK)).toEqual([]);
   });
+
+  it("includes legacy pre-rule-engine rows that use type/date instead of code/detectedAt", () => {
+    const trader = seedUser({ name: "Legacy Trader", email: "legacy@test.com" });
+    const template = seedTemplate();
+    seedChallenge(trader.id, template.id, {
+      // Exact shape written by the pre-rule-engine sync (challenges #4/#10):
+      // no `code`, `severity` or `detectedAt` — just type/date/drawdown.
+      violations: [{ type: "max_drawdown", date: NOW - 24 * 60 * 60 * 1000, drawdown: 2318.38 }],
+    });
+
+    const entries = digest.collectWeekViolations(db, NOW, WEEK);
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.ruleCode).toBe("max_drawdown");
+    expect(entries[0]!.ruleLabelText).toBe("Max drawdown");
+    expect(entries[0]!.message).toBe("max_drawdown"); // no message → falls back to the code
+    expect(entries[0]!.detectedAt).toBe(NOW - 24 * 60 * 60 * 1000);
+    expect(entries[0]!.traderName).toBe("Legacy Trader");
+    expect(entries[0]!.challengeLabel).toBe("Two-Step Evaluation · $50,000");
+  });
+
+  it("accepts legacy rows whose date is an ISO string and drops rows with no usable date", () => {
+    const trader = seedUser();
+    const template = seedTemplate();
+    // ISO-string date (defensive) → parsed into the window.
+    seedChallenge(trader.id, template.id, {
+      violations: [{ type: "daily_drawdown", date: new Date(NOW - 2 * 24 * 60 * 60 * 1000).toISOString() }],
+    });
+    // Same shape but no usable timestamp — cannot be window-filtered → skipped.
+    seedChallenge(trader.id, template.id, {
+      violations: [{ type: "ea_detected" }],
+    });
+
+    const entries = digest.collectWeekViolations(db, NOW, WEEK);
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.ruleCode).toBe("daily_drawdown");
+    expect(entries[0]!.ruleLabelText).toBe("Daily drawdown");
+  });
+
+  it("backfills legacy rows older than the window on challenges that are still violated", () => {
+    const trader = seedUser({ name: "Old Breach Trader" });
+    const template = seedTemplate();
+    // #4-style row: legacy shape, months-old date, challenge still `violated`.
+    seedChallenge(trader.id, template.id, {
+      violations: [{ type: "max_drawdown", date: NOW - 17 * 24 * 60 * 60 * 1000, drawdown: 2318.38 }],
+    });
+
+    const entries = digest.collectWeekViolations(db, NOW, WEEK);
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.ruleCode).toBe("max_drawdown");
+    expect(entries[0]!.ruleLabelText).toBe("Max drawdown");
+    expect(entries[0]!.detectedAt).toBe(NOW - 17 * 24 * 60 * 60 * 1000);
+  });
+
+  it("still applies the trailing window to legacy rows on non-violated challenges", () => {
+    const trader = seedUser();
+    const template = seedTemplate();
+    // Same old legacy row, but the challenge is `active` — no backfill.
+    seedChallenge(trader.id, template.id, {
+      status: "active",
+      violations: [{ type: "max_drawdown", date: NOW - 10 * 24 * 60 * 60 * 1000, drawdown: 900 }],
+    });
+
+    expect(digest.collectWeekViolations(db, NOW, WEEK)).toEqual([]);
+  });
+
+  it("does not backfill old NEW-format violations even on violated challenges", () => {
+    const trader = seedUser();
+    const template = seedTemplate();
+    // Rule-engine rows carry code/detectedAt — the weekly window stays strict
+    // for them regardless of status (their alert fired in real time).
+    seedChallenge(trader.id, template.id, {
+      violations: [hardViolation("max_drawdown", NOW - 10 * 24 * 60 * 60 * 1000)],
+    });
+
+    expect(digest.collectWeekViolations(db, NOW, WEEK)).toEqual([]);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════

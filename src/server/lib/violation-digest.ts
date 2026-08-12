@@ -16,6 +16,16 @@
  * Hard violations only — non-terminal drawdown warnings (`severity:
  * "warning"`) are intentionally excluded so the recap stays actionable.
  *
+ * The parser is tolerant of legacy rows written before the rule engine
+ * existed (shape `{ type, date, drawdown }`, e.g. `{ type:
+ * "max_drawdown", date: <epoch ms>, drawdown: 2318.38 }`): `date` is
+ * treated as the detection timestamp and `type` as the rule code. Legacy
+ * rows on challenges that are STILL violated bypass the trailing window
+ * (they predate the per-violation alert and were never surfaced by a prior
+ * digest) and stay visible until the challenge is reset or repurchased —
+ * which clears the stored violations. Every other violation keeps the
+ * strict weekly window.
+ *
  * The scheduler is started once per process by the same entrypoints that
  * start the MT5 scheduler (dev Vite plugin + production `server.ts`). A
  * `violation_digest_last_sent` settings row de-duplicates across restarts:
@@ -41,7 +51,10 @@ export const DIGEST_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 export const DIGEST_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** First tick shortly after boot, then every `DIGEST_INTERVAL_MS`. */
-const DIGEST_INITIAL_DELAY_MS = 60 * 1000;
+// E2e mode (E2E_TESTING=1, Playwright web server): push the first auto-tick
+// far out so specs drive sends exclusively through the manual button (the
+// scheduler itself is unit-tested). Mirrors the MT5 scheduler's e2e timers.
+const DIGEST_INITIAL_DELAY_MS = process.env.E2E_TESTING === "1" ? 60 * 60 * 1000 : 60 * 1000;
 
 const LAST_SENT_KEY = "violation_digest_last_sent";
 
@@ -79,7 +92,30 @@ interface StoredViolation {
   severity?: string;
   message?: string;
   detectedAt?: number;
+  /** Legacy pre-rule-engine shape: `{ type, date, drawdown }` — `date` is epoch ms. */
+  date?: string | number;
   [key: string]: unknown;
+}
+
+/**
+ * Best-effort detection timestamp for a stored violation. The rule engine
+ * writes `detectedAt` (epoch ms); legacy rows written before it existed
+ * carry `date` instead (epoch ms, occasionally an ISO/date string). Returns
+ * `null` when neither is usable so the row can be window-filtered rather
+ * than mis-placed.
+ */
+function violationTimestamp(v: StoredViolation): number | null {
+  if (typeof v.detectedAt === "number" && Number.isFinite(v.detectedAt)) return v.detectedAt;
+  const raw = v.date;
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    // Seconds-precision epochs are ~1e9; ms-precision are ~1e12.
+    return raw < 1e11 ? raw * 1000 : raw;
+  }
+  if (typeof raw === "string") {
+    const parsed = Date.parse(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 /**
@@ -87,6 +123,12 @@ interface StoredViolation {
  * challenge that carries a stored violation record. Identity (trader name +
  * email) and the purchase label are joined in so the email needs no extra
  * lookups. Entries are returned newest-first.
+ *
+ * Legacy pre-rule-engine rows (`{ type, date, drawdown }`, no
+ * `detectedAt`/`code`) are parsed via `violationTimestamp` + `type`; on a
+ * challenge still in `violated` status they are backfilled regardless of
+ * age (reset/repurchase clears them), while the weekly window still
+ * applies everywhere else.
  */
 export function collectWeekViolations(
   db: Db,
@@ -121,8 +163,18 @@ export function collectWeekViolations(
     for (const v of stored) {
       // Digest is hard violations only — non-terminal warnings stay out.
       if (v.severity === "warning") continue;
-      const detectedAt = v.detectedAt;
-      if (typeof detectedAt !== "number" || detectedAt < since || detectedAt > now) continue;
+      const detectedAt = violationTimestamp(v);
+      if (detectedAt === null || detectedAt > now) continue;
+
+      // Legacy pre-rule-engine rows (type/date, no code/detectedAt) on a
+      // challenge that is STILL violated bypass the window: they were never
+      // surfaced by the real-time alert or an earlier digest, so they stay
+      // in the recap until the admin resets/repurchases the challenge
+      // (which clears the stored violations). Everything else keeps the
+      // strict trailing-7-day window.
+      const isLegacyRow = typeof v.code !== "string" && typeof v.detectedAt !== "number";
+      const backfillLegacy = isLegacyRow && challenge.status === "violated";
+      if (!backfillLegacy && detectedAt < since) continue;
 
       const owner = ownerById.get(challenge.userId);
       const code = v.code || v.type || "unknown";

@@ -29,6 +29,7 @@
     "test:e2e:audit": "playwright test --grep \"11\\. Purchase label & audit trail\"",
     "test:e2e:settings": "playwright test --grep \"12\\. Admin Settings\"",
     "test:e2e:violations": "playwright test --grep \"13\\. Challenge violations\"",
+    "test:e2e:digest": "playwright test --grep \"14\\. Weekly violation digest\"",
     "check:secrets": "bash scripts/check-secrets.sh",
     "test:secrets-fixture": "bash scripts/gitleaks-fixture.sh",
     "test:secrets-alignment": "bash scripts/check-alignment.sh"

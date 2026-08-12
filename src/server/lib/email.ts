@@ -99,10 +99,25 @@ export interface SendEmailResult {
   reason?: string;
 }
 
+// Playwright e2e mode (E2E_TESTING=1, set by the test web server): emails are
+// captured in memory and reported as delivered — no network, no credentials —
+// so UI flows like the manual digest button can be driven end-to-end and
+// assert the success path deterministically. Mirrors the scheduler/e2e hooks.
+const E2E_TESTING = process.env.E2E_TESTING === "1";
+
+/** Emails captured by the e2e fake transport (for assertions / debugging). */
+export const e2eCapturedEmails: Array<{ to: string; subject: string }> = [];
+
 export async function sendEmail(
   params: SendEmailParams,
   overrides?: { apiKey?: string },
 ): Promise<SendEmailResult> {
+  if (E2E_TESTING) {
+    e2eCapturedEmails.push({ to: params.to, subject: params.subject });
+    console.log("[Email:E2E] Captured email to", params.to, "—", params.subject);
+    return { ok: true };
+  }
+
   const resendClient = overrides?.apiKey ? new Resend(overrides.apiKey) : getResendClient();
   if (!resendClient) {
     console.warn("[Email] RESEND_API_KEY not configured — skipping email send to", params.to);
