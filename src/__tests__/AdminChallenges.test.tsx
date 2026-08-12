@@ -69,9 +69,23 @@ vi.mock("@/components/ui/alert-dialog", () => ({
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
-// ─── Mock: react-router (audit trail deep links) ──────────
+// ─── Mock: react-router (audit trail deep links + tab routing) ─
 vi.mock("react-router", () => ({
   Link: ({ to, children, ...rest }: any) => <a href={to} {...rest}>{children}</a>,
+  // Stateful like the real hook: clicking a tab rewrites the URL params and
+  // re-renders the component so the deep-linkable tab UI follows.
+  useSearchParams: () => {
+    const [params, setParams] = React.useState(() => new URLSearchParams());
+    const set = (next: any, _opts?: any) => {
+      setParams(next instanceof URLSearchParams ? next : new URLSearchParams(next));
+    };
+    return [params, set];
+  },
+}));
+
+// ─── Mock: react-query (digest-tab actions invalidate queries) ──
+vi.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
 
 // ─── Import component after mocks ─────────────────────────

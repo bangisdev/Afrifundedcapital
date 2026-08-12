@@ -23,6 +23,7 @@ let mockSearchParams = new URLSearchParams();
 vi.mock("react-router", () => ({
   useNavigate: () => mockNavigate,
   useSearchParams: () => [mockSearchParams, mockSetSearchParams],
+  Link: ({ to, children, ...rest }: any) => <a href={to} {...rest}>{children}</a>,
 }));
 
 // ─── Mock: useAuth ─────────────────────────────────────────

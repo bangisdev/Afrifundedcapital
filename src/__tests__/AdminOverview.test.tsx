@@ -22,6 +22,11 @@ vi.mock("@/hooks/use-auth", () => ({
   })),
 }));
 
+// ─── Mock: react-router (overview deep links) ─────────────
+vi.mock("react-router", () => ({
+  Link: ({ to, children, ...rest }: any) => <a href={to} {...rest}>{children}</a>,
+}));
+
 // ─── Mock: useApiQuery ────────────────────────────────────
 const queryDataMap: Record<string, any> = {};
 const mockRefetch = vi.fn();

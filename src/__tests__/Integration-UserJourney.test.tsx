@@ -17,6 +17,7 @@ const mockNavigate = vi.fn();
 vi.mock("react-router", () => ({
   useNavigate: () => mockNavigate,
   useSearchParams: () => [new URLSearchParams(), vi.fn()],
+  Link: ({ to, children, ...rest }: any) => <a href={to} {...rest}>{children}</a>,
 }));
 
 const mockAuthState = {
@@ -307,7 +308,13 @@ vi.mock("@/components/ui/carousel", () => ({
   CarouselPrevious: (props: any) => React.createElement("button", { "data-testid": "carousel-prev", ...props }, "←"),
   CarouselNext: (props: any) => React.createElement("button", { "data-testid": "carousel-next", ...props }, "→"),
 }));
-vi.mock("@/lib/utils", () => ({ cn: (...args: any[]) => args.filter(Boolean).join(" ") }));
+vi.mock("@/lib/utils", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/utils")>();
+  return {
+    ...actual,
+    cn: (...args: any[]) => args.filter(Boolean).join(" "),
+  };
+});
 vi.mock("@/components/LogoDropdown", () => ({
   LogoDropdown: () => React.createElement("div", { "data-testid": "logo-dropdown" }, "Logo"),
 }));

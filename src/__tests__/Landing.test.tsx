@@ -8,6 +8,7 @@ import React from "react";
 const mockNavigate = vi.fn();
 vi.mock("react-router", () => ({
   useNavigate: () => mockNavigate,
+  Link: ({ to, children, ...rest }: any) => <a href={to} {...rest}>{children}</a>,
 }));
 
 // ─── Mock: useAuth ─────────────────────────────────────────
@@ -76,6 +77,7 @@ vi.mock("lucide-react", () => {
     CreditCard: createIcon("CreditCard"),
     ShieldCheck: createIcon("ShieldCheck"),
     Headphones: createIcon("Headphones"),
+    ExternalLink: createIcon("ExternalLink"),
   };
 });
 
@@ -122,9 +124,13 @@ vi.mock("@/components/ui/carousel", () => ({
   CarouselNext: (props: any) => React.createElement("button", { "data-testid": "carousel-next", ...props }, "→"),
 }));
 
-vi.mock("@/lib/utils", () => ({
-  cn: (...args: any[]) => args.filter(Boolean).join(" "),
-}));
+vi.mock("@/lib/utils", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/utils")>();
+  return {
+    ...actual,
+    cn: (...args: any[]) => args.filter(Boolean).join(" "),
+  };
+});
 
 // ─── Import component under test ──────────────────────────
 import Landing from "@/pages/Landing";
@@ -444,10 +450,10 @@ describe("Landing Page", () => {
       expect(screen.getByText("What payment methods do you accept?")).toBeTruthy();
     });
 
-    it("renders all 8 accordion items", () => {
+    it("renders all 9 accordion items", () => {
       render(<Landing />);
       const items = screen.getAllByTestId("accordion-item");
-      expect(items.length).toBe(8);
+      expect(items.length).toBe(9);
     });
 
     it("renders FAQ answers in accordion content", () => {

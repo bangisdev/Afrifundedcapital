@@ -29,6 +29,11 @@ vi.mock("@/hooks/use-auth", () => ({
   })),
 }));
 
+// ─── Mock: react-router (support deep links) ───────────────
+vi.mock("react-router", () => ({
+  Link: ({ to, children, ...rest }: any) => <a href={to} {...rest}>{children}</a>,
+}));
+
 // ─── Mock: useApiQuery / useApiMutation ────────────────────
 const queryDataMap: Record<string, any> = {};
 const mockCreateTicket = vi.fn(async () => ({ message: "created" }));
