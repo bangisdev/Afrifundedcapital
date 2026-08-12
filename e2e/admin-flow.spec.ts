@@ -488,7 +488,7 @@ test.describe("Admin Dashboard E2E Flow", () => {
       await warmUp(page, "/dashboard/trading");
       await waitForAppReady(page);
       // Seeded funded accounts render as cards with balance/equity/leverage.
-      await expect(page.locator("body")).toContainText(/Account #|No MT5 accounts yet/, {
+      await expect(page.locator("body")).toContainText(/Account #|No trading accounts yet/, {
         timeout: 20_000,
       });
       await expect(page.locator("body")).toContainText(/Balance|Equity|Leverage/, {

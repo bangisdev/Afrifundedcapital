@@ -292,7 +292,7 @@ export default function Trading() {
       {(mt5Accounts || []).length === 0 && !isLoading && (
         <div className="card-subtle p-8 text-center space-y-2">
           <Server className="h-8 w-8 mx-auto text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">No MT5 accounts yet. Purchase and start a challenge to get one.</p>
+          <p className="text-sm text-muted-foreground">You don't have any trading accounts yet. Purchase and start a challenge — your MT5 account is provisioned automatically.</p>
         </div>
       )}
 

@@ -226,7 +226,7 @@ describe("Trading Page", () => {
   describe("Empty States", () => {
     it("shows empty state when no MT5 accounts exist", () => {
       render(<Trading />);
-      expect(screen.getByText(/No MT5 accounts yet/)).toBeTruthy();
+      expect(screen.getByText(/don't have any trading accounts yet/)).toBeTruthy();
     });
 
     it("shows empty chart prompt when MT5 accounts exist but no history and user is seeded", () => {
