@@ -137,16 +137,16 @@ describe("Overview Page", () => {
 
   // ─── Page header ───────────────────────────────────────
   describe("Page Header", () => {
-    it("renders title", () => {
+    it("renders greeting title", () => {
       setQueryData({});
       render(<Overview />);
-      expect(screen.getByText("Overview")).toBeTruthy();
+      expect(screen.getByText(/^Good (morning|afternoon|evening)/)).toBeTruthy();
     });
 
     it("renders welcome description", () => {
       setQueryData({});
       render(<Overview />);
-      expect(screen.getByText(/Welcome to your AfriFundedCapital dashboard/)).toBeTruthy();
+      expect(screen.getByText(/Track your funded journey/)).toBeTruthy();
     });
 
     it("renders New Challenge button", () => {
@@ -166,13 +166,12 @@ describe("Overview Page", () => {
 
   // ─── Stats cards ───────────────────────────────────────
   describe("Stats Cards", () => {
-    it("renders all four stat cards", () => {
+    it("renders the stat cards", () => {
       setQueryData({});
       render(<Overview />);
       expect(screen.getByText("Active Challenges")).toBeTruthy();
       expect(screen.getByText("Funded Accounts")).toBeTruthy();
       expect(screen.getByText("Wallet Balance")).toBeTruthy();
-      expect(screen.getByText("Total Challenges")).toBeTruthy();
     });
 
     it("displays metric values from data", () => {
@@ -183,7 +182,7 @@ describe("Overview Page", () => {
       render(<Overview />);
       expect(screen.getByText("3")).toBeTruthy();
       expect(screen.getByText("1")).toBeTruthy();
-      expect(screen.getByText("8")).toBeTruthy();
+      expect(screen.getByText("150,000 NGN")).toBeTruthy();
     });
 
     it("shows zero when no data", () => {
@@ -345,7 +344,7 @@ describe("Overview Page", () => {
         "wallet/my": { balance: 250000, currency: "NGN" },
       });
       render(<Overview />);
-      expect(screen.getByText("Overview")).toBeTruthy();
+      expect(screen.getByText(/^Good (morning|afternoon|evening)/)).toBeTruthy();
       expect(screen.getByText("Active Challenges")).toBeTruthy();
       expect(screen.getByText("Your Challenges")).toBeTruthy();
       expect(screen.getByText("Challenge #1")).toBeTruthy();
@@ -358,7 +357,7 @@ describe("Overview Page", () => {
         "wallet/my": null,
       });
       render(<Overview />);
-      expect(screen.getByText("Overview")).toBeTruthy();
+      expect(screen.getByText(/^Good (morning|afternoon|evening)/)).toBeTruthy();
     });
 
     it("wallet shows default currency when not set", () => {

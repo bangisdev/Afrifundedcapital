@@ -586,7 +586,7 @@ describe("Integration: Full User Journey", () => {
       setQueryData({ "challenges/my": [], "metrics/dashboard": { latestMetrics: null }, "metrics/history": [], "mt5/my": [] });
       const Overview = (await import("@/pages/dashboard/Overview")).default;
       render(<Overview />);
-      await waitFor(() => { expect(screen.getByText("Overview")).toBeTruthy(); });
+      await waitFor(() => { expect(screen.getByText(/^Good (morning|afternoon|evening)/)).toBeTruthy(); });
     });
 
     it("stage 2: user purchases a challenge", async () => {

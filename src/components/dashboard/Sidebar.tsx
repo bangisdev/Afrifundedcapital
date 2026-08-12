@@ -27,20 +27,40 @@ interface NavItem {
   label: string;
   icon: React.ReactNode;
   path: string;
-  adminOnly?: boolean;
 }
 
-const clientNavItems: NavItem[] = [
-  { label: "Overview", icon: <LayoutDashboard className="h-4 w-4" />, path: "/dashboard" },
-  { label: "Challenges", icon: <BarChart3 className="h-4 w-4" />, path: "/dashboard/challenges" },
-  { label: "Trading", icon: <TrendingUp className="h-4 w-4" />, path: "/dashboard/trading" },
-  { label: "Wallet", icon: <Wallet className="h-4 w-4" />, path: "/dashboard/wallet" },
-  { label: "Payouts", icon: <DollarSign className="h-4 w-4" />, path: "/dashboard/payouts" },
-  { label: "Notifications", icon: <Bell className="h-4 w-4" />, path: "/dashboard/notifications" },
-  { label: "Affiliate", icon: <Users className="h-4 w-4" />, path: "/dashboard/affiliate" },
-  { label: "Certificates", icon: <Award className="h-4 w-4" />, path: "/dashboard/certificates" },
-  { label: "Support", icon: <Ticket className="h-4 w-4" />, path: "/dashboard/support" },
-  { label: "Profile", icon: <UserCircle className="h-4 w-4" />, path: "/dashboard/profile" },
+interface NavGroup {
+  label?: string;
+  items: NavItem[];
+}
+
+// Client navigation is grouped so the dashboard stays scannable — the
+// notifications bell in the top bar covers /dashboard/notifications, so it
+// isn't repeated here.
+const clientNavGroups: NavGroup[] = [
+  {
+    items: [
+      { label: "Overview", icon: <LayoutDashboard className="h-4 w-4" />, path: "/dashboard" },
+      { label: "Challenges", icon: <BarChart3 className="h-4 w-4" />, path: "/dashboard/challenges" },
+      { label: "Trading", icon: <TrendingUp className="h-4 w-4" />, path: "/dashboard/trading" },
+    ],
+  },
+  {
+    label: "Finance",
+    items: [
+      { label: "Wallet", icon: <Wallet className="h-4 w-4" />, path: "/dashboard/wallet" },
+      { label: "Payouts", icon: <DollarSign className="h-4 w-4" />, path: "/dashboard/payouts" },
+    ],
+  },
+  {
+    label: "Account",
+    items: [
+      { label: "Affiliate", icon: <Users className="h-4 w-4" />, path: "/dashboard/affiliate" },
+      { label: "Certificates", icon: <Award className="h-4 w-4" />, path: "/dashboard/certificates" },
+      { label: "Support", icon: <Ticket className="h-4 w-4" />, path: "/dashboard/support" },
+      { label: "Profile", icon: <UserCircle className="h-4 w-4" />, path: "/dashboard/profile" },
+    ],
+  },
 ];
 
 const adminNavItems: NavItem[] = [
@@ -67,7 +87,7 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
   const { signOut, user } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
 
-  const navItems = isAdmin ? adminNavItems : clientNavItems;
+  const navGroups = isAdmin ? [{ items: adminNavItems }] : clientNavGroups;
 
   const handleSignOut = async () => {
     await signOut();
@@ -97,22 +117,33 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto">
-        {navItems.map((item) => (
-          <button
-            key={item.path}
-            onClick={() => navigate(item.path)}
-            className={cn(
-              "w-full flex items-center gap-3 px-3 py-2 rounded-md text-xs transition-colors",
-              location.pathname === item.path
-                ? "bg-secondary text-foreground font-medium"
-                : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
-              collapsed && "justify-center px-2",
+      <nav className="flex-1 py-3 px-2 overflow-y-auto">
+        {navGroups.map((group, gi) => (
+          <div key={gi} className="mb-1 last:mb-0">
+            {group.label && !collapsed && (
+              <p className="px-3 pt-3 pb-1 text-[10px] font-medium uppercase tracking-widest text-muted-foreground/50">
+                {group.label}
+              </p>
             )}
-          >
-            {item.icon}
-            {!collapsed && <span>{item.label}</span>}
-          </button>
+            <div className="space-y-0.5">
+              {group.items.map((item) => (
+                <button
+                  key={item.path}
+                  onClick={() => navigate(item.path)}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2 rounded-md text-xs transition-colors",
+                    location.pathname === item.path
+                      ? "bg-secondary text-foreground font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
+                    collapsed && "justify-center px-2",
+                  )}
+                >
+                  {item.icon}
+                  {!collapsed && <span>{item.label}</span>}
+                </button>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 
