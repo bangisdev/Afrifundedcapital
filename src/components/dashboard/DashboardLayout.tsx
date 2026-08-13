@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Sidebar } from "./Sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { NotificationBell } from "@/components/NotificationBell";
-import { MailWarning, ChevronRight } from "lucide-react";
+import { MailWarning, ChevronRight, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Pretty label for the current section shown in the top bar breadcrumb.
@@ -104,6 +104,7 @@ export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boole
   const { isLoading, isAuthenticated, user, refetch } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Track whether auth has ever resolved to true on THIS component instance.
   const hasSeenAuth = useRef(false);
@@ -111,6 +112,11 @@ export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boole
   useEffect(() => {
     if (isAuthenticated) hasSeenAuth.current = true;
   }, [isAuthenticated]);
+
+  // Close the mobile drawer whenever the route changes.
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
 
   useEffect(() => {
     if (location.pathname.startsWith("/auth")) return;
@@ -151,11 +157,19 @@ export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boole
 
   return (
     <div className="min-h-screen bg-background flex">
-      <Sidebar isAdmin={isAdmin} />
+      <Sidebar isAdmin={isAdmin} mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <header className="h-16 border-b border-border flex items-center justify-between px-6 bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/70">
+        <header className="h-16 border-b border-border flex items-center justify-between gap-3 px-4 sm:px-6 bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/70">
           <div className="flex items-center gap-2 text-xs min-w-0">
+            {/* Mobile menu toggle */}
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="md:hidden h-8 w-8 shrink-0 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              aria-label="Open navigation menu"
+            >
+              <Menu className="h-4 w-4" />
+            </button>
             <button
               onClick={() => navigate(isAdmin ? "/admin" : "/dashboard")}
               className="text-muted-foreground hover:text-foreground shrink-0"

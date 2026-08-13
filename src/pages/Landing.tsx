@@ -568,7 +568,7 @@ export default function Landing() {
           initial="hidden"
           animate="visible"
           style={{ opacity: heroOpacity }}
-          className="max-w-4xl mx-auto text-center relative z-10"
+          className="max-w-4xl w-full mx-auto text-center relative z-10"
         >
           {/* Badge */}
           <motion.div variants={fadeUp} custom={0} className="mb-8">
@@ -585,7 +585,7 @@ export default function Landing() {
           <motion.h1
             variants={fadeUp}
             custom={1}
-            className="text-4xl sm:text-5xl md:text-7xl font-light tracking-tight leading-[1.05] mb-6"
+            className="text-[clamp(1.5rem,7.5vw,2.25rem)] sm:text-5xl md:text-7xl font-light tracking-tight leading-[1.05] mb-6"
           >
             Get Funded to{" "}
             <span className="relative inline-block">
@@ -616,11 +616,11 @@ export default function Landing() {
           </motion.p>
 
           {/* CTA Buttons */}
-          <motion.div variants={fadeUp} custom={3} className="flex items-center justify-center gap-4">
+          <motion.div variants={fadeUp} custom={3} className="flex w-full flex-col items-center justify-center gap-4 sm:flex-row">
             <Button
               size="lg"
               onClick={() => navigate("/auth")}
-              className="px-8 text-sm group relative overflow-hidden"
+              className="w-full px-8 text-sm group relative overflow-hidden sm:w-auto"
             >
               <span className="relative z-10 flex items-center">
                 Start Your Challenge
@@ -639,7 +639,7 @@ export default function Landing() {
               onClick={() => {
                 document.getElementById("features")?.scrollIntoView({ behavior: "smooth" });
               }}
-              className="px-8 text-sm"
+              className="w-full px-8 text-sm sm:w-auto"
             >
               Explore Features
             </Button>

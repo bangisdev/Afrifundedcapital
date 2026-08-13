@@ -104,7 +104,15 @@ function isActive(path: string, current: string): boolean {
   return current === path;
 }
 
-export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
+export function Sidebar({
+  isAdmin = false,
+  mobileOpen = false,
+  onClose,
+}: {
+  isAdmin?: boolean;
+  mobileOpen?: boolean;
+  onClose?: () => void;
+}) {
   const navigate = useNavigate();
   const location = useLocation();
   const { signOut, user } = useAuth();
@@ -113,26 +121,47 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
   const navGroups = isAdmin ? adminNavGroups : clientNavGroups;
   const consoleLabel = isAdmin ? "Admin Console" : "Client Portal";
 
+  // On mobile the drawer is always expanded (collapsed state is desktop-only).
+  const effCollapsed = collapsed && !mobileOpen;
+
+  const go = (path: string) => {
+    navigate(path);
+    onClose?.();
+  };
+
   const handleSignOut = async () => {
     await signOut();
     navigate("/");
+    onClose?.();
   };
 
   return (
+    <>
+      {/* Mobile backdrop */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          onClick={onClose}
+          aria-hidden
+        />
+      )}
     <aside
       className={cn(
         "h-screen border-r border-border bg-card flex flex-col transition-all duration-200",
-        collapsed ? "w-16" : "w-60",
+        // Mobile: off-canvas drawer; desktop: static column.
+        "fixed inset-y-0 left-0 z-50 md:static md:z-auto",
+        mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+        effCollapsed ? "w-16" : "w-60",
       )}
     >
       {/* Brand */}
       <div
         className={cn(
           "h-16 flex items-center gap-3 border-b border-border px-4 shrink-0",
-          collapsed && "justify-center px-0",
+          effCollapsed && "justify-center px-0",
         )}
       >
-        {!collapsed && (
+        {!effCollapsed && (
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <div className="h-7 w-7 rounded-lg bg-foreground text-background flex items-center justify-center text-[11px] font-semibold tracking-tight shrink-0">
@@ -143,7 +172,7 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
             <p className="text-[10px] text-muted-foreground mt-0.5 pl-9">{consoleLabel}</p>
           </div>
         )}
-        {collapsed && (
+        {effCollapsed && (
           <div className="h-7 w-7 rounded-lg bg-foreground text-background flex items-center justify-center text-[11px] font-semibold shrink-0">
             AFC
           </div>
@@ -151,11 +180,11 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
         <Button
           variant="ghost"
           size="icon"
-          className={cn("h-6 w-6 ml-auto shrink-0", collapsed && "ml-0")}
+          className={cn("h-6 w-6 ml-auto shrink-0 hidden md:inline-flex", effCollapsed && "ml-0")}
           onClick={() => setCollapsed(!collapsed)}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          <ChevronLeft className={cn("h-3 w-3 transition-transform", collapsed && "rotate-180")} />
+          <ChevronLeft className={cn("h-3 w-3 transition-transform", effCollapsed && "rotate-180")} />
         </Button>
       </div>
 
@@ -163,7 +192,7 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
       <nav className="flex-1 py-4 px-2.5 overflow-y-auto overflow-x-hidden">
         {navGroups.map((group, gi) => (
           <div key={gi} className="mb-2 last:mb-0">
-            {group.label && !collapsed && (
+            {group.label && !effCollapsed && (
               <p className="px-2.5 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">
                 {group.label}
               </p>
@@ -174,13 +203,13 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
                 return (
                   <button
                     key={item.path}
-                    onClick={() => navigate(item.path)}
+                    onClick={() => go(item.path)}
                     className={cn(
                       "relative w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-xs transition-colors",
                       active
                         ? "bg-secondary text-foreground font-medium"
                         : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
-                      collapsed && "justify-center px-0",
+                      effCollapsed && "justify-center px-0",
                     )}
                   >
                     {active && (
@@ -189,7 +218,7 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
                     <span className={cn("shrink-0", active ? "text-foreground" : "text-muted-foreground/80")}>
                       {item.icon}
                     </span>
-                    {!collapsed && <span className="truncate">{item.label}</span>}
+                    {!effCollapsed && <span className="truncate">{item.label}</span>}
                   </button>
                 );
               })}
@@ -203,27 +232,28 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
         {/* Admin link only shown if user has admin role */}
         {!isAdmin && user?.role && ["super_admin", "support_admin", "finance_admin", "client_manager", "compliance_admin", "marketing_admin", "affiliate_manager"].includes(user.role) && (
           <button
-            onClick={() => navigate("/admin")}
+            onClick={() => go("/admin")}
             className={cn(
               "w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors",
-              collapsed && "justify-center px-0",
+              effCollapsed && "justify-center px-0",
             )}
           >
             <Settings className="h-4 w-4" />
-            {!collapsed && <span>Admin</span>}
+            {!effCollapsed && <span>Admin</span>}
           </button>
         )}
         <button
           onClick={handleSignOut}
           className={cn(
             "w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/5 transition-colors",
-            collapsed && "justify-center px-0",
+            effCollapsed && "justify-center px-0",
           )}
         >
           <LogOut className="h-4 w-4" />
-          {!collapsed && <span>Sign Out</span>}
+          {!effCollapsed && <span>Sign Out</span>}
         </button>
       </div>
     </aside>
+    </>
   );
 }
