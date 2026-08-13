@@ -51,7 +51,7 @@
 
 /* ─── Light Mode — Near-monochrome, restrained ─── */
 :root {
-  --radius: 0.25rem;
+  --radius: 0.375rem;
   --background: oklch(0.985 0 0);
   --foreground: oklch(0.13 0 0);
   --card: oklch(0.98 0 0);
@@ -151,25 +151,67 @@
 
   /* Scrollbar styling */
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 5px;
+    height: 5px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: oklch(0.8 0 0);
+    background: oklch(0.82 0 0);
     border-radius: 3px;
   }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.7 0 0);
+  }
   .dark ::-webkit-scrollbar-thumb {
-    background: oklch(0.3 0 0);
+    background: oklch(0.32 0 0);
+  }
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.42 0 0);
   }
 }
 
 @layer components {
+  /* Elevated surface — the workhorse panel for dashboards and admin views */
+  .panel {
+    @apply bg-card border border-border rounded-xl;
+    box-shadow: 0 1px 2px oklch(0 0 0 / 0.04), 0 8px 24px -16px oklch(0 0 0 / 0.12);
+  }
+  .dark .panel {
+    box-shadow: 0 1px 2px oklch(0 0 0 / 0.4), 0 12px 32px -20px oklch(0 0 0 / 0.6);
+  }
+
+  /* Tiny uppercase label above a section title */
+  .eyebrow {
+    @apply text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground;
+  }
+
+  /* Large KPI number */
+  .kpi-value {
+    @apply text-2xl sm:text-3xl font-light tracking-tight tabular-nums;
+  }
+
+  /* Rounded icon chip used across KPI cards and section headers */
+  .icon-chip {
+    @apply h-8 w-8 rounded-lg border border-border bg-secondary/60 flex items-center justify-center text-foreground/80;
+  }
+
+  /* Horizontal bar used for simple inline comparisons (growth, share) */
+  .bar-track {
+    @apply h-1.5 w-full rounded-full bg-secondary overflow-hidden;
+  }
+  .bar-fill {
+    @apply h-full rounded-full bg-foreground/80 transition-all duration-700 ease-out;
+  }
+}
+
+
+@layer components {
   /* Subtle card with no shadow, just a hairline border */
   .card-subtle {
-    @apply bg-card border border-border rounded-lg;
+    @apply bg-card border border-border rounded-xl;
+    box-shadow: 0 1px 2px oklch(0 0 0 / 0.03);
   }
 
   /* Section divider — just a thin line */

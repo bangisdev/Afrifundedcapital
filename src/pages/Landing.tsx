@@ -543,9 +543,9 @@ export default function Landing() {
                 backgroundSize: "48px 48px",
               }}
             />
-            {/* Gradient orbs */}
+            {/* Gradient orbs — brand-tinted for depth */}
             <motion.div
-              className="absolute w-[600px] h-[600px] rounded-full bg-foreground/5 blur-[120px] -top-48 -right-48"
+              className="absolute w-[600px] h-[600px] rounded-full bg-brand/10 blur-[120px] -top-48 -right-48"
               animate={{
                 x: mousePos.x * 30 - 15,
                 y: mousePos.y * 30 - 15,
@@ -553,7 +553,7 @@ export default function Landing() {
               transition={{ type: "spring", stiffness: 50, damping: 30 }}
             />
             <motion.div
-              className="absolute w-[400px] h-[400px] rounded-full bg-foreground/3 blur-[100px] -bottom-32 -left-32"
+              className="absolute w-[400px] h-[400px] rounded-full bg-brand/5 blur-[100px] -bottom-32 -left-32"
               animate={{
                 x: mousePos.x * -20 + 10,
                 y: mousePos.y * -20 + 10,

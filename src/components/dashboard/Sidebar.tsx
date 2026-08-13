@@ -19,6 +19,7 @@ import {
   UserCircle,
   Percent,
   DollarSign,
+  ScrollText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -63,23 +64,45 @@ const clientNavGroups: NavGroup[] = [
   },
 ];
 
-const adminNavItems: NavItem[] = [
-  { label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" />, path: "/admin" },
-  { label: "Users", icon: <Users className="h-4 w-4" />, path: "/admin/users" },
-  { label: "Challenges", icon: <BarChart3 className="h-4 w-4" />, path: "/admin/challenges" },
-  { label: "Payments", icon: <Wallet className="h-4 w-4" />, path: "/admin/payments" },
-  { label: "Payouts", icon: <DollarSign className="h-4 w-4" />, path: "/admin/payouts" },
-  { label: "KYC", icon: <Shield className="h-4 w-4" />, path: "/admin/kyc" },
-  { label: "Affiliates", icon: <Percent className="h-4 w-4" />, path: "/admin/affiliates" },
-  { label: "Coupons", icon: <Gift className="h-4 w-4" />, path: "/admin/coupons" },
-  { label: "Support", icon: <Ticket className="h-4 w-4" />, path: "/admin/support" },
-  { label: "Certificates", icon: <Award className="h-4 w-4" />, path: "/admin/certificates" },
-  { label: "MT5", icon: <TrendingUp className="h-4 w-4" />, path: "/admin/mt5" },
-  { label: "Notifications", icon: <Bell className="h-4 w-4" />, path: "/admin/notifications" },
-  { label: "Reports", icon: <FileText className="h-4 w-4" />, path: "/admin/reports" },
-  { label: "Audit Logs", icon: <BarChart3 className="h-4 w-4" />, path: "/admin/audit-logs" },
-  { label: "Settings", icon: <Settings className="h-4 w-4" />, path: "/admin/settings" },
+const adminNavGroups: NavGroup[] = [
+  {
+    label: "Overview",
+    items: [{ label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" />, path: "/admin" }],
+  },
+  {
+    label: "Management",
+    items: [
+      { label: "Users", icon: <Users className="h-4 w-4" />, path: "/admin/users" },
+      { label: "Challenges", icon: <BarChart3 className="h-4 w-4" />, path: "/admin/challenges" },
+      { label: "Payments", icon: <Wallet className="h-4 w-4" />, path: "/admin/payments" },
+      { label: "Payouts", icon: <DollarSign className="h-4 w-4" />, path: "/admin/payouts" },
+      { label: "KYC", icon: <Shield className="h-4 w-4" />, path: "/admin/kyc" },
+      { label: "Affiliates", icon: <Percent className="h-4 w-4" />, path: "/admin/affiliates" },
+      { label: "Coupons", icon: <Gift className="h-4 w-4" />, path: "/admin/coupons" },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      { label: "Support", icon: <Ticket className="h-4 w-4" />, path: "/admin/support" },
+      { label: "Certificates", icon: <Award className="h-4 w-4" />, path: "/admin/certificates" },
+      { label: "MT5", icon: <TrendingUp className="h-4 w-4" />, path: "/admin/mt5" },
+      { label: "Notifications", icon: <Bell className="h-4 w-4" />, path: "/admin/notifications" },
+      { label: "Reports", icon: <FileText className="h-4 w-4" />, path: "/admin/reports" },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { label: "Audit Logs", icon: <ScrollText className="h-4 w-4" />, path: "/admin/audit-logs" },
+      { label: "Settings", icon: <Settings className="h-4 w-4" />, path: "/admin/settings" },
+    ],
+  },
 ];
+
+function isActive(path: string, current: string): boolean {
+  return current === path;
+}
 
 export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
   const navigate = useNavigate();
@@ -87,7 +110,8 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
   const { signOut, user } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
 
-  const navGroups = isAdmin ? [{ items: adminNavItems }] : clientNavGroups;
+  const navGroups = isAdmin ? adminNavGroups : clientNavGroups;
+  const consoleLabel = isAdmin ? "Admin Console" : "Client Portal";
 
   const handleSignOut = async () => {
     await signOut();
@@ -98,64 +122,91 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
     <aside
       className={cn(
         "h-screen border-r border-border bg-card flex flex-col transition-all duration-200",
-        collapsed ? "w-14" : "w-56",
+        collapsed ? "w-16" : "w-60",
       )}
     >
-      {/* Logo */}
-      <div className={cn("h-14 flex items-center border-b border-border px-4", collapsed && "justify-center")}>
+      {/* Brand */}
+      <div
+        className={cn(
+          "h-16 flex items-center gap-3 border-b border-border px-4 shrink-0",
+          collapsed && "justify-center px-0",
+        )}
+      >
         {!collapsed && (
-          <span className="text-sm font-medium tracking-tight">AfriFundedCapital</span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <div className="h-7 w-7 rounded-lg bg-foreground text-background flex items-center justify-center text-[11px] font-semibold tracking-tight shrink-0">
+                AFC
+              </div>
+              <span className="text-sm font-medium tracking-tight truncate">AfriFundedCapital</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-0.5 pl-9">{consoleLabel}</p>
+          </div>
+        )}
+        {collapsed && (
+          <div className="h-7 w-7 rounded-lg bg-foreground text-background flex items-center justify-center text-[11px] font-semibold shrink-0">
+            AFC
+          </div>
         )}
         <Button
           variant="ghost"
           size="icon"
-          className={cn("h-6 w-6 ml-auto", collapsed && "ml-0")}
+          className={cn("h-6 w-6 ml-auto shrink-0", collapsed && "ml-0")}
           onClick={() => setCollapsed(!collapsed)}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           <ChevronLeft className={cn("h-3 w-3 transition-transform", collapsed && "rotate-180")} />
         </Button>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 py-3 px-2 overflow-y-auto">
+      <nav className="flex-1 py-4 px-2.5 overflow-y-auto overflow-x-hidden">
         {navGroups.map((group, gi) => (
-          <div key={gi} className="mb-1 last:mb-0">
+          <div key={gi} className="mb-2 last:mb-0">
             {group.label && !collapsed && (
-              <p className="px-3 pt-3 pb-1 text-[10px] font-medium uppercase tracking-widest text-muted-foreground/50">
+              <p className="px-2.5 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">
                 {group.label}
               </p>
             )}
             <div className="space-y-0.5">
-              {group.items.map((item) => (
-                <button
-                  key={item.path}
-                  onClick={() => navigate(item.path)}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-3 py-2 rounded-md text-xs transition-colors",
-                    location.pathname === item.path
-                      ? "bg-secondary text-foreground font-medium"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
-                    collapsed && "justify-center px-2",
-                  )}
-                >
-                  {item.icon}
-                  {!collapsed && <span>{item.label}</span>}
-                </button>
-              ))}
+              {group.items.map((item) => {
+                const active = isActive(item.path, location.pathname);
+                return (
+                  <button
+                    key={item.path}
+                    onClick={() => navigate(item.path)}
+                    className={cn(
+                      "relative w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-xs transition-colors",
+                      active
+                        ? "bg-secondary text-foreground font-medium"
+                        : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
+                      collapsed && "justify-center px-0",
+                    )}
+                  >
+                    {active && (
+                      <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[3px] rounded-full bg-foreground" />
+                    )}
+                    <span className={cn("shrink-0", active ? "text-foreground" : "text-muted-foreground/80")}>
+                      {item.icon}
+                    </span>
+                    {!collapsed && <span className="truncate">{item.label}</span>}
+                  </button>
+                );
+              })}
             </div>
           </div>
         ))}
       </nav>
 
       {/* Bottom actions */}
-      <div className="border-t border-border p-2 space-y-0.5">
+      <div className="border-t border-border p-2.5 space-y-0.5">
         {/* Admin link only shown if user has admin role */}
         {!isAdmin && user?.role && ["super_admin", "support_admin", "finance_admin", "client_manager", "compliance_admin", "marketing_admin", "affiliate_manager"].includes(user.role) && (
           <button
             onClick={() => navigate("/admin")}
             className={cn(
-              "w-full flex items-center gap-3 px-3 py-2 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors",
-              collapsed && "justify-center",
+              "w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors",
+              collapsed && "justify-center px-0",
             )}
           >
             <Settings className="h-4 w-4" />
@@ -165,8 +216,8 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
         <button
           onClick={handleSignOut}
           className={cn(
-            "w-full flex items-center gap-3 px-3 py-2 rounded-md text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/5 transition-colors",
-            collapsed && "justify-center",
+            "w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/5 transition-colors",
+            collapsed && "justify-center px-0",
           )}
         >
           <LogOut className="h-4 w-4" />

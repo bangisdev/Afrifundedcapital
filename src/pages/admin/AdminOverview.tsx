@@ -2,17 +2,99 @@
 import { useApiQuery } from "@/hooks/use-api";
 import { readResponseBody } from "@/lib/api";
 import { useState, useMemo } from "react";
-import { Loader2, Users, BarChart3, DollarSign, Award, TrendingUp, Database, CheckCircle, AlertTriangle, ChevronRight, Mail, Send } from "lucide-react";
+import {
+  Loader2,
+  Users,
+  BarChart3,
+  Wallet,
+  Activity,
+  Award,
+  CheckCircle2,
+  TrendingUp,
+  Clock,
+  Database,
+  CheckCircle,
+  AlertTriangle,
+  ChevronRight,
+  Mail,
+  Send,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Link } from "react-router";
 import { parseStoredViolations, ruleCodeLabel, timeAgo } from "@/lib/challenge-violations";
+import { cn } from "@/lib/utils";
 
-function StatCard({ label, value, icon }: { label: string; value: string | number; icon: React.ReactNode }) {
+function StatCard({
+  label,
+  value,
+  icon,
+  tone = "default",
+}: {
+  label: string;
+  value: string | number;
+  icon: React.ReactNode;
+  tone?: "default" | "emerald" | "amber" | "blue";
+}) {
   return (
     <div className="card-subtle p-5">
-      <div className="flex items-center gap-2 mb-3"><div className="h-6 w-6 rounded-full border border-border flex items-center justify-center">{icon}</div><span className="text-xs text-muted-foreground">{label}</span></div>
-      <div className="stat-value">{value}</div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground mb-1.5">
+            {label}
+          </p>
+          <div className="kpi-value">{value}</div>
+        </div>
+        <div
+          className={cn(
+            "icon-chip shrink-0",
+            tone === "emerald" && "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+            tone === "amber" && "bg-amber-500/10 text-amber-600 border-amber-500/20",
+            tone === "blue" && "bg-blue-500/10 text-blue-600 border-blue-500/20",
+          )}
+        >
+          {icon}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SectionCard({
+  title,
+  icon,
+  accent = "default",
+  actions,
+  children,
+}: {
+  title: string;
+  icon?: React.ReactNode;
+  accent?: "default" | "emerald" | "blue" | "amber";
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="card-subtle p-6">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <h2 className="text-sm font-medium inline-flex items-center gap-2">
+          {icon && (
+            <span
+              className={cn(
+                "h-6 w-6 rounded-md flex items-center justify-center shrink-0",
+                accent === "blue" && "bg-blue-500/10 text-blue-600",
+                accent === "emerald" && "bg-emerald-500/10 text-emerald-600",
+                accent === "amber" && "bg-amber-500/10 text-amber-600",
+                accent === "default" && "bg-secondary text-foreground/70",
+              )}
+            >
+              {icon}
+            </span>
+          )}
+          {title}
+        </h2>
+        {actions}
+      </div>
+      {children}
     </div>
   );
 }
@@ -119,11 +201,24 @@ export default function AdminOverview() {
 
   const hasNoData = !userStats?.totalUsers && !challengeStats?.total;
 
+  // Simple proportional bars for the growth cards (pure CSS, no chart dep).
+  const userGrowthPct =
+    userGrowth && userGrowth.totalUsers > 0
+      ? Math.min(100, Math.round(((userGrowth.newUsers30d || 0) / userGrowth.totalUsers) * 100))
+      : 0;
+  const revenueTotal =
+    revenueGrowth && Number(revenueGrowth.thisMonth || 0) + Number(revenueGrowth.lastMonth || 0) > 0
+      ? Number(revenueGrowth.thisMonth || 0) + Number(revenueGrowth.lastMonth || 0)
+      : 0;
+  const revenuePct = revenueTotal > 0 ? Math.round((Number(revenueGrowth?.thisMonth || 0) / revenueTotal) * 100) : 0;
+
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      {/* ─── Page header ─── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-lg font-medium tracking-tight">Admin Overview</h1>
+          <p className="eyebrow mb-1">Operations</p>
+          <h1 className="text-xl font-medium tracking-tight">Admin Overview</h1>
           <p className="text-xs text-muted-foreground mt-1">Platform statistics and analytics</p>
         </div>
         {hasNoData && (
@@ -163,7 +258,7 @@ export default function AdminOverview() {
         )}
       </div>
 
-      {/* Bulk seed results */}
+      {/* ─── Seed results ─── */}
       {bulkSeedResult && (
         <div className={`card-subtle p-4 flex items-start gap-3 ${bulkSeedResult.success ? "border-emerald-500/20" : "border-yellow-500/20"}`}>
           {bulkSeedResult.success ? (
@@ -200,7 +295,6 @@ export default function AdminOverview() {
         </div>
       )}
 
-      {/* User seed results */}
       {userSeedResult && (
         <div className={`card-subtle p-4 flex items-start gap-3 ${userSeedResult.success ? "border-emerald-500/20" : "border-yellow-500/20"}`}>
           {userSeedResult.success ? (
@@ -226,26 +320,26 @@ export default function AdminOverview() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Total Users" value={userStats?.totalUsers || 0} icon={<Users className="h-3.5 w-3.5" />} />
-        <StatCard label="Total Challenges" value={challengeStats?.total || 0} icon={<BarChart3 className="h-3.5 w-3.5" />} />
-        <StatCard label="Revenue" value={`₦${(paymentStats?.revenue || 0).toLocaleString()}`} icon={<DollarSign className="h-3.5 w-3.5" />} />
-        <StatCard label="Active Challenges" value={challengeStats?.active || 0} icon={<TrendingUp className="h-3.5 w-3.5" />} />
+      {/* ─── KPI cards ─── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard label="Total Users" value={userStats?.totalUsers || 0} icon={<Users className="h-4 w-4" />} />
+        <StatCard label="Total Challenges" value={challengeStats?.total || 0} icon={<BarChart3 className="h-4 w-4" />} />
+        <StatCard label="Revenue" value={`₦${(paymentStats?.revenue || 0).toLocaleString()}`} icon={<Wallet className="h-4 w-4" />} tone="blue" />
+        <StatCard label="Active Challenges" value={challengeStats?.active || 0} icon={<Activity className="h-4 w-4" />} />
       </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Funded Accounts" value={challengeStats?.funded || 0} icon={<Award className="h-3.5 w-3.5" />} />
-        <StatCard label="Completed Payments" value={paymentStats?.completed || 0} icon={<DollarSign className="h-3.5 w-3.5" />} />
-        <StatCard label="Total Paid Out" value={`₦${(payoutStats?.totalPaid || 0).toLocaleString()}`} icon={<TrendingUp className="h-3.5 w-3.5" />} />
-        <StatCard label="Pending Payouts" value={payoutStats?.pending || 0} icon={<BarChart3 className="h-3.5 w-3.5" />} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard label="Funded Accounts" value={challengeStats?.funded || 0} icon={<Award className="h-4 w-4" />} tone="emerald" />
+        <StatCard label="Completed Payments" value={paymentStats?.completed || 0} icon={<CheckCircle2 className="h-4 w-4" />} />
+        <StatCard label="Total Paid Out" value={`₦${(payoutStats?.totalPaid || 0).toLocaleString()}`} icon={<TrendingUp className="h-4 w-4" />} />
+        <StatCard label="Pending Payouts" value={payoutStats?.pending || 0} icon={<Clock className="h-4 w-4" />} tone="amber" />
       </div>
 
-      {/* Weekly violation digest status — when the recap email last went out */}
-      <div className="card-subtle p-6">
-        <div className="flex items-center justify-between mb-4 gap-3">
-          <h2 className="text-sm font-medium inline-flex items-center gap-2">
-            <Mail className="h-3.5 w-3.5 text-blue-500" />
-            Weekly Violation Digest
-          </h2>
+      {/* ─── Weekly violation digest status ─── */}
+      <SectionCard
+        title="Weekly Violation Digest"
+        icon={<Mail className="h-3 w-3" />}
+        accent="blue"
+        actions={
           <div className="flex items-center gap-2 shrink-0">
             <Button
               size="sm"
@@ -269,7 +363,8 @@ export default function AdminOverview() {
               <ChevronRight className="h-3 w-3" />
             </Link>
           </div>
-        </div>
+        }
+      >
         <div className="flex items-center gap-3">
           <div
             className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 ${
@@ -301,33 +396,46 @@ export default function AdminOverview() {
             </div>
           </div>
         </div>
-      </div>
-      {userGrowth && (
-        <div className="card-subtle p-6">
-          <h2 className="text-sm font-medium mb-3">User Growth</h2>
-          <div className="flex items-center gap-6 text-xs text-muted-foreground">
-            <span>Total: {userGrowth.totalUsers}</span>
-            <span>New (30d): {userGrowth.newUsers30d}</span>
-          </div>
-        </div>
-      )}
-      {revenueGrowth && (
-        <div className="card-subtle p-6">
-          <h2 className="text-sm font-medium mb-3">Revenue Growth</h2>
-          <div className="flex items-center gap-6 text-xs text-muted-foreground">
-            <span>This Month: ₦{(revenueGrowth.thisMonth || 0).toLocaleString()}</span>
-            <span>Last Month: ₦{(revenueGrowth.lastMonth || 0).toLocaleString()}</span>
-          </div>
-        </div>
-      )}
+      </SectionCard>
 
-      {/* Recent violations digest snapshot */}
-      <div className="card-subtle p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-medium inline-flex items-center gap-2">
-            <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
-            Recent Violations
-          </h2>
+      {/* ─── Growth snapshot ─── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {userGrowth && (
+          <SectionCard title="User Growth" icon={<Users className="h-3 w-3" />}>
+            <div className="flex items-center gap-6 text-xs text-muted-foreground mb-4">
+              <span>Total: {userGrowth.totalUsers}</span>
+              <span>New (30d): {userGrowth.newUsers30d}</span>
+            </div>
+            <div className="bar-track">
+              <div className="bar-fill" style={{ width: `${userGrowthPct}%` }} />
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1.5">
+              {userGrowthPct}% of your user base joined in the last 30 days
+            </p>
+          </SectionCard>
+        )}
+        {revenueGrowth && (
+          <SectionCard title="Revenue Growth" icon={<TrendingUp className="h-3 w-3" />}>
+            <div className="flex items-center gap-6 text-xs text-muted-foreground mb-4">
+              <span>This Month: ₦{(revenueGrowth.thisMonth || 0).toLocaleString()}</span>
+              <span>Last Month: ₦{(revenueGrowth.lastMonth || 0).toLocaleString()}</span>
+            </div>
+            <div className="bar-track">
+              <div className="bar-fill" style={{ width: `${revenuePct}%` }} />
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1.5">
+              {revenuePct}% of the two-month total was earned this month
+            </p>
+          </SectionCard>
+        )}
+      </div>
+
+      {/* ─── Recent violations ─── */}
+      <SectionCard
+        title="Recent Violations"
+        icon={<AlertTriangle className="h-3 w-3" />}
+        accent="amber"
+        actions={
           <Link
             to="/admin/challenges?tab=violations"
             className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -335,7 +443,8 @@ export default function AdminOverview() {
             View all
             <ChevronRight className="h-3 w-3" />
           </Link>
-        </div>
+        }
+      >
         {recentViolations.length === 0 ? (
           <p className="text-xs text-muted-foreground">
             No violations recorded yet — the rule engine hasn't flagged any challenges.
@@ -383,7 +492,7 @@ export default function AdminOverview() {
             })}
           </div>
         )}
-      </div>
+      </SectionCard>
     </div>
   );
 }
