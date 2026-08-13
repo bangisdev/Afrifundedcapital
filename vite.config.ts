@@ -64,6 +64,14 @@ export default defineConfig({
   },
   optimizeDeps: {
     entries: ['index.html'],
+    // Pre-bundle lazy-chunk deps at boot. The admin/detail routes are
+    // dynamically imported, so their deps (radix menus/pickers, calendar,
+    // command palettes, sheets, forms) are NOT part of the entry graph and
+    // would otherwise be discovered on-demand — which re-runs the dep
+    // optimizer mid-request. In memory-constrained environments that spikes
+    // past the budget and kills the dev server, surfacing as
+    // "Failed to fetch dynamically imported module". Listing them here
+    // moves that work to boot (once) instead of on-demand (per session).
     include: [
       'react',
       'react/jsx-runtime',
@@ -71,6 +79,29 @@ export default defineConfig({
       'react-dom/client',
       'react-router',
       'framer-motion',
+      // Lazy admin/detail chunk deps (see comment above)
+      '@radix-ui/react-aspect-ratio',
+      '@radix-ui/react-avatar',
+      '@radix-ui/react-collapsible',
+      '@radix-ui/react-context-menu',
+      '@radix-ui/react-hover-card',
+      '@radix-ui/react-menubar',
+      '@radix-ui/react-navigation-menu',
+      '@radix-ui/react-popover',
+      '@radix-ui/react-progress',
+      '@radix-ui/react-radio-group',
+      '@radix-ui/react-scroll-area',
+      '@radix-ui/react-select',
+      '@radix-ui/react-separator',
+      '@radix-ui/react-slider',
+      '@radix-ui/react-toggle',
+      '@radix-ui/react-toggle-group',
+      'cmdk',
+      'input-otp',
+      'react-day-picker',
+      'react-hook-form',
+      'react-resizable-panels',
+      'vaul',
     ],
   },
   server: {
