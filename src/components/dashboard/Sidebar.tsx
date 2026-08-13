@@ -101,7 +101,11 @@ const adminNavGroups: NavGroup[] = [
 ];
 
 function isActive(path: string, current: string): boolean {
-  return current === path;
+  if (current === path) return true;
+  // Index items (Overview) only match exactly; every other item also matches
+  // its nested routes (e.g. /dashboard/challenges/123 → Challenges).
+  if (path === "/dashboard" || path === "/admin") return false;
+  return current.startsWith(path + "/");
 }
 
 export function Sidebar({

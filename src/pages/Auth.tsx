@@ -272,15 +272,15 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   return (
     <div className="min-h-screen flex flex-col">
       <div className="flex-1 flex items-center justify-center">
-        <div className="flex items-center justify-center h-full flex-col">
-          <Card className="min-w-[350px] pb-0 border shadow-md">
+        <div className="flex items-center justify-center h-full flex-col w-full px-4">
+          <Card className="w-full max-w-[400px] min-w-0 sm:min-w-[350px] pb-0 border shadow-md">
             {mode === "sign-in" && (
               <>
                 {header("Welcome Back", "Sign in to your account")}
                 <form onSubmit={handleSignIn}>
                   <CardContent className="space-y-4">
                     <div className="relative">
-                      <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
@@ -292,7 +292,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                       />
                     </div>
                     <div className="relative">
-                      <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
@@ -369,7 +369,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                 <form onSubmit={handleSignUp}>
                   <CardContent className="space-y-4">
                     <div className="relative">
-                      <UserIcon className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         value={name}
                         onChange={(e) => setName(e.target.value)}
@@ -381,7 +381,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                       />
                     </div>
                     <div className="relative">
-                      <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
@@ -393,7 +393,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                       />
                     </div>
                     <div className="relative">
-                      <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
@@ -442,7 +442,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                 <form onSubmit={handleForgotPassword}>
                   <CardContent className="space-y-4">
                     <div className="relative">
-                      <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
@@ -481,7 +481,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                 <form onSubmit={handleResetPassword}>
                   <CardContent className="space-y-4">
                     <div className="relative">
-                      <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
@@ -543,7 +543,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                 <form onSubmit={handleTwoFactor}>
                   <CardContent className="space-y-4">
                     <div className="relative">
-                      <ShieldCheck className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         value={code}
                         onChange={(e) => setCode(e.target.value)}

@@ -199,11 +199,7 @@ export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boole
         {user && user.emailVerified === false && <EmailVerificationBanner email={user.email} onVerified={refetch} />}
         {/* Main content */}
         <main className={cn("flex-1 overflow-auto", isAdmin ? "bg-gradient-to-b from-secondary/30 to-transparent" : "")}>
-          {isAdmin ? (
-            <div className="h-full px-5 py-6 sm:px-7 sm:py-8">{children || <Outlet />}</div>
-          ) : (
-            (children || <Outlet />)
-          )}
+          <div className="h-full px-5 py-6 sm:px-7 sm:py-8">{children || <Outlet />}</div>
         </main>
       </div>
     </div>
