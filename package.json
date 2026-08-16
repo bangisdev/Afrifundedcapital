@@ -5,6 +5,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "postinstall": "bun scripts/heal-node_modules.mjs",
+    "predev": "bun scripts/heal-node_modules.mjs",
+    "prebuild": "bun scripts/heal-node_modules.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
