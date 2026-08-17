@@ -1,0 +1,28 @@
+# AfriFundedCapital — Prometheus scrape configuration
+#
+# Run with the docker-compose `monitoring` profile:
+#   docker compose --profile prod --profile monitoring up --build
+#
+# The app exposes metrics (unauthenticated aggregates — no PII) at:
+#   GET /api/metrics   (dev + prod)
+#   GET /metrics       (prod alias)
+# Prometheus scrapes app-prod directly on the internal compose network, so
+# /metrics is never exposed through nginx. Do NOT publish /metrics to the
+# public internet.
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+  external_labels:
+    stack: afrifundedcapital
+
+scrape_configs:
+  - job_name: "afc"
+    metrics_path: /api/metrics
+    static_configs:
+      - targets: ["app-prod:5173"]
+        labels:
+          app: afrifundedcapital
+
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

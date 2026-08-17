@@ -129,6 +129,39 @@ SecretKeyField  →  PUT/DELETE /api/admin/secrets/:name      (admin-only, audit
 - **E2E (Playwright):** `e2e/admin-flow.spec.ts` is split into greppable chunks (see package.json `test:e2e:*` scripts); each chunk boots its own Vite server on port 5174 with `E2E_TESTING=1` and an isolated `.e2e/` DB.
 - **CI:** `.github/workflows/e2e.yml` / `e2e-matrix.yml` run the e2e chunks in parallel plus a `secrets-scan` job; `secret-scan.yml` runs gitleaks.
 
+## Observability (Prometheus + Grafana)
+
+The app exposes a dependency-free Prometheus **`/api/metrics`** endpoint (and a `/metrics` alias in production) — unauthenticated **aggregates only** (no emails, names, keys, or per-user data). Do not publish it to the public internet; Prometheus scrapes the app directly on the internal Docker network.
+
+| Metric family | Kind | Meaning |
+| --- | --- | --- |
+| `afc_up` / `afc_process_*` | gauge | Liveness, uptime, RSS memory |
+| `afc_http_requests_total{method,route,status}` | counter | Request volume by matched route + status (non-API noise bucketed as `other`) |
+| `afc_mt5_queue_depth{status}` / `afc_mt5_queue_total` / `afc_mt5_queue_last_job_timestamp_seconds` | gauge | MT5 retry-queue depth (pending/failed/done), total, last enqueue |
+| `afc_mt5_sync_runs_total{outcome}` / `afc_mt5_sync_duration_seconds_total` / `afc_mt5_sync_last_duration_seconds` | counter/gauge | Sync runs (synced/error/skipped) + duration — every caller (scheduler, retry queue, manual/admin sync) is instrumented |
+| `afc_mt5_last_sync_timestamp_seconds` / `afc_mt5_stale_accounts` | gauge | Freshness of the newest sync; active accounts unsynced > 23h |
+| `afc_mt5_gateway_configured` / `afc_mt5_provider_mode{mode}` | gauge | Live gateway vs. simulated mode |
+| `afc_challenges_active` / `afc_challenges_violated` / `afc_mt5_accounts{status}` | gauge | Portfolio totals |
+| `afc_mt5_reconciliation_*` | gauge | Last reconciliation run, status, total entries |
+| `afc_payments_total{status}` / `afc_payments_amount_total{status}` / `afc_payment_webhooks_total{provider,event}` | gauge/counter | Payment counts + sums by status; webhooks received (before validation, so misses are visible) |
+| `afc_users_total{role}` | gauge | User counts by role |
+
+**Files**
+
+- `src/server/lib/metrics.ts` — registry, recorders, HTTP middleware, text-format emitter (hand-rolled, no dependency)
+- `src/server/routes/metrics.ts` — the route, mounted at `/api/metrics` in `src/server/index.ts` (dev + prod) and `/metrics` in `server.ts` (prod)
+- `deploy/prometheus/prometheus.yml` — scrape config (targets `app-prod:5173`)
+- `deploy/grafana/provisioning/` — datasource + auto-loaded **AfriFundedCapital** dashboard (HTTP, MT5 queue/sync/staleness, payments)
+
+**Run the monitoring stack** (with the prod app):
+
+```bash
+docker compose --profile prod --profile monitoring up --build
+# Grafana: http://<host>:3000  (GRAFANA_ADMIN_USER / GRAFANA_ADMIN_PASSWORD, default admin/admin)
+```
+
+In development the same endpoint is available at `http://localhost:5173/api/metrics` (the Hono dev plugin forwards `/api/*`), so you can scrape it with a local Prometheus or `curl`.
+
 ## Auth Hardening
 
 Account security features implemented on top of the session-cookie auth (all under `/api/auth/*`, in `src/server/routes/security.ts` + the inline routes in `src/server/index.ts`):

@@ -8,6 +8,7 @@ import { paymentConfirmationEmail } from "../lib/email";
 import { voidRedemptionForPayment, voidStaleRedemptions, ensureRedemptionForPayment, restoreRedemptionIfValid } from "../lib/payment-sweep";
 import { writeAuditLog, redactSetting } from "../lib/audit";
 import { getSecret, getSecretStatus } from "../lib/secrets";
+import { recordPaymentWebhook } from "../lib/metrics";
 
 const app = new Hono();
 
@@ -502,6 +503,10 @@ app.post("/webhook/flutterwave", async (c) => {
 
   const event = body?.event;
   const data = body?.data;
+
+  // Prometheus: count every received webhook (before validation, so missed
+  // deliveries and signature failures are visible in metrics).
+  recordPaymentWebhook("flutterwave", event || "unknown");
 
   if (!data?.id) return c.json({ status: "ignored" });
 

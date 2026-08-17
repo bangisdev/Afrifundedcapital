@@ -119,6 +119,8 @@ export async function buildTestApp(): Promise<Hono> {
   const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
   const COOKIE_NAME = "afc_session";
 
+  const { metricsMiddleware } = await import("../lib/metrics");
+
   const app = new Hono();
 
   // CORS
@@ -129,6 +131,9 @@ export async function buildTestApp(): Promise<Hono> {
       credentials: true,
     }),
   );
+
+  // Prometheus request counters (non-critical; never throws)
+  app.use("*", metricsMiddleware);
 
   // ── Health ───────────────────────────────────────────────────
   app.get("/api/health", (c) => c.json({ status: "ok", timestamp: Date.now() }));
@@ -351,6 +356,7 @@ export async function buildTestApp(): Promise<Hono> {
   const secretsModule = await import("../routes/secrets");
   const testEmailModule = await import("../routes/test-email");
   const securityModule = await import("../routes/security");
+  const metricsModule = await import("../routes/metrics");
 
   app.route("/api/kyc", kycModule.default);
   app.route("/api/payments", paymentsModule.default);
@@ -368,6 +374,7 @@ export async function buildTestApp(): Promise<Hono> {
   app.route("/api/admin/secrets", secretsModule.default);
   app.route("/api/test-email", testEmailModule.default);
   app.route("/api/auth", securityModule.default);
+  app.route("/api/metrics", metricsModule.default);
 
   // Unmock so other tests can re-mock cleanly
   vi.doUnmock("../db");

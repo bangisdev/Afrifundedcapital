@@ -24,6 +24,8 @@ import couponsRouter from "./src/server/routes/coupons";
 import certificatesRouter from "./src/server/routes/certificates";
 import payoutsRouter from "./src/server/routes/payouts";
 import seedRouter from "./src/server/routes/seed";
+import metricsRouter, { metricsHandler } from "./src/server/routes/metrics";
+import { metricsMiddleware } from "./src/server/lib/metrics";
 import { startMT5Scheduler } from "./src/server/lib/mt5/scheduler";
 import { startViolationDigestScheduler } from "./src/server/lib/violation-digest";
 
@@ -47,6 +49,9 @@ app.use("*", cors({
     : ["http://localhost:5173", "http://127.0.0.1:5173", "https://*.freebuff.dev"],
   credentials: true,
 }));
+
+// Prometheus request counters (non-critical; never throws)
+app.use("*", metricsMiddleware);
 
 // ─── Health check ───────────────────────────────────────
 app.get("/api/health", (c) => c.json({ status: "ok", timestamp: Date.now() }));
@@ -252,6 +257,9 @@ app.route("/api/coupons", couponsRouter);
 app.route("/api/certificates", certificatesRouter);
 app.route("/api/payouts", payoutsRouter);
 app.route("/api/seed", seedRouter);
+app.route("/api/metrics", metricsRouter);
+// Conventional unscraped-path alias: /metrics → same handler as /api/metrics.
+app.get("/metrics", metricsHandler);
 
 // ─── Settings (simplified for production) ───────────────
 app.get("/api/settings/public", (c) => {

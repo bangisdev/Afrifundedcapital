@@ -34,6 +34,8 @@ import seedRouter from "./routes/seed";
 import testEmailRouter from "./routes/test-email";
 import secretsRouter from "./routes/secrets";
 import securityRouter from "./routes/security";
+import metricsRouter from "./routes/metrics";
+import { metricsMiddleware } from "./lib/metrics";
 import { startMT5Scheduler } from "./lib/mt5/scheduler";
 import { startViolationDigestScheduler } from "./lib/violation-digest";
 
@@ -106,6 +108,9 @@ app.use("*", cors({
   origin: ["http://localhost:5173", "http://127.0.0.1:5173", "https://*.freebuff.dev", "https://*.vly.sh"],
   credentials: true,
 }));
+
+// Prometheus request counters (non-critical; never throws)
+app.use("*", metricsMiddleware);
 
 // Health check
 app.get("/api/health", (c) => c.json({ status: "ok", timestamp: Date.now() }));
@@ -842,6 +847,7 @@ app.route("/api/seed", seedRouter);
 app.route("/api/test-email", testEmailRouter);
 app.route("/api/admin/secrets", secretsRouter);
 app.route("/api/auth", securityRouter);
+app.route("/api/metrics", metricsRouter);
 
 // ═══════════════════════════════════════════════
 //  VITE PLUGIN — mounts Hono into dev server

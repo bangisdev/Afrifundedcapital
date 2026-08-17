@@ -121,6 +121,51 @@ services:
     # Keep container alive for cron-based renewal
     entrypoint: ["/bin/sh", "-c", "while true; do sleep 12h; done"]
 
+  # ─── Monitoring (Prometheus + Grafana) ────────────────────
+  # Run with: docker compose --profile prod --profile monitoring up --build
+  # Prometheus scrapes app-prod directly on the internal network — /metrics is
+  # never exposed through nginx. Grafana: http://<host>:3000 (admin / the
+  # GRAFANA_ADMIN_PASSWORD env, default admin).
+  prometheus:
+    profiles: ["monitoring"]
+    image: prom/prometheus:v2.55.1
+    container_name: afc-prometheus
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prom-data:/prometheus
+    depends_on:
+      app-prod:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - afc-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  grafana:
+    profiles: ["monitoring"]
+    image: grafana/grafana:11.4.0
+    container_name: afc-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - afc-network
+
 networks:
   afc-network:
     driver: bridge
@@ -139,4 +184,8 @@ volumes:
   certbot-certs:
     driver: local
   certbot-logs:
+    driver: local
+  prom-data:
+    driver: local
+  grafana-data:
     driver: local

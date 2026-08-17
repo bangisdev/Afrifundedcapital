@@ -1,0 +1,12 @@
+# Grafana dashboard provider — loads afrifundedcapital.json automatically.
+apiVersion: 1
+providers:
+  - name: "AfriFundedCapital"
+    orgId: 1
+    folder: "AfriFundedCapital"
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards

@@ -21,6 +21,7 @@ import { maybeGenerateCertificate } from "../certificates";
 import { createNotification, notify, notifyAdminsOfChallengeViolation } from "../notifications";
 import { challengeWarningEmail, challengeViolationEmail } from "../email";
 import { writeAuditLog } from "../audit";
+import { recordSyncOutcome, recordSyncDuration } from "../metrics";
 
 export interface SyncOutcome {
   synced: boolean;
@@ -109,7 +110,7 @@ function writeLifecycleAudit(
  * happened within the last 23 hours, and `{ synced: false, reason: "skipped" }`
  * when the challenge isn't in a syncable state.
  */
-export async function syncChallenge(
+async function syncChallengeInner(
   db: Db,
   provider: MT5Provider,
   challenge: ChallengeRow,
@@ -412,6 +413,29 @@ export async function syncChallenge(
   }
 
   return { synced: true, source: result.source };
+}
+
+/**
+ * Instrumented entry point for `syncChallengeInner` — records Prometheus sync
+ * run counts and duration (see `lib/metrics.ts`) for every caller: the
+ * background scheduler, the retry queue, and the manual/admin sync endpoints.
+ */
+export async function syncChallenge(
+  db: Db,
+  provider: MT5Provider,
+  challenge: ChallengeRow,
+): Promise<SyncOutcome> {
+  const started = Date.now();
+  try {
+    const outcome = await syncChallengeInner(db, provider, challenge);
+    recordSyncOutcome(outcome.synced ? "synced" : outcome.error ? "error" : "skipped");
+    return outcome;
+  } catch (err) {
+    recordSyncOutcome("error");
+    throw err;
+  } finally {
+    recordSyncDuration(Date.now() - started);
+  }
 }
 
 /** List active challenges that still need a sync (used by admin sync-all and queue). */
