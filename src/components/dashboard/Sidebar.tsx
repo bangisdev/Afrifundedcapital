@@ -168,7 +168,7 @@ export function Sidebar({
         {!effCollapsed && (
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <div className="h-7 w-7 rounded-lg bg-foreground text-background flex items-center justify-center text-[11px] font-semibold tracking-tight shrink-0">
+              <div className="h-7 w-7 rounded-lg bg-foreground text-background flex items-center justify-center text-[11px] font-semibold tracking-tight shrink-0 ring-1 ring-ring/40 shadow-sm">
                 AFC
               </div>
               <span className="text-sm font-medium tracking-tight truncate">AfriFundedCapital</span>
@@ -177,7 +177,7 @@ export function Sidebar({
           </div>
         )}
         {effCollapsed && (
-          <div className="h-7 w-7 rounded-lg bg-foreground text-background flex items-center justify-center text-[11px] font-semibold shrink-0">
+          <div className="h-7 w-7 rounded-lg bg-foreground text-background flex items-center justify-center text-[11px] font-semibold shrink-0 ring-1 ring-ring/40 shadow-sm">
             AFC
           </div>
         )}
@@ -209,17 +209,17 @@ export function Sidebar({
                     key={item.path}
                     onClick={() => go(item.path)}
                     className={cn(
-                      "relative w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-xs transition-colors",
+                      "relative w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-xs transition-all duration-150",
                       active
-                        ? "bg-secondary text-foreground font-medium"
-                        : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
+                        ? "bg-brand/10 text-foreground font-medium ring-1 ring-brand/15"
+                        : "text-muted-foreground hover:text-foreground hover:bg-secondary/60",
                       effCollapsed && "justify-center px-0",
                     )}
                   >
                     {active && (
-                      <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[3px] rounded-full bg-foreground" />
+                      <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[3px] rounded-full bg-brand" />
                     )}
-                    <span className={cn("shrink-0", active ? "text-foreground" : "text-muted-foreground/80")}>
+                    <span className={cn("shrink-0", active ? "text-brand" : "text-muted-foreground/80")}>
                       {item.icon}
                     </span>
                     {!effCollapsed && <span className="truncate">{item.label}</span>}

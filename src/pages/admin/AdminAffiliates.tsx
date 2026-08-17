@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
+import { AdminPageHeader } from "@/components/dashboard/AdminPageHeader";
 import { useState, useEffect } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Badge } from "@/components/ui/badge";
@@ -100,12 +101,7 @@ export default function AdminAffiliates() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-lg font-medium tracking-tight">Affiliate Management</h1>
-        <p className="text-xs text-muted-foreground mt-1">
-          Manage affiliates, commissions, and payout requests
-        </p>
-      </div>
+      <AdminPageHeader eyebrow="Growth" title="Affiliate Management" subtitle="Manage affiliates, commissions, and payout requests" />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="h-9">

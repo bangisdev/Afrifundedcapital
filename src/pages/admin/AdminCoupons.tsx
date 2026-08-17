@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
+import { AdminPageHeader } from "@/components/dashboard/AdminPageHeader";
 import { readResponseBody, errorMessageOf } from "@/lib/api";
 import { useState } from "react";
 import { useNow } from "@/hooks/use-now";
@@ -110,15 +111,16 @@ export default function AdminCoupons() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-medium tracking-tight">Coupons</h1>
-          <p className="text-xs text-muted-foreground mt-1">{totalCoupons} coupons · {totalRedemptions} total redemptions</p>
-        </div>
-        <Button size="sm" className="text-xs" onClick={() => setShowCreate(true)}>
-          <Plus className="h-3 w-3 mr-1" /> Create
-        </Button>
-      </div>
+      <AdminPageHeader
+        eyebrow="Growth"
+        title="Coupons"
+        subtitle={`${totalCoupons} coupons · ${totalRedemptions} total redemptions`}
+        actions={
+          <Button size="sm" className="text-xs" onClick={() => setShowCreate(true)}>
+            <Plus className="h-3 w-3 mr-1" /> Create
+          </Button>
+        }
+      />
 
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4">

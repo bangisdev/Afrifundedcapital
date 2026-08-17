@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
+import { AdminPageHeader } from "@/components/dashboard/AdminPageHeader";
 import { useNow } from "@/hooks/use-now";
 import { useQueryClient } from "@tanstack/react-query";
 import { readResponseBody, errorMessageOf } from "@/lib/api";
@@ -384,14 +385,11 @@ export default function AdminChallenges() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-medium tracking-tight">Challenge Management</h1>
-          <p className="text-xs text-muted-foreground mt-1">
-            Create and manage challenge templates and account sizes
-          </p>
-        </div>
-      </div>
+      <AdminPageHeader
+        eyebrow="Management"
+        title="Challenge Management"
+        subtitle="Create and manage challenge templates and account sizes"
+      />
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

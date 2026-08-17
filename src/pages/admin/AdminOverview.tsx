@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery } from "@/hooks/use-api";
+import { AdminPageHeader } from "@/components/dashboard/AdminPageHeader";
 import { readResponseBody } from "@/lib/api";
 import { useState, useMemo } from "react";
 import {
@@ -18,6 +19,8 @@ import {
   ChevronRight,
   Mail,
   Send,
+  ArrowUpRight,
+  ArrowDownRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -30,11 +33,13 @@ function StatCard({
   value,
   icon,
   tone = "default",
+  trend,
 }: {
   label: string;
   value: string | number;
   icon: React.ReactNode;
   tone?: "default" | "emerald" | "amber" | "blue";
+  trend?: { label: string; direction: "up" | "down" | "flat" };
 }) {
   return (
     <div className="card-subtle p-5">
@@ -44,6 +49,22 @@ function StatCard({
             {label}
           </p>
           <div className="kpi-value">{value}</div>
+          {trend && (
+            <div className="mt-2 flex items-center gap-1 text-[10px] font-medium">
+              <span
+                className={cn(
+                  "inline-flex items-center gap-0.5",
+                  trend.direction === "up" && "text-emerald-600 dark:text-emerald-400",
+                  trend.direction === "down" && "text-red-500 dark:text-red-400",
+                  trend.direction === "flat" && "text-muted-foreground",
+                )}
+              >
+                {trend.direction === "up" && <ArrowUpRight className="h-3 w-3" />}
+                {trend.direction === "down" && <ArrowDownRight className="h-3 w-3" />}
+                {trend.label}
+              </span>
+            </div>
+          )}
         </div>
         <div
           className={cn(
@@ -212,51 +233,52 @@ export default function AdminOverview() {
       : 0;
   const revenuePct = revenueTotal > 0 ? Math.round((Number(revenueGrowth?.thisMonth || 0) / revenueTotal) * 100) : 0;
 
+  // KPI trend chips — derived from the same stats the growth cards show, so
+  // nothing extra is fetched. Users: new in the last 30 days. Revenue:
+  // month-over-month change.
+  type Trend = { label: string; direction: "up" | "down" | "flat" };
+  const userTrend: Trend | undefined =
+    Number(userGrowth?.newUsers30d) > 0
+      ? { label: `+${userGrowth.newUsers30d} in 30d`, direction: "up" }
+      : undefined;
+  const revLast = Number(revenueGrowth?.lastMonth || 0);
+  const revThis = Number(revenueGrowth?.thisMonth || 0);
+  const revDeltaPct = revLast > 0 ? ((revThis - revLast) / revLast) * 100 : revThis > 0 ? 100 : 0;
+  const revenueTrend: Trend | undefined =
+    revLast > 0 || revThis > 0
+      ? {
+          label: `${revDeltaPct >= 0 ? "+" : ""}${revDeltaPct.toFixed(1)}% vs last month`,
+          direction: revDeltaPct >= 0 ? "up" : "down",
+        }
+      : undefined;
+
   return (
     <div className="space-y-6">
       {/* ─── Page header ─── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <p className="eyebrow mb-1">Operations</p>
-          <h1 className="text-xl font-medium tracking-tight">Admin Overview</h1>
-          <p className="text-xs text-muted-foreground mt-1">Platform statistics and analytics</p>
-        </div>
-        {hasNoData && (
-          <Button
-            size="sm"
-            className="text-xs"
-            onClick={handleBulkSeed}
-            disabled={bulkSeeding}
-          >
-            {bulkSeeding ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Database className="h-3 w-3 mr-1" />}
-            {bulkSeeding ? "Seeding..." : "Seed All Demo Data"}
-          </Button>
-        )}
-        {!hasNoData && (
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="text-xs"
-              onClick={handleSeedUsers}
-              disabled={seedingUsers}
-            >
-              {seedingUsers ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Users className="h-3 w-3 mr-1" />}
-              {seedingUsers ? "Seeding..." : "Seed Demo Users"}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="text-xs"
-              onClick={handleBulkSeed}
-              disabled={bulkSeeding}
-            >
+      <AdminPageHeader
+        eyebrow="Operations"
+        title="Admin Overview"
+        subtitle="Platform statistics and analytics"
+        actions={
+          hasNoData ? (
+            <Button size="sm" className="text-xs" onClick={handleBulkSeed} disabled={bulkSeeding}>
               {bulkSeeding ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Database className="h-3 w-3 mr-1" />}
-              {bulkSeeding ? "Seeding..." : "Re-Seed Demo Data"}
+              {bulkSeeding ? "Seeding..." : "Seed All Demo Data"}
             </Button>
-          </div>
-        )}
-      </div>
+          ) : (
+            <>
+              <Button size="sm" variant="outline" className="text-xs" onClick={handleSeedUsers} disabled={seedingUsers}>
+                {seedingUsers ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Users className="h-3 w-3 mr-1" />}
+                {seedingUsers ? "Seeding..." : "Seed Demo Users"}
+              </Button>
+              <Button size="sm" variant="outline" className="text-xs" onClick={handleBulkSeed} disabled={bulkSeeding}>
+                {bulkSeeding ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Database className="h-3 w-3 mr-1" />}
+                {bulkSeeding ? "Seeding..." : "Re-Seed Demo Data"}
+              </Button>
+            </>
+          )
+        }
+      />
 
       {/* ─── Seed results ─── */}
       {bulkSeedResult && (
@@ -322,9 +344,9 @@ export default function AdminOverview() {
 
       {/* ─── KPI cards ─── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Total Users" value={userStats?.totalUsers || 0} icon={<Users className="h-4 w-4" />} />
+        <StatCard label="Total Users" value={userStats?.totalUsers || 0} icon={<Users className="h-4 w-4" />} trend={userTrend} />
         <StatCard label="Total Challenges" value={challengeStats?.total || 0} icon={<BarChart3 className="h-4 w-4" />} />
-        <StatCard label="Revenue" value={`₦${(paymentStats?.revenue || 0).toLocaleString()}`} icon={<Wallet className="h-4 w-4" />} tone="blue" />
+        <StatCard label="Revenue" value={`₦${(paymentStats?.revenue || 0).toLocaleString()}`} icon={<Wallet className="h-4 w-4" />} tone="blue" trend={revenueTrend} />
         <StatCard label="Active Challenges" value={challengeStats?.active || 0} icon={<Activity className="h-4 w-4" />} />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
+import { AdminPageHeader } from "@/components/dashboard/AdminPageHeader";
 import { readResponseBody, errorMessageOf } from "@/lib/api";
 import { useState, type ReactNode } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
@@ -591,18 +592,17 @@ export default function AdminSettings() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-medium tracking-tight">Payment Settings</h1>
-          <p className="text-xs text-muted-foreground mt-1">
-            Configure payment providers and environment mode — gateway secrets can be updated here or set via environment variables
-          </p>
-        </div>
-        <Button size="sm" className="text-xs" onClick={handleBulkSeed} disabled={bulkSeeding}>
-          {bulkSeeding ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Database className="h-3 w-3 mr-1" />}
-          {bulkSeeding ? "Seeding..." : "Seed All Demo Data"}
-        </Button>
-      </div>
+      <AdminPageHeader
+        eyebrow="System"
+        title="Payment Settings"
+        subtitle="Configure payment providers and environment mode — gateway secrets can be updated here or set via environment variables"
+        actions={
+          <Button size="sm" className="text-xs" onClick={handleBulkSeed} disabled={bulkSeeding}>
+            {bulkSeeding ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Database className="h-3 w-3 mr-1" />}
+            {bulkSeeding ? "Seeding..." : "Seed All Demo Data"}
+          </Button>
+        }
+      />
 
       {/* Keys saved here are encrypted with a stable key only when
           APP_SECRETS_KEY / JWT_PRIVATE_KEY is set — otherwise they would be

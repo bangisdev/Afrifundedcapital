@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
+import { AdminPageHeader } from "@/components/dashboard/AdminPageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +29,7 @@ import {
   Trash2,
   Save,
   Clock,
+  Wallet,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
@@ -235,12 +237,18 @@ export default function AdminMT5() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div><h1 className="text-lg font-medium tracking-tight">MT5 Manager</h1><p className="text-xs text-muted-foreground mt-1">Provision accounts, monitor the gateway, retry queue, and reconciliation</p></div>
-        {tab === "accounts" && (
-          <Button size="sm" className="text-xs" onClick={() => setShowCreate(true)}><Plus className="h-3 w-3 mr-1" /> Create Account</Button>
-        )}
-      </div>
+      <AdminPageHeader
+        eyebrow="Infrastructure"
+        title="MT5 Manager"
+        subtitle="Provision accounts, monitor the gateway, retry queue, and reconciliation"
+        actions={
+          tab === "accounts" ? (
+            <Button size="sm" className="text-xs" onClick={() => setShowCreate(true)}>
+              <Plus className="h-3 w-3 mr-1" /> Create Account
+            </Button>
+          ) : undefined
+        }
+      />
 
       {/* Connector status banner */}
       <div className="card-subtle p-4 flex items-center justify-between flex-wrap gap-3">
@@ -289,15 +297,15 @@ export default function AdminMT5() {
               <div><div className="text-lg font-medium">{stats.total}</div><div className="text-[10px] text-muted-foreground">Total Accounts</div></div>
             </div>
             <div className="card-subtle p-3 flex items-center gap-3">
-              <div className="h-8 w-8 rounded-md bg-secondary flex items-center justify-center"><Server className="h-4 w-4 text-muted-foreground" /></div>
+              <div className="h-8 w-8 rounded-md bg-emerald-500/10 flex items-center justify-center"><Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /></div>
               <div><div className="text-lg font-medium">{stats.active}</div><div className="text-[10px] text-muted-foreground">Active</div></div>
             </div>
             <div className="card-subtle p-3 flex items-center gap-3">
-              <div className="h-8 w-8 rounded-md bg-secondary flex items-center justify-center"><Server className="h-4 w-4 text-muted-foreground" /></div>
+              <div className="h-8 w-8 rounded-md bg-amber-500/10 flex items-center justify-center"><ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400" /></div>
               <div><div className="text-lg font-medium">{stats.suspended}</div><div className="text-[10px] text-muted-foreground">Suspended</div></div>
             </div>
             <div className="card-subtle p-3 flex items-center gap-3">
-              <div className="h-8 w-8 rounded-md bg-secondary flex items-center justify-center"><Server className="h-4 w-4 text-muted-foreground" /></div>
+              <div className="h-8 w-8 rounded-md bg-blue-500/10 flex items-center justify-center"><Wallet className="h-4 w-4 text-blue-600 dark:text-blue-400" /></div>
               <div><div className="text-lg font-medium">${(stats.totalBalance || 0).toLocaleString()}</div><div className="text-[10px] text-muted-foreground">Combined Balance</div></div>
             </div>
           </div>
@@ -358,7 +366,11 @@ export default function AdminMT5() {
           {/* List */}
           <div className="space-y-1">
             {accounts.length === 0 ? (
-              <div className="card-subtle p-8 text-center text-muted-foreground text-xs">No MT5 accounts found</div>
+              <EmptyList
+                icon={<Server className="h-5 w-5" />}
+                title="No MT5 accounts found"
+                hint="Accounts appear here once a challenge is funded, or you can provision one manually with Create Account."
+              />
             ) : (
               accounts.map((acc: any) => (
                 <div key={acc.id} className="card-subtle p-4 flex items-center justify-between">
@@ -575,7 +587,11 @@ export default function AdminMT5() {
 
           <div className="space-y-1">
             {(queueData?.items || []).length === 0 ? (
-              <div className="card-subtle p-8 text-center text-muted-foreground text-xs">Queue is empty</div>
+              <EmptyList
+                icon={<Activity className="h-5 w-5" />}
+                title="Queue is empty"
+                hint="Sync jobs that fail (for example, a gateway timeout) land here and are retried with backoff."
+              />
             ) : (
               (queueData?.items || []).map((job: any) => (
                 <div key={job.id} className="card-subtle p-3 flex items-center justify-between">
@@ -614,7 +630,11 @@ export default function AdminMT5() {
 
           <div className="space-y-1">
             {(reconcileData?.items || []).length === 0 ? (
-              <div className="card-subtle p-8 text-center text-muted-foreground text-xs">No reconciliation entries yet — run one to compare live balances against stored values</div>
+              <EmptyList
+                icon={<RefreshCcw className="h-5 w-5" />}
+                title="No reconciliation entries yet"
+                hint="Run a reconciliation to compare live MT5 balances against the values stored locally."
+              />
             ) : (
               (reconcileData?.items || []).map((entry: any) => (
                 <div key={entry.id} className="card-subtle p-3 flex items-center justify-between">
@@ -644,6 +664,21 @@ export default function AdminMT5() {
           <NewsCalendarPanel />
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+/**
+ * Consistent empty state for the list panels — icon, title and optional hint.
+ */
+function EmptyList({ icon, title, hint }: { icon: React.ReactNode; title: string; hint?: string }) {
+  return (
+    <div className="card-subtle px-6 py-10 flex flex-col items-center justify-center gap-2.5 text-center">
+      <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center text-muted-foreground">
+        {icon}
+      </div>
+      <p className="text-sm font-medium">{title}</p>
+      {hint && <p className="text-xs text-muted-foreground max-w-sm">{hint}</p>}
     </div>
   );
 }

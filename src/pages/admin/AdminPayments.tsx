@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
+import { AdminPageHeader } from "@/components/dashboard/AdminPageHeader";
 import { useState, useEffect, useMemo } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Badge } from "@/components/ui/badge";
@@ -222,39 +223,40 @@ export default function AdminPayments() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-medium tracking-tight">Payments</h1>
-          <p className="text-xs text-muted-foreground mt-1">Manage transactions, refunds, and revenue</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs"
-            disabled={cleanupStale.isPending}
-            onClick={async () => {
-              try {
-                const res = await cleanupStale.mutateAsync({});
-                toast.success(res?.message || "Cleanup complete");
-                refetch();
-              } catch (e: any) {
-                toast.error(e.message || "Cleanup failed");
-              }
-            }}
-          >
-            {cleanupStale.isPending ? (
-              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-            ) : (
-              <Trash2 className="h-3 w-3 mr-1" />
-            )}
-            Clean Up Abandoned
-          </Button>
-          <Button variant="outline" size="sm" className="text-xs" onClick={() => refetch()}>
-            <RefreshCw className="h-3 w-3 mr-1" /> Refresh
-          </Button>
-        </div>
-      </div>
+      <AdminPageHeader
+        eyebrow="Finance"
+        title="Payments"
+        subtitle="Manage transactions, refunds, and revenue"
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs"
+              disabled={cleanupStale.isPending}
+              onClick={async () => {
+                try {
+                  const res = await cleanupStale.mutateAsync({});
+                  toast.success(res?.message || "Cleanup complete");
+                  refetch();
+                } catch (e: any) {
+                  toast.error(e.message || "Cleanup failed");
+                }
+              }}
+            >
+              {cleanupStale.isPending ? (
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              ) : (
+                <Trash2 className="h-3 w-3 mr-1" />
+              )}
+              Clean Up Abandoned
+            </Button>
+            <Button variant="outline" size="sm" className="text-xs" onClick={() => refetch()}>
+              <RefreshCw className="h-3 w-3 mr-1" /> Refresh
+            </Button>
+          </>
+        }
+      />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

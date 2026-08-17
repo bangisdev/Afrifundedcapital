@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery } from "@/hooks/use-api";
+import { AdminPageHeader } from "@/components/dashboard/AdminPageHeader";
 import { readResponseBody, errorMessageOf } from "@/lib/api";
 import { useState, useEffect, useMemo } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
@@ -262,10 +263,7 @@ export default function AdminUsers() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-lg font-medium tracking-tight">User Management</h1>
-        <p className="text-xs text-muted-foreground mt-1">View, edit, and manage all platform users</p>
-      </div>
+      <AdminPageHeader eyebrow="People" title="User Management" subtitle="View, edit, and manage all platform users" />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

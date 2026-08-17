@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery } from "@/hooks/use-api";
+import { AdminPageHeader } from "@/components/dashboard/AdminPageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -224,10 +225,7 @@ export default function AdminAuditLogs() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-lg font-medium tracking-tight">Audit Logs</h1>
-        <p className="text-xs text-muted-foreground mt-1">Security and activity trail across the platform</p>
-      </div>
+      <AdminPageHeader eyebrow="System" title="Audit Logs" subtitle="Security and activity trail across the platform" />
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
