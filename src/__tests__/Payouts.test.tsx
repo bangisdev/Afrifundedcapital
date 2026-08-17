@@ -197,17 +197,17 @@ describe("Payouts Page", () => {
 
   // ─── Loading state ─────────────────────────────────────
   describe("Loading State", () => {
-    it("shows a spinner when payout data is loading", () => {
+    it("shows a skeleton when payout data is loading", () => {
       // No data set = all queries return isLoading: true
       clearAllQueryData();
       const { container } = render(<Payouts />);
-      expect(container.querySelector(".animate-spin")).toBeTruthy();
+      expect(container.querySelector("[aria-busy='true']")).toBeTruthy();
     });
 
-    it("hides spinner once data is loaded", () => {
+    it("hides skeleton once data is loaded", () => {
       setQueryData({});
       const { container } = render(<Payouts />);
-      expect(container.querySelector(".animate-spin")).toBeNull();
+      expect(container.querySelector("[aria-busy='true']")).toBeNull();
     });
   });
 
@@ -315,15 +315,15 @@ describe("Payouts Page", () => {
       setQueryData({});
       delete queryDataMap["payouts/my"];
       render(<Payouts />);
-      // With payouts/my undefined, isLoading is true → spinner
+      // With payouts/my undefined, isLoading is true → skeleton
       const { container } = render(<Payouts />);
-      expect(container.querySelector(".animate-spin")).toBeTruthy();
+      expect(container.querySelector("[aria-busy='true']")).toBeTruthy();
     });
 
     it("renders DollarSign icon in empty state", () => {
       setQueryData({ "payouts/my": [] });
       const { container } = render(<Payouts />);
-      const emptyIcon = container.querySelector(".h-8.w-8");
+      const emptyIcon = container.querySelector("[data-slot='empty-icon']");
       expect(emptyIcon).toBeTruthy();
     });
   });
@@ -378,7 +378,7 @@ describe("Payouts Page", () => {
         "payouts/my": [makePayout({ amount: 60000, requestedAt: date.getTime() })],
       });
       render(<Payouts />);
-      expect(screen.getByText(/6\/15\/2025/)).toBeTruthy();
+      expect(screen.getByText(/Jun 15, 2025/)).toBeTruthy();
     });
 
     it("handles missing requestedAt gracefully", () => {
@@ -764,7 +764,7 @@ describe("Payouts Page", () => {
       // Initially loading (no data set)
       clearAllQueryData();
       const { container } = render(<Payouts />);
-      expect(container.querySelector(".animate-spin")).toBeTruthy();
+      expect(container.querySelector("[aria-busy='true']")).toBeTruthy();
 
       // Data loads (fresh render with data)
       clearAllQueryData();
@@ -772,7 +772,7 @@ describe("Payouts Page", () => {
         "payouts/my": [makePayout({ amount: 60000 })],
       });
       const { container: container2 } = render(<Payouts />);
-      expect(container2.querySelector(".animate-spin")).toBeNull();
+      expect(container2.querySelector("[aria-busy='true']")).toBeNull();
       expect(screen.getByText("Payouts")).toBeTruthy();
       expect(screen.getByText("₦60,000")).toBeTruthy();
     });

@@ -4,12 +4,14 @@ import { useState, useEffect } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { PageLoader } from "@/components/dashboard/PageLoader";
 import {
-  Loader2, Bell, Search, CheckCheck, DollarSign, ShieldCheck,
+  Bell, Search, CheckCheck, DollarSign, ShieldCheck,
   ShieldX, AlertTriangle, Award, UserPlus, Ticket, Gift,
   Settings, BarChart3, ChevronDown, ChevronLeft, ChevronRight,
   ArrowUp, ArrowDown, ArrowUpDown,
 } from "lucide-react";
+import { formatRelativeTime } from "@/lib/utils";
 import { toast } from "sonner";
 
 const NOTIFICATION_ICONS: Record<string, React.ReactNode> = {
@@ -48,18 +50,6 @@ interface NotificationsResponse {
 }
 
 const PAGE_SIZES = [10, 25, 50];
-
-function getRelativeDate(timestamp: number) {
-  const diffMs = Date.now() - timestamp;
-  const diffMinutes = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-  if (diffMinutes < 1) return "Just now";
-  if (diffMinutes < 60) return `${diffMinutes}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return new Date(timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
 
 export default function Notifications() {
   const [search, setSearch] = useState("");
@@ -140,7 +130,7 @@ export default function Notifications() {
   const hasUnread = stats.unread > 0;
 
   if (isLoading) {
-    return <div className="flex items-center justify-center h-64"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
+    return <PageLoader rows={6} />;
   }
 
   return (
@@ -207,7 +197,7 @@ export default function Notifications() {
                 {!n.read && <div className="h-1.5 w-1.5 rounded-full bg-foreground shrink-0" />}
               </div>
               <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.message}</p>
-              <span className="text-[10px] text-muted-foreground mt-1 block">{getRelativeDate(n.createdAt)}</span>
+              <span className="text-[10px] text-muted-foreground mt-1 block">{formatRelativeTime(n.createdAt)}</span>
             </div>
           </div>
         ))}

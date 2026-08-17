@@ -277,10 +277,10 @@ describe("Challenges Page", () => {
 
   // ─── Loading state ─────────────────────────────────────
   describe("Loading State", () => {
-    it("shows a spinner when data is loading", () => {
+    it("shows a skeleton when data is loading", () => {
       Object.keys(queryDataMap).forEach((k) => delete queryDataMap[k]);
       const { container } = render(<Challenges />);
-      expect(container.querySelector(".animate-spin")).toBeTruthy();
+      expect(container.querySelector("[aria-busy='true']")).toBeTruthy();
     });
   });
 

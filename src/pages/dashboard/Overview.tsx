@@ -4,10 +4,19 @@ import { useNavigate } from "react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { PageLoader } from "@/components/dashboard/PageLoader";
+import {
+  Empty,
+  EmptyHeader,
+  EmptyTitle,
+  EmptyDescription,
+  EmptyContent,
+  EmptyMedia,
+} from "@/components/ui/empty";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRight, ChevronRight, Sparkles, X, Loader2, BarChart3, Award, Wallet } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { ArrowRight, ChevronRight, Sparkles, X, BarChart3, Award, Wallet } from "lucide-react";
+import { cn, formatMoney, formatRelativeTime } from "@/lib/utils";
 
 const SKIP_BANNER_KEY = "_afc_onboarding_banner_dismissed";
 
@@ -53,11 +62,7 @@ export default function Overview() {
   const isLoading = metricsLoading || challengesLoading || walletLoading;
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   const firstName = user?.name?.split(" ")[0] || "Trader";
@@ -78,7 +83,7 @@ export default function Overview() {
     },
     {
       label: "Wallet Balance",
-      value: `${(wallet?.balance || 0).toLocaleString()} ${wallet?.currency || "NGN"}`,
+      value: formatMoney(wallet?.balance, wallet?.currency || "NGN"),
       path: "/dashboard/wallet",
       icon: <Wallet className="h-4 w-4" />,
     },
@@ -184,31 +189,43 @@ export default function Overview() {
               <button
                 key={ch.id}
                 onClick={() => navigate("/dashboard/challenges")}
-                className="w-full card-subtle p-4 flex items-center justify-between text-left hover:bg-secondary/30 transition-colors"
+                className="w-full card-subtle p-4 flex items-center justify-between text-left hover:bg-secondary/30 transition-colors group"
               >
                 <div className="min-w-0">
-                  <div className="text-sm font-medium">Challenge #{ch.id}</div>
+                  <div className="text-sm font-medium truncate">
+                    {ch.templateName || `Challenge #${ch.id}`}
+                  </div>
                   <div className="text-xs text-muted-foreground mt-0.5">
                     ${ch.accountSize?.toLocaleString()} account
+                    {ch.createdAt ? ` · ${formatRelativeTime(ch.createdAt)}` : ""}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className={statusPillStyle(ch.status)}>{ch.status?.replace(/_/g, " ")}</span>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
                 </div>
               </button>
             ))}
           </div>
         </div>
       ) : (
-        <div className="card-subtle p-10 text-center">
-          <p className="text-sm text-muted-foreground mb-4">
-            You haven't purchased any challenges yet.
-          </p>
-          <Button size="sm" onClick={() => navigate("/dashboard/challenges")}>
-            Browse Challenges
-          </Button>
-        </div>
+        <Empty className="card-subtle p-10">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <BarChart3 className="h-6 w-6" />
+            </EmptyMedia>
+            <EmptyTitle>No challenges yet</EmptyTitle>
+            <EmptyDescription>
+              You haven't purchased any challenges yet. Browse the available
+              account sizes and start your funded journey.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button size="sm" onClick={() => navigate("/dashboard/challenges")}>
+              Browse Challenges
+            </Button>
+          </EmptyContent>
+        </Empty>
       )}
     </div>
   );

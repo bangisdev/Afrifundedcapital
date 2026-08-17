@@ -198,24 +198,24 @@ describe("Wallet Page", () => {
 
   // ─── Loading state ─────────────────────────────────────
   describe("Loading State", () => {
-    it("shows spinner when wallet data is loading", () => {
+    it("shows skeleton loader when wallet data is loading", () => {
       clearAllQueryData();
       const { container } = render(<Wallet />);
-      expect(container.querySelector(".animate-spin")).toBeTruthy();
+      expect(container.querySelector(".animate-pulse")).toBeTruthy();
     });
 
-    it("hides spinner once all data is loaded", () => {
+    it("hides skeleton loader once all data is loaded", () => {
       setQueryData({});
       const { container } = render(<Wallet />);
-      expect(container.querySelector(".animate-spin")).toBeNull();
+      expect(container.querySelector(".animate-pulse")).toBeNull();
     });
 
-    it("shows spinner when transactions are still loading", () => {
+    it("shows row skeletons when transactions are still loading", () => {
       queryDataMap["wallet/my"] = makeWallet();
       queryDataMap["payments/my"] = [];
       // wallet/txns not set = loading
       const { container } = render(<Wallet />);
-      expect(container.querySelector(".animate-spin")).toBeTruthy();
+      expect(container.querySelector(".animate-pulse")).toBeTruthy();
     });
   });
 
@@ -404,7 +404,7 @@ describe("Wallet Page", () => {
         "wallet/txns": [makeTransaction({ type: "deposit", amount: 50000, description: "Deposit", createdAt: date.getTime() })],
       });
       render(<Wallet />);
-      expect(screen.getByText(/15 Jun 2025/)).toBeTruthy();
+      expect(screen.getByText(/Jun 15, 2025/)).toBeTruthy();
     });
 
     it("handles missing createdAt gracefully", () => {
@@ -792,7 +792,7 @@ describe("Wallet Page", () => {
 
       await user.click(screen.getByText("Payment History"));
       await user.click(screen.getByText("Challenge Purchase"));
-      expect(screen.getByText("6/15/2025")).toBeTruthy();
+      expect(screen.getByText("Jun 15, 2025")).toBeTruthy();
     });
 
     it("closes payment dialog on close button", async () => {
@@ -1113,11 +1113,11 @@ describe("Wallet Page", () => {
     it("loading → data transition works correctly", () => {
       clearAllQueryData();
       const { container } = render(<Wallet />);
-      expect(container.querySelector(".animate-spin")).toBeTruthy();
+      expect(container.querySelector(".animate-pulse")).toBeTruthy();
 
       setQueryData({});
       const { container: c2 } = render(<Wallet />);
-      expect(c2.querySelector(".animate-spin")).toBeNull();
+      expect(c2.querySelector(".animate-pulse")).toBeNull();
       expect(screen.getByText("Wallet")).toBeTruthy();
     });
 

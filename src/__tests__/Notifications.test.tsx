@@ -137,16 +137,16 @@ describe("Notifications Page", () => {
 
   // ─── Loading state ─────────────────────────────────────
   describe("Loading State", () => {
-    it("shows a spinner when data is loading", () => {
+    it("shows a skeleton when data is loading", () => {
       clearAllQueryData();
       const { container } = render(<Notifications />);
-      expect(container.querySelector(".animate-spin")).toBeTruthy();
+      expect(container.querySelector("[aria-busy='true']")).toBeTruthy();
     });
 
-    it("hides spinner once data is loaded", () => {
+    it("hides skeleton once data is loaded", () => {
       setQueryData({});
       const { container } = render(<Notifications />);
-      expect(container.querySelector(".animate-spin")).toBeNull();
+      expect(container.querySelector("[aria-busy='true']")).toBeNull();
     });
   });
 

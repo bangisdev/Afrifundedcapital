@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { readResponseBody } from "@/lib/api";
-import { newsBlackoutWindow, RULE_HINTS } from "@/lib/utils";
+import { newsBlackoutWindow, RULE_HINTS, formatMoney, formatShortDate } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useAuth } from "@/hooks/use-auth";
@@ -22,8 +22,16 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@/components/ui/tabs";
+import { PageLoader } from "@/components/dashboard/PageLoader";
+import {
+  Empty,
+  EmptyHeader,
+  EmptyTitle,
+  EmptyDescription,
+  EmptyMedia,
+} from "@/components/ui/empty";
 import { useNavigate, useSearchParams, Link } from "react-router";
-import { Loader2, CheckCircle, XCircle, ChevronRight, ChevronLeft, ArrowUp, ArrowDown, ArrowUpDown, Gift, Check, X, ExternalLink } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, ChevronRight, ChevronLeft, ArrowUp, ArrowDown, ArrowUpDown, Gift, Check, X, ExternalLink, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
 
 type Doc = Record<string, any>;
@@ -261,11 +269,7 @@ export default function Challenges() {
   const isLoading = templatesLoading || myLoading;
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <PageLoader rows={5} />;
   }
 
   const ruleFlag = (label: string, allowed: boolean, value?: string, hint?: string) => (
@@ -338,7 +342,7 @@ export default function Challenges() {
       const data = await readResponseBody(res);
       if (data.valid) {
         setCouponResult(data);
-        toast.success(`Coupon applied! You save ₦${data.discount?.toLocaleString()}`);
+        toast.success(`Coupon applied! You save ${formatMoney(data.discount)}`);
       } else {
         setCouponError(data.error || "Invalid coupon");
         setCouponResult(null);
@@ -474,9 +478,17 @@ export default function Challenges() {
 
         <TabsContent value="my-challenges" className="space-y-3">
           {myChallenges.length === 0 ? (
-            <div className="card-subtle p-8 text-center">
-              <p className="text-sm text-muted-foreground">No challenges yet. Start your journey!</p>
-            </div>
+            <Empty className="card-subtle p-8">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <BarChart3 className="h-6 w-6" />
+                </EmptyMedia>
+                <EmptyTitle>No challenges yet. Start your journey!</EmptyTitle>
+                <EmptyDescription>
+                  Pick an account size above and begin your evaluation — or apply a coupon at checkout.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : (
             <>
               {/* Sort Toolbar */}
@@ -498,12 +510,12 @@ export default function Challenges() {
                     <div className="min-w-0">
                       <div className="text-sm font-medium truncate">
                         {ch.templateName
-                          ? `${ch.templateName} · $${Number(ch.accountSize || 0).toLocaleString()}`
+                          ? `${ch.templateName} · ${formatMoney(Number(ch.accountSize || 0), "USD")}`
                           : `Challenge #${ch.id}`}
                       </div>
                       <div className="text-xs text-muted-foreground mt-0.5">
                         {ch.templateName ? `Challenge #${ch.id} · ` : ""}
-                        Started {ch.createdAt ? new Date(ch.createdAt).toLocaleDateString() : "N/A"}
+                        Started {formatShortDate(ch.createdAt) || "N/A"}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -572,12 +584,12 @@ export default function Challenges() {
                         <div className="min-w-0">
                           <div className="text-sm font-medium font-mono tracking-wider">{cp.code || `#${cp.id}`}</div>
                           <div className="text-[10px] text-muted-foreground">
-                            Redeemed {cp.redeemedAt ? new Date(cp.redeemedAt).toLocaleDateString() : ""}
+                            Redeemed {formatShortDate(cp.redeemedAt)}
                           </div>
                         </div>
                       </div>
                       <span className="text-sm font-medium tabular-nums shrink-0 ml-4">
-                        {cp.discountAmount ? `-₦${cp.discountAmount.toLocaleString()}` : "—"}
+                        {cp.discountAmount ? `-${formatMoney(cp.discountAmount)}` : "—"}
                       </span>
                     </div>
                   ))}
@@ -705,7 +717,7 @@ export default function Challenges() {
                     </div>
                     {acct?.price != null && (
                       <span className="text-sm font-medium tabular-nums shrink-0">
-                        {acct.currency || "NGN"} {Number(acct.price).toLocaleString()}
+                        {formatMoney(Number(acct.price), acct.currency || "NGN")}
                       </span>
                     )}
                   </div>
@@ -730,7 +742,7 @@ export default function Challenges() {
                     disabled={paymentState.status === "initiating" || paymentState.status === "verifying"}
                   >
                     <div className="text-sm font-medium">{size.label}</div>
-                    <div className="text-xs text-muted-foreground mt-1">{size.currency} {size.price?.toLocaleString()}</div>
+                    <div className="text-xs text-muted-foreground mt-1">{formatMoney(Number(size.price), size.currency || "NGN")}</div>
                   </button>
                 ))}
               </div>
@@ -757,8 +769,8 @@ export default function Challenges() {
                 {couponResult && (
                   <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1">
                     ✓ {couponResult.discountType === "percentage"
-                      ? `${couponResult.discountValue}% off — You save ₦${couponResult.discount?.toLocaleString()}`
-                      : `₦${couponResult.discountValue} off — You save ₦${couponResult.discount?.toLocaleString()}`}
+                      ? `${couponResult.discountValue}% off — You save ${formatMoney(couponResult.discount)}`
+                      : `${formatMoney(couponResult.discountValue)} off — You save ${formatMoney(couponResult.discount)}`}
                   </p>
                 )}
               </div>
@@ -768,18 +780,18 @@ export default function Challenges() {
                   {couponResult && (
                     <div className="flex justify-between text-xs">
                       <span className="text-muted-foreground">Original Price</span>
-                      <span className="text-muted-foreground line-through">₦{sizes.find((s: Doc) => String(s.id) === selectedSize)?.price?.toLocaleString()}</span>
+                      <span className="text-muted-foreground line-through">{formatMoney(Number(sizes.find((s: Doc) => String(s.id) === selectedSize)?.price))}</span>
                     </div>
                   )}
                   {couponResult && (
                     <div className="flex justify-between text-xs text-emerald-600 dark:text-emerald-400">
                       <span>Discount</span>
-                      <span>-₦{couponResult.discount?.toLocaleString()}</span>
+                      <span>-{formatMoney(couponResult.discount)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-sm font-medium">
                     <span className="text-muted-foreground">Total</span>
-                    <span>₦{(couponResult?.finalAmount ?? sizes.find((s: Doc) => String(s.id) === selectedSize)?.price)?.toLocaleString()}</span>
+                    <span className="tabular-nums">{formatMoney(Number(couponResult?.finalAmount ?? sizes.find((s: Doc) => String(s.id) === selectedSize)?.price))}</span>
                   </div>
                 </div>
               )}

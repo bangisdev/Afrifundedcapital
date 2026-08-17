@@ -118,20 +118,20 @@ describe("Overview Page", () => {
 
   // ─── Loading state ─────────────────────────────────────
   describe("Loading State", () => {
-    it("shows spinner when data is loading", () => {
+    it("shows skeleton loader when data is loading", () => {
       clearAllQueryData();
       const { container } = render(<Overview />);
-      expect(container.querySelector(".animate-spin")).toBeTruthy();
+      expect(container.querySelector(".animate-pulse")).toBeTruthy();
     });
 
-    it("hides spinner once loaded", () => {
+    it("hides skeleton loader once loaded", () => {
       setQueryData({
         "metrics/dashboard": { activeChallenges: 0, fundedAccounts: 0, totalChallenges: 0 },
         "challenges/my": [],
         "wallet/my": { balance: 0, currency: "NGN" },
       });
       const { container } = render(<Overview />);
-      expect(container.querySelector(".animate-spin")).toBeNull();
+      expect(container.querySelector(".animate-pulse")).toBeNull();
     });
   });
 
@@ -182,7 +182,7 @@ describe("Overview Page", () => {
       render(<Overview />);
       expect(screen.getByText("3")).toBeTruthy();
       expect(screen.getByText("1")).toBeTruthy();
-      expect(screen.getByText("150,000 NGN")).toBeTruthy();
+      expect(screen.getByText("₦150,000")).toBeTruthy();
     });
 
     it("shows zero when no data", () => {
@@ -360,13 +360,13 @@ describe("Overview Page", () => {
       expect(screen.getByText(/^Good (morning|afternoon|evening)/)).toBeTruthy();
     });
 
-    it("wallet shows default currency when not set", () => {
+    it("wallet falls back to NGN formatting when currency not set", () => {
       setQueryData({
         "metrics/dashboard": { activeChallenges: 0, fundedAccounts: 0, totalChallenges: 0 },
         "wallet/my": { balance: 0 },
       });
       render(<Overview />);
-      expect(screen.getByText(/NGN/)).toBeTruthy();
+      expect(screen.getByText("₦0")).toBeTruthy();
     });
   });
 });

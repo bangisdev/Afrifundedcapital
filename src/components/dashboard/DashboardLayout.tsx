@@ -149,8 +149,11 @@ export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boole
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground text-sm">Loading…</div>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3">
+        <div className="h-8 w-8 rounded-lg bg-foreground text-background flex items-center justify-center text-xs font-semibold tracking-tight ring-1 ring-ring/40 shadow-sm animate-pulse">
+          AFC
+        </div>
+        <div className="text-xs text-muted-foreground animate-pulse">Loading…</div>
       </div>
     );
   }

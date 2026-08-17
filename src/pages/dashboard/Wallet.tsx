@@ -4,6 +4,16 @@ import { useState, useEffect } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { PageLoader } from "@/components/dashboard/PageLoader";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Empty,
+  EmptyHeader,
+  EmptyTitle,
+  EmptyDescription,
+  EmptyContent,
+  EmptyMedia,
+} from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -11,6 +21,7 @@ import {
   FileText, CheckCircle, XCircle, Clock, WalletIcon, TrendingUp,
   ArrowUp, ArrowDown, ArrowUpDown,
 } from "lucide-react";
+import { formatMoney, formatRelativeTime, formatShortDate } from "@/lib/utils";
 import { toast } from "sonner";
 
 type TabView = "transactions" | "payments";
@@ -108,7 +119,7 @@ export default function Wallet() {
   useResetOnChange([pTotalPages, pPage], () => setPPage(1), pPage > pTotalPages && pTotalPages > 0);
 
   if (wLoading) {
-    return <div className="flex items-center justify-center h-64"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
+    return <PageLoader />;
   }
 
   const handleWithdraw = async () => {
@@ -224,7 +235,7 @@ export default function Wallet() {
       <div className="grid md:grid-cols-3 gap-4">
         <div className="card-subtle p-6">
           <div className="flex items-center gap-2 mb-2"><WalletIcon className="h-3.5 w-3.5 text-muted-foreground" /><span className="stat-label">Main Balance</span></div>
-          <div className="text-3xl font-light tracking-tight mt-1">₦{(wallet?.balance || 0).toLocaleString()}</div>
+          <div className="text-3xl font-light tracking-tight tabular-nums mt-1">{formatMoney(wallet?.balance, wallet?.currency || "NGN")}</div>
         </div>
         <div className="card-subtle p-6 flex flex-col justify-between">
           <div className="flex items-center gap-2 mb-2"><TrendingUp className="h-3.5 w-3.5 text-muted-foreground" /><span className="stat-label">This Month</span></div>
@@ -267,9 +278,30 @@ export default function Wallet() {
           )}
 
           {tLoading && transactions.length === 0 ? (
-            <div className="flex items-center justify-center h-32"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+            <div className="space-y-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="card-subtle p-3.5 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <Skeleton className="h-8 w-8 rounded-full shrink-0" />
+                    <div className="space-y-2 flex-1 min-w-0">
+                      <Skeleton className="h-3 w-40" />
+                      <Skeleton className="h-2.5 w-20" />
+                    </div>
+                  </div>
+                  <Skeleton className="h-4 w-16 shrink-0" />
+                </div>
+              ))}
+            </div>
           ) : transactions.length === 0 ? (
-            <div className="card-subtle p-8 text-center"><FileText className="h-8 w-8 mx-auto mb-3 text-muted-foreground" /><p className="text-xs text-muted-foreground">No transactions found</p></div>
+            <Empty className="card-subtle p-8">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <FileText className="h-6 w-6" />
+                </EmptyMedia>
+                <EmptyTitle>No transactions found</EmptyTitle>
+                <EmptyDescription>Your wallet activity will appear here once you make a deposit or purchase a challenge.</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : (
             <>
               <div className="space-y-1">
@@ -279,11 +311,11 @@ export default function Wallet() {
                       <div className="h-8 w-8 rounded-full border border-border flex items-center justify-center shrink-0">{txIcon(tx.type)}</div>
                       <div className="min-w-0">
                         <div className="text-xs font-medium truncate">{tx.description}</div>
-                        <div className="text-[10px] text-muted-foreground mt-0.5">{tx.createdAt ? new Date(tx.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }) : ""}</div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">{formatRelativeTime(tx.createdAt)}</div>
                       </div>
                     </div>
                     <div className={`text-sm font-light tabular-nums shrink-0 ml-4 ${txColor(tx.type)}`}>
-                      {tx.type === "withdrawal" || tx.type === "challenge_purchase" ? "-" : "+"}₦{(tx.amount || 0).toLocaleString()}
+                      {tx.type === "withdrawal" || tx.type === "challenge_purchase" ? "-" : "+"}{formatMoney(tx.amount, tx.currency || "NGN")}
                     </div>
                   </div>
                 ))}
@@ -314,9 +346,30 @@ export default function Wallet() {
       {activeTab === "payments" && (
         <div className="space-y-4">
           {pLoading && payments.length === 0 ? (
-            <div className="flex items-center justify-center h-32"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="card-subtle p-3.5 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <Skeleton className="h-8 w-8 rounded-full shrink-0" />
+                    <div className="space-y-2 flex-1 min-w-0">
+                      <Skeleton className="h-3 w-44" />
+                      <Skeleton className="h-2.5 w-16" />
+                    </div>
+                  </div>
+                  <Skeleton className="h-4 w-16 shrink-0" />
+                </div>
+              ))}
+            </div>
           ) : payments.length === 0 ? (
-            <div className="card-subtle p-8 text-center"><FileText className="h-8 w-8 mx-auto mb-3 text-muted-foreground" /><p className="text-xs text-muted-foreground">No payments yet</p></div>
+            <Empty className="card-subtle p-8">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <FileText className="h-6 w-6" />
+                </EmptyMedia>
+                <EmptyTitle>No payments yet</EmptyTitle>
+                <EmptyDescription>Payments for your challenge purchases will show up here.</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : (
             <>
               <div className="card-subtle px-4 py-2 flex items-center gap-1.5 flex-wrap">
@@ -335,7 +388,7 @@ export default function Wallet() {
                         <div className="text-[10px] text-muted-foreground mt-0.5">{p.reference?.slice(0, 12)}</div>
                       </div>
                     </div>
-                    <span className="text-sm font-light tabular-nums">₦{(p.amount || 0).toLocaleString()}</span>
+                    <span className="text-sm font-light tabular-nums">{formatMoney(p.amount, p.currency || "NGN")}</span>
                   </button>
                 ))}
               </div>
@@ -366,7 +419,7 @@ export default function Wallet() {
         <DialogContent className="sm:max-w-sm">
           <DialogHeader><DialogTitle className="text-base font-medium">Request Withdrawal</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div className="card-subtle p-3 text-center"><span className="text-xs text-muted-foreground">Available Balance</span><div className="text-xl font-light mt-1">₦{(wallet?.balance || 0).toLocaleString()}</div></div>
+            <div className="card-subtle p-3 text-center"><span className="text-xs text-muted-foreground">Available Balance</span><div className="text-xl font-light tabular-nums mt-1">{formatMoney(wallet?.balance, wallet?.currency || "NGN")}</div></div>
             <div><label className="text-xs text-muted-foreground block mb-1">Amount (NGN)</label><Input type="number" placeholder="5000" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="text-xs h-9" /></div>
             <div><label className="text-xs text-muted-foreground block mb-1">Account Details</label><Input placeholder="Bank name, account number" value={withdrawDetails} onChange={(e) => setWithdrawDetails(e.target.value)} className="text-xs h-9" /></div>
             <Button className="w-full text-xs" size="sm" onClick={handleWithdraw}>Submit Withdrawal Request</Button>
@@ -379,11 +432,11 @@ export default function Wallet() {
           <DialogHeader><DialogTitle className="text-base font-medium">Payment Details</DialogTitle></DialogHeader>
           {selectedPayment && (
             <div className="space-y-4">
-              <div className="text-center"><div className="text-3xl font-light tracking-tight">₦{(selectedPayment.amount || 0).toLocaleString()}</div></div>
+              <div className="text-center"><div className="text-3xl font-light tracking-tight tabular-nums">{formatMoney(selectedPayment.amount, selectedPayment.currency || "NGN")}</div></div>
               <div className="border border-border/50 rounded-lg divide-y divide-border/50">
                 <div className="flex items-center justify-between px-4 py-2.5"><span className="text-[11px] text-muted-foreground">Reference</span><span className="text-[11px] font-mono">{selectedPayment.reference}</span></div>
                 <div className="flex items-center justify-between px-4 py-2.5"><span className="text-[11px] text-muted-foreground">Status</span><span className="text-[11px] font-medium capitalize">{selectedPayment.status}</span></div>
-                <div className="flex items-center justify-between px-4 py-2.5"><span className="text-[11px] text-muted-foreground">Date</span><span className="text-[11px]">{selectedPayment.createdAt ? new Date(selectedPayment.createdAt).toLocaleDateString() : ""}</span></div>
+                <div className="flex items-center justify-between px-4 py-2.5"><span className="text-[11px] text-muted-foreground">Date</span><span className="text-[11px]">{formatShortDate(selectedPayment.createdAt)}</span></div>
               </div>
             </div>
           )}

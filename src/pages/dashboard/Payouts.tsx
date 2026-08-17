@@ -4,10 +4,20 @@ import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { PageLoader } from "@/components/dashboard/PageLoader";
+import {
+  Empty,
+  EmptyHeader,
+  EmptyTitle,
+  EmptyDescription,
+  EmptyContent,
+  EmptyMedia,
+} from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, DollarSign, ArrowUpRight, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { DollarSign, ArrowUpRight, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { formatMoney, formatShortDate } from "@/lib/utils";
 import { toast } from "sonner";
 
 interface PayoutsResponse {
@@ -98,7 +108,7 @@ export default function Payouts() {
   useResetOnChange([totalPages, page], () => setPage(1), page > totalPages);
 
   if (pLoading) {
-    return <div className="flex items-center justify-center h-64"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
+    return <PageLoader />;
   }
 
   const handleRequest = async () => {
@@ -122,20 +132,37 @@ export default function Payouts() {
         }
       />
       <div className="grid md:grid-cols-3 gap-4">
-        <div className="card-subtle p-5"><div className="stat-label">Total Paid</div><div className="stat-value mt-1">₦{(stats?.totalPaid ?? listStats.totalPaid).toLocaleString()}</div></div>
-        <div className="card-subtle p-5"><div className="stat-label">Pending</div><div className="stat-value mt-1">₦{(stats?.totalPending ?? listStats.totalPending).toLocaleString()}</div></div>
-        <div className="card-subtle p-5"><div className="stat-label">Total Payouts</div><div className="stat-value mt-1">{stats?.totalPayouts ?? listStats.total}</div></div>
+        <div className="card-subtle p-5"><div className="stat-label">Total Paid</div><div className="stat-value mt-1 tabular-nums">{formatMoney(stats?.totalPaid ?? listStats.totalPaid)}</div></div>
+        <div className="card-subtle p-5"><div className="stat-label">Pending</div><div className="stat-value mt-1 tabular-nums">{formatMoney(stats?.totalPending ?? listStats.totalPending)}</div></div>
+        <div className="card-subtle p-5"><div className="stat-label">Total Payouts</div><div className="stat-value mt-1 tabular-nums">{stats?.totalPayouts ?? listStats.total}</div></div>
       </div>
       {payouts.length === 0 ? (
-        <div className="card-subtle p-8 text-center"><DollarSign className="h-8 w-8 mx-auto mb-3 text-muted-foreground" /><p className="text-xs text-muted-foreground">No payout requests yet</p></div>
+        <Empty className="card-subtle p-8">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <DollarSign className="h-6 w-6" />
+            </EmptyMedia>
+            <EmptyTitle>No payout requests yet</EmptyTitle>
+            <EmptyDescription>
+              Once your funded accounts generate profits, request a payout here and it will be reviewed by our team.
+            </EmptyDescription>
+          </EmptyHeader>
+          {fundedAccounts.length > 0 && (
+            <EmptyContent>
+              <Button size="sm" className="text-xs" onClick={() => setShowRequest(true)}>
+                <ArrowUpRight className="h-3 w-3 mr-1" /> Request your first payout
+              </Button>
+            </EmptyContent>
+          )}
+        </Empty>
       ) : (
         <>
           <div className="space-y-2">
             {payouts.map((p: any) => (
               <div key={p.id} className="card-subtle p-4 flex items-center justify-between">
                 <div>
-                  <div className="text-sm font-medium">₦{(p.amount || 0).toLocaleString()}</div>
-                  <div className="text-xs text-muted-foreground">{p.paymentMethod} · {p.requestedAt ? new Date(p.requestedAt).toLocaleDateString() : ""}</div>
+                  <div className="text-sm font-medium tabular-nums">{formatMoney(p.amount, p.currency || "NGN")}</div>
+                  <div className="text-xs text-muted-foreground">{p.paymentMethod} · {formatShortDate(p.requestedAt)}</div>
                   {p.status === "rejected" && p.rejectionReason && (
                     <div className="text-[10px] text-destructive mt-1">
                       Reason: {p.rejectionReason}
@@ -198,13 +225,13 @@ export default function Payouts() {
           <div className="border-t border-border">
             {fundedAccounts.map((a: any) => (
               <div key={a.id} className="flex items-center justify-between gap-3 py-2 border-b border-border/60 last:border-b-0 text-xs">
-                <div className="font-medium">${(a.accountSize || 0).toLocaleString()}</div>
+                <div className="font-medium tabular-nums">{formatMoney(a.accountSize, "USD")}</div>
                 <div className="flex items-center gap-3">
                   <Badge variant={a.isActive ? "default" : "secondary"} className="text-[10px]">{a.isActive ? "Active" : "Inactive"}</Badge>
                   <span className="text-muted-foreground tabular-nums">
-                    {a.activatedAt ? new Date(a.activatedAt).toLocaleDateString() : "—"}
+                    {formatShortDate(a.activatedAt) || "—"}
                   </span>
-                  <span className="text-muted-foreground tabular-nums">₦{(a.totalPayouts || 0).toLocaleString()}</span>
+                  <span className="text-muted-foreground tabular-nums">{formatMoney(a.totalPayouts, a.currency || "NGN")}</span>
                 </div>
               </div>
             ))}
@@ -218,7 +245,7 @@ export default function Payouts() {
           <div className="space-y-3">
             <div><label className="text-xs text-muted-foreground block mb-1">Funded Account</label>
               <select value={selectedAccount?.id || ""} onChange={(e) => setSelectedAccount(fundedAccounts?.find((a: any) => String(a.id) === e.target.value))} className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs">
-                <option value="">Select account</option>{(fundedAccounts || []).map((a: any) => <option key={a.id} value={a.id}>${(a.accountSize || 0).toLocaleString()} Account</option>)}
+                <option value="">Select account</option>{(fundedAccounts || []).map((a: any) => <option key={a.id} value={a.id}>{formatMoney(a.accountSize, "USD")} Account</option>)}
               </select>
             </div>
             <div><label className="text-xs text-muted-foreground block mb-1">Amount (NGN)</label><Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-xs h-9" /></div>
