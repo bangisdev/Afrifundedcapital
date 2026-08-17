@@ -274,8 +274,21 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   );
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <div className="flex-1 flex items-center justify-center">
+    <div className="min-h-screen flex flex-col relative overflow-hidden">
+      {/* Decorative background — dot grid + brand-tinted orbs */}
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <div
+          className="absolute inset-0 opacity-[0.03] dark:opacity-[0.05]"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)",
+            backgroundSize: "48px 48px",
+          }}
+        />
+        <div className="absolute -top-40 -right-40 h-[480px] w-[480px] rounded-full bg-brand/10 blur-[120px]" />
+        <div className="absolute -bottom-40 -left-40 h-[420px] w-[420px] rounded-full bg-brand/5 blur-[110px]" />
+      </div>
+      <div className="flex-1 flex items-center justify-center relative">
         <div className="flex items-center justify-center h-full flex-col w-full px-4">
           <Card className="w-full max-w-[400px] min-w-0 sm:min-w-[350px] pb-0 border shadow-md">
             {mode === "sign-in" && (

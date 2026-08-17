@@ -40,6 +40,10 @@ import {
   ShieldCheck,
   Headphones,
   ExternalLink,
+  Activity,
+  Wallet,
+  ArrowUpRight,
+  ArrowDownRight,
 } from "lucide-react";
 import { LogoDropdown } from "@/components/LogoDropdown";
 import { readResponseBody } from "@/lib/api";
@@ -361,6 +365,232 @@ function ruleRow(ok: boolean, label: string, value: string) {
   );
 }
 
+// ─── Live Platform Preview ───
+// Stylised product shot: a floating trader-portal panel with an animated
+// equity curve, stat tiles and payout chips. Pure decoration — no data,
+// no links — rendered between the hero and the stats bar.
+
+const EQUITY_PATH = "M0,148 C42,146 70,134 104,136 C138,138 166,116 198,114 C230,112 258,126 288,120 C318,114 348,94 378,90 C408,86 436,96 466,82 C496,68 530,54 560,46";
+const EQUITY_AREA = `${EQUITY_PATH} L560,180 L0,180 Z`;
+
+function PlatformPreview() {
+  return (
+    <section className="relative py-20 sm:py-24 px-4 overflow-hidden">
+      <div className="container-page max-w-5xl">
+        <motion.div
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-80px" }}
+          transition={{ duration: 0.7, ease: "easeOut" }}
+          className="relative"
+        >
+          {/* Ambient glow behind the panel */}
+          <div
+            aria-hidden
+            className="absolute -inset-8 rounded-[2rem] bg-brand/5 blur-3xl"
+          />
+
+          {/* ── Window frame ── */}
+          <div className="relative panel overflow-hidden">
+            {/* Title bar */}
+            <div className="flex items-center gap-2 px-5 py-3 border-b border-border/60 bg-secondary/30">
+              <span className="h-2.5 w-2.5 rounded-full bg-border" />
+              <span className="h-2.5 w-2.5 rounded-full bg-border" />
+              <span className="h-2.5 w-2.5 rounded-full bg-border" />
+              <div className="ml-3 flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground min-w-0">
+                <Activity className="h-3 w-3 shrink-0" />
+                <span className="truncate">Trader Portal — One-Step Challenge</span>
+              </div>
+              <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border border-brand/25 bg-brand/10 px-2 py-0.5 text-[9px] font-medium uppercase tracking-wider text-brand">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand opacity-60" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand" />
+                </span>
+                Live
+              </span>
+            </div>
+
+            <div className="grid sm:grid-cols-[150px_1fr]">
+              {/* Mini sidebar */}
+              <div className="hidden sm:flex flex-col gap-1 border-r border-border/60 p-3 text-[10px] text-muted-foreground">
+                {[
+                  { icon: <BarChart3 className="h-3.5 w-3.5" />, label: "Overview" },
+                  { icon: <Wallet className="h-3.5 w-3.5" />, label: "Wallet" },
+                  { icon: <Award className="h-3.5 w-3.5" />, label: "Challenges" },
+                  { icon: <TrendingUp className="h-3.5 w-3.5" />, label: "Metrics" },
+                  { icon: <Shield className="h-3.5 w-3.5" />, label: "Security" },
+                ].map((item, i) => (
+                  <div
+                    key={item.label}
+                    className={`flex items-center gap-2 rounded-md px-2 py-1.5 ${
+                      i === 0 ? "bg-secondary text-foreground" : "hover:bg-secondary/50"
+                    }`}
+                  >
+                    {item.icon}
+                    {item.label}
+                  </div>
+                ))}
+              </div>
+
+              {/* Main area */}
+              <div className="p-5 sm:p-6 space-y-5">
+                {/* Stat tiles */}
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { label: "Equity", value: "$50,412", delta: "+2.4%", up: true },
+                    { label: "Today", value: "+$312.40", delta: "+0.6%", up: true },
+                    { label: "Drawdown", value: "2.1%", delta: "−0.4%", up: false },
+                  ].map((s) => (
+                    <div key={s.label} className="rounded-lg border border-border/60 bg-background p-3">
+                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground mb-1">{s.label}</div>
+                      <div className="text-sm sm:text-base font-light tracking-tight tabular-nums">{s.value}</div>
+                      <div
+                        className={`mt-0.5 inline-flex items-center gap-0.5 text-[9px] font-medium tabular-nums ${
+                          s.up ? "text-brand" : "text-destructive"
+                        }`}
+                      >
+                        {s.up ? (
+                          <ArrowUpRight className="h-2.5 w-2.5" />
+                        ) : (
+                          <ArrowDownRight className="h-2.5 w-2.5" />
+                        )}
+                        {s.delta}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Equity chart */}
+                <div className="rounded-lg border border-border/60 bg-background p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                      Equity Curve
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-brand/25 bg-brand/10 px-2 py-0.5 text-[9px] font-medium tabular-nums text-brand">
+                      <ArrowUpRight className="h-2.5 w-2.5" />
+                      +13.4% this month
+                    </span>
+                  </div>
+                  <svg viewBox="0 0 560 180" className="w-full h-32 sm:h-40" role="img" aria-label="Illustrative equity curve trending upward">
+                    <defs>
+                      <linearGradient id="afc-eq-fill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="var(--brand)" stopOpacity="0.16" />
+                        <stop offset="100%" stopColor="var(--brand)" stopOpacity="0" />
+                      </linearGradient>
+                    </defs>
+                    {/* Horizontal gridlines */}
+                    {[36, 72, 108, 144].map((y) => (
+                      <line key={y} x1="0" x2="560" y1={y} y2={y} stroke="var(--border)" strokeWidth="1" strokeDasharray="2 6" />
+                    ))}
+                    {/* Max drawdown reference line */}
+                    <line x1="0" x2="560" y1="132" y2="132" stroke="var(--muted-foreground)" strokeOpacity="0.35" strokeWidth="1" strokeDasharray="6 5" />
+                    <text x="552" y="126" textAnchor="end" fontSize="8" fill="var(--muted-foreground)" fillOpacity="0.7" fontFamily="var(--font-mono)">
+                      max DD
+                    </text>
+                    {/* Area fill + line */}
+                    <motion.path
+                      d={EQUITY_AREA}
+                      fill="url(#afc-eq-fill)"
+                      initial={{ opacity: 0 }}
+                      whileInView={{ opacity: 1 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: 1.4, duration: 0.6 }}
+                    />
+                    <motion.path
+                      d={EQUITY_PATH}
+                      fill="none"
+                      stroke="var(--brand)"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      initial={{ pathLength: 0 }}
+                      whileInView={{ pathLength: 1 }}
+                      viewport={{ once: true }}
+                      transition={{ duration: 1.8, ease: "easeInOut" }}
+                    />
+                    {/* Endpoint marker */}
+                    <motion.circle
+                      cx="560"
+                      cy="46"
+                      r="4"
+                      fill="var(--brand)"
+                      initial={{ opacity: 0, scale: 0 }}
+                      whileInView={{ opacity: 1, scale: 1 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: 1.6, duration: 0.4 }}
+                    />
+                    <motion.circle
+                      cx="560"
+                      cy="46"
+                      r="9"
+                      fill="var(--brand)"
+                      fillOpacity="0.15"
+                      initial={{ opacity: 0, scale: 0 }}
+                      whileInView={{ opacity: 1, scale: 1 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: 1.6, duration: 0.5 }}
+                    />
+                  </svg>
+                </div>
+
+                {/* Phase progress */}
+                <div>
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1.5">
+                    <span>Phase 1 progress</span>
+                    <span className="tabular-nums">68% of 10% target</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+                    <motion.div
+                      className="h-full rounded-full bg-foreground"
+                      initial={{ width: 0 }}
+                      whileInView={{ width: "68%" }}
+                      viewport={{ once: true }}
+                      transition={{ duration: 1.2, ease: "easeOut", delay: 0.6 }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Floating payout chip */}
+          <motion.div
+            className="absolute -right-2 sm:-right-10 top-14 hidden sm:flex"
+            animate={{ y: [0, -8, 0] }}
+            transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <div className="card-subtle flex items-center gap-2.5 px-3.5 py-2.5 shadow-lg">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand/10 text-brand">
+                <CheckCircle className="h-3.5 w-3.5" />
+              </span>
+              <div className="leading-tight">
+                <div className="text-[10px] font-medium tabular-nums">Payout approved · ₦842,000</div>
+                <div className="text-[9px] text-muted-foreground">2–5 business days</div>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Floating profit chip */}
+          <motion.div
+            className="absolute -left-2 sm:-left-10 bottom-24 hidden sm:flex"
+            animate={{ y: [0, 8, 0] }}
+            transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <div className="card-subtle flex items-center gap-2.5 px-3.5 py-2.5 shadow-lg">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-secondary text-foreground/80">
+                <TrendingUp className="h-3.5 w-3.5" />
+              </span>
+              <div className="leading-tight">
+                <div className="text-[10px] font-medium tabular-nums">Profit target +9.2%</div>
+                <div className="text-[9px] text-muted-foreground">On track — 68% reached</div>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      </div>
+    </section>
+  );
+}
+
 export default function Landing() {
   const navigate = useNavigate();
   const { isLoading, isAuthenticated } = useAuth();
@@ -560,6 +790,14 @@ export default function Landing() {
               }}
               transition={{ type: "spring", stiffness: 50, damping: 30 }}
             />
+            {/* Film-grain texture for depth */}
+            <div
+              className="absolute inset-0 opacity-[0.03] dark:opacity-[0.05]"
+              style={{
+                backgroundImage:
+                  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E\")",
+              }}
+            />
           </motion.div>
         </div>
 
@@ -660,6 +898,9 @@ export default function Landing() {
         </motion.div>
       </section>
 
+      {/* ─── PLATFORM PREVIEW ─── */}
+      <PlatformPreview />
+
       {/* ─── STATS BAR ─── */}
       <section className="py-16 px-4 border-y border-border/50">
         <div className="container-page max-w-5xl">
@@ -739,10 +980,11 @@ export default function Landing() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.6, delay: i * 0.15 }}
-                className="text-center relative"
+                className="text-center relative group"
               >
-                <div className="h-24 w-24 rounded-full border border-border/60 bg-background flex items-center justify-center mx-auto mb-6 relative z-10">
-                  {item.icon}
+                <div className="relative h-24 w-24 rounded-full border border-border/60 bg-background flex items-center justify-center mx-auto mb-6 z-10 transition-all duration-300 group-hover:border-brand/40 group-hover:ring-4 group-hover:ring-brand/10">
+                  <span className="absolute inset-0 rounded-full bg-brand/[0.04] opacity-0 transition-opacity duration-300 group-hover:opacity-100" aria-hidden />
+                  <span className="relative">{item.icon}</span>
                 </div>
                 <div className="text-[10px] font-mono text-muted-foreground/40 mb-3 tracking-widest">
                   {item.step}

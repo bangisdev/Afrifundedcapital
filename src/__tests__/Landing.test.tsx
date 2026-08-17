@@ -78,6 +78,10 @@ vi.mock("lucide-react", () => {
     ShieldCheck: createIcon("ShieldCheck"),
     Headphones: createIcon("Headphones"),
     ExternalLink: createIcon("ExternalLink"),
+    Activity: createIcon("Activity"),
+    Wallet: createIcon("Wallet"),
+    ArrowUpRight: createIcon("ArrowUpRight"),
+    ArrowDownRight: createIcon("ArrowDownRight"),
   };
 });
 
