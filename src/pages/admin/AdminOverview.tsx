@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery } from "@/hooks/use-api";
-import { AdminPageHeader } from "@/components/dashboard/AdminPageHeader";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { readResponseBody } from "@/lib/api";
 import { useState, useMemo } from "react";
 import {
@@ -255,7 +255,7 @@ export default function AdminOverview() {
   return (
     <div className="space-y-6">
       {/* ─── Page header ─── */}
-      <AdminPageHeader
+      <PageHeader
         eyebrow="Operations"
         title="Admin Overview"
         subtitle="Platform statistics and analytics"

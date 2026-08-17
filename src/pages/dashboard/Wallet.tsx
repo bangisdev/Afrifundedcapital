@@ -3,6 +3,7 @@ import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { useState, useEffect } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -214,10 +215,11 @@ export default function Wallet() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-lg font-medium tracking-tight">Wallet</h1>
-        <p className="text-xs text-muted-foreground mt-1">Manage your funds, view transactions, and request withdrawals</p>
-      </div>
+      <PageHeader
+        eyebrow="Finance"
+        title="Wallet"
+        subtitle="Manage your funds, view transactions, and request withdrawals"
+      />
 
       <div className="grid md:grid-cols-3 gap-4">
         <div className="card-subtle p-6">

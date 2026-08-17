@@ -3,6 +3,7 @@ import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -110,10 +111,16 @@ export default function Payouts() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div><h1 className="text-lg font-medium tracking-tight">Payouts</h1><p className="text-xs text-muted-foreground mt-1">Request profit withdrawals from your funded accounts</p></div>
-        <Button size="sm" className="text-xs" onClick={() => setShowRequest(true)} disabled={!(fundedAccounts?.length)}><ArrowUpRight className="h-3 w-3 mr-1" /> Request Payout</Button>
-      </div>
+      <PageHeader
+        eyebrow="Finance"
+        title="Payouts"
+        subtitle="Request profit withdrawals from your funded accounts"
+        actions={
+          <Button size="sm" className="text-xs" onClick={() => setShowRequest(true)} disabled={!(fundedAccounts?.length)}>
+            <ArrowUpRight className="h-3 w-3 mr-1" /> Request Payout
+          </Button>
+        }
+      />
       <div className="grid md:grid-cols-3 gap-4">
         <div className="card-subtle p-5"><div className="stat-label">Total Paid</div><div className="stat-value mt-1">₦{(stats?.totalPaid ?? listStats.totalPaid).toLocaleString()}</div></div>
         <div className="card-subtle p-5"><div className="stat-label">Pending</div><div className="stat-value mt-1">₦{(stats?.totalPending ?? listStats.totalPending).toLocaleString()}</div></div>

@@ -40,7 +40,7 @@ export default function Onboarding() {
     <div className="flex items-center justify-center min-h-[60vh]">
       <div className="w-full max-w-md card-subtle p-8">
         <div className="text-center mb-6">
-          <h1 className="text-lg font-medium tracking-tight">{step === 1 ? "Your Profile" : step === 2 ? "Trading Experience" : "Preferences"}</h1>
+          <h1 className="text-xl font-medium tracking-tight">{step === 1 ? "Your Profile" : step === 2 ? "Trading Experience" : "Preferences"}</h1>
           <p className="text-xs text-muted-foreground mt-1">Step {step} of 3</p>
         </div>
 

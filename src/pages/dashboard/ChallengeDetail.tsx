@@ -4,6 +4,7 @@ import { useParams, useNavigate, Link } from "react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Loader2, ArrowLeft, Activity, BarChart3, AlertTriangle, Check, X, ExternalLink } from "lucide-react";
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts";
@@ -103,22 +104,29 @@ export default function ChallengeDetail() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard/challenges")}><ArrowLeft className="h-3 w-3" /></Button>
-          <div>
-            <h1 className="text-lg font-medium tracking-tight">
-              {challenge.templateName
-                ? `${challenge.templateName} · $${Number(challenge.accountSize || 0).toLocaleString()}`
-                : `$${challenge.accountSize?.toLocaleString()} Challenge`}
-            </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
+      <div className="space-y-2">
+        <Button variant="ghost" size="sm" className="-ml-2 text-xs text-muted-foreground" onClick={() => navigate("/dashboard/challenges")}>
+          <ArrowLeft className="h-3 w-3 mr-1" /> Back to Challenges
+        </Button>
+        <PageHeader
+          eyebrow="Trading"
+          title={
+            challenge.templateName
+              ? `${challenge.templateName} · $${Number(challenge.accountSize || 0).toLocaleString()}`
+              : `$${challenge.accountSize?.toLocaleString()} Challenge`
+          }
+          subtitle={
+            <>
               {challenge.templateName ? `Challenge #${challenge.id} · ` : ""}
               Target: {challenge.profitTarget}% · Max DD: {challenge.maxDrawdown}% · Leverage: 1:{challenge.maxLeverage}
-            </p>
-          </div>
-        </div>
-        <Badge variant={challenge.status === "active" ? "default" : "secondary"} className="text-[10px]">{challenge.status}</Badge>
+            </>
+          }
+          actions={
+            <Badge variant={challenge.status === "active" ? "default" : "secondary"} className="text-[10px]">
+              {challenge.status}
+            </Badge>
+          }
+        />
       </div>
 
       {challenge.templateRules && (

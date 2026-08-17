@@ -2,6 +2,7 @@
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 
@@ -22,7 +23,11 @@ export default function NotificationPreferences() {
 
   return (
     <div className="space-y-8">
-      <div><h1 className="text-lg font-medium tracking-tight">Notification Preferences</h1><p className="text-xs text-muted-foreground mt-1">Control how you receive notifications</p></div>
+      <PageHeader
+        eyebrow="Account"
+        title="Notification Preferences"
+        subtitle="Control how you receive notifications"
+      />
       <div className="card-subtle p-6 space-y-4">
         <div className="flex items-center justify-between">
           <div><div className="text-sm font-medium">Email Notifications</div><div className="text-xs text-muted-foreground">Receive notifications via email</div></div>

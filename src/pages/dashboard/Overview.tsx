@@ -3,9 +3,10 @@ import { useApiQuery } from "@/hooks/use-api";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRight, ChevronRight, Sparkles, X, Loader2 } from "lucide-react";
+import { ArrowRight, ChevronRight, Sparkles, X, Loader2, BarChart3, Award, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const SKIP_BANNER_KEY = "_afc_onboarding_banner_dismissed";
@@ -67,16 +68,19 @@ export default function Overview() {
       label: "Active Challenges",
       value: String(metrics?.activeChallenges ?? 0),
       path: "/dashboard/challenges",
+      icon: <BarChart3 className="h-4 w-4" />,
     },
     {
       label: "Funded Accounts",
       value: String(metrics?.fundedAccounts ?? 0),
       path: "/dashboard/trading",
+      icon: <Award className="h-4 w-4" />,
     },
     {
       label: "Wallet Balance",
       value: `${(wallet?.balance || 0).toLocaleString()} ${wallet?.currency || "NGN"}`,
       path: "/dashboard/wallet",
+      icon: <Wallet className="h-4 w-4" />,
     },
   ];
 
@@ -138,18 +142,17 @@ export default function Overview() {
       </AnimatePresence>
 
       {/* Header */}
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">{greeting}</h1>
-          <p className="text-xs text-muted-foreground mt-1.5">
-            Track your funded journey — challenges, trading and payouts at a glance.
-          </p>
-        </div>
-        <Button size="sm" className="text-xs shrink-0" onClick={() => navigate("/dashboard/challenges")}>
-          New Challenge
-          <ArrowRight className="ml-1 h-3 w-3" />
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Overview"
+        title={greeting}
+        subtitle="Track your funded journey — challenges, trading and payouts at a glance."
+        actions={
+          <Button size="sm" className="text-xs shrink-0" onClick={() => navigate("/dashboard/challenges")}>
+            New Challenge
+            <ArrowRight className="ml-1 h-3 w-3" />
+          </Button>
+        }
+      />
 
       {/* Stats grid */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -159,8 +162,15 @@ export default function Overview() {
             onClick={() => navigate(stat.path)}
             className="card-subtle p-5 text-left hover:bg-secondary/30 transition-colors"
           >
-            <p className="text-xs text-muted-foreground">{stat.label}</p>
-            <p className="stat-value mt-2">{stat.value}</p>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground mb-1.5">
+                  {stat.label}
+                </p>
+                <div className="kpi-value">{stat.value}</div>
+              </div>
+              <span className="icon-chip shrink-0">{stat.icon}</span>
+            </div>
           </button>
         ))}
       </div>

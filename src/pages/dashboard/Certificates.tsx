@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useApiQuery } from "@/hooks/use-api";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import {
   Loader2,
@@ -126,19 +127,18 @@ export default function Certificates() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-medium tracking-tight">Certificates</h1>
-          <p className="text-xs text-muted-foreground mt-1">
-            View and download your trading certificates
-          </p>
-        </div>
-        {total > 0 && (
-          <div className="text-xs text-muted-foreground">
-            {total} certificate{total === 1 ? "" : "s"}
-          </div>
-        )}
-      </div>
+      <PageHeader
+        eyebrow="Account"
+        title="Certificates"
+        subtitle="View and download your trading certificates"
+        actions={
+          total > 0 ? (
+            <span className="text-xs text-muted-foreground">
+              {total} certificate{total === 1 ? "" : "s"}
+            </span>
+          ) : undefined
+        }
+      />
 
       {certificates.length === 0 ? (
         <div className="card-subtle p-8 text-center">

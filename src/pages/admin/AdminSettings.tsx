@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
-import { AdminPageHeader } from "@/components/dashboard/AdminPageHeader";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { readResponseBody, errorMessageOf } from "@/lib/api";
 import { useState, type ReactNode } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
@@ -592,7 +592,7 @@ export default function AdminSettings() {
 
   return (
     <div className="space-y-8">
-      <AdminPageHeader
+      <PageHeader
         eyebrow="System"
         title="Payment Settings"
         subtitle="Configure payment providers and environment mode — gateway secrets can be updated here or set via environment variables"

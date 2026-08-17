@@ -7,6 +7,7 @@ import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useAuth } from "@/hooks/use-auth";
 import { useFlutterwavePayment } from "@/hooks/use-flutterwave";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -404,12 +405,11 @@ export default function Challenges() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-lg font-medium tracking-tight">Challenges</h1>
-        <p className="text-xs text-muted-foreground mt-1">
-          Browse challenge types and start your funding journey
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Trading"
+        title="Challenges"
+        subtitle="Browse challenge types and start your funding journey"
+      />
 
       <Tabs defaultValue="browse" className="space-y-6">
         <TabsList className="border border-border bg-transparent p-0.5">

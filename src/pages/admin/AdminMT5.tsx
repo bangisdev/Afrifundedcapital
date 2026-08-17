@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
-import { AdminPageHeader } from "@/components/dashboard/AdminPageHeader";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -237,7 +237,7 @@ export default function AdminMT5() {
 
   return (
     <div className="space-y-6">
-      <AdminPageHeader
+      <PageHeader
         eyebrow="Infrastructure"
         title="MT5 Manager"
         subtitle="Provision accounts, monitor the gateway, retry queue, and reconciliation"

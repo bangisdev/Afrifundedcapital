@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery } from "@/hooks/use-api";
-import { AdminPageHeader } from "@/components/dashboard/AdminPageHeader";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { useState, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -286,7 +286,7 @@ export default function AdminReports() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <AdminPageHeader eyebrow="Analytics" title="Reports" subtitle="Export and download platform data as CSV or PDF" />
+      <PageHeader eyebrow="Analytics" title="Reports" subtitle="Export and download platform data as CSV or PDF" />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">

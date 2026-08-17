@@ -615,7 +615,7 @@ describe("Integration: Full User Journey", () => {
       setQueryData({ "challenges/my": [makeChallenge({ id: 100, status: "active" })], "metrics/dashboard": { latestMetrics: makeLatestMetrics() }, "metrics/history": makeMetricsHistory(30), "mt5/my": [makeMt5Account({ balance: 10500, equity: 10750 })] });
       const Trading = (await import("@/pages/dashboard/Trading")).default;
       render(<Trading />);
-      expect(screen.getByText("Trading")).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "Trading" })).toBeTruthy();
       expect(screen.getByText("Total Balance")).toBeTruthy();
       expect(screen.getAllByText("$10,500").length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText("Performance Charts")).toBeTruthy();
@@ -649,7 +649,7 @@ describe("Integration: Full User Journey", () => {
       ] });
       const Certificates = (await import("@/pages/dashboard/Certificates")).default;
       render(<Certificates />);
-      expect(screen.getByText("Certificates")).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "Certificates" })).toBeTruthy();
       expect(screen.getByText(/AFC-001/)).toBeTruthy();
       expect(screen.getByText(/AFC-002/)).toBeTruthy();
     });
@@ -706,7 +706,7 @@ describe("Integration: Full User Journey", () => {
       ] });
       const Notifications = (await import("@/pages/dashboard/Notifications")).default;
       render(<Notifications />);
-      expect(screen.getByText("Notifications")).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "Notifications" })).toBeTruthy();
       expect(screen.getByText("Payment Received")).toBeTruthy();
       expect(screen.getByText("Challenge Created")).toBeTruthy();
     });
@@ -731,7 +731,7 @@ describe("Integration: Full User Journey", () => {
       setQueryData({ "support/my": [{ id: 1, subject: "Cannot withdraw profits", category: "payments", status: "open", priority: "high", createdAt: Date.now() - 86400000 }] });
       const Support = (await import("@/pages/dashboard/Support")).default;
       render(<Support />);
-      expect(screen.getByText("Support")).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "Support" })).toBeTruthy();
       expect(screen.getByText("New Ticket")).toBeTruthy();
       expect(screen.getByText("Cannot withdraw profits")).toBeTruthy();
     });

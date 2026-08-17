@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
-import { AdminPageHeader } from "@/components/dashboard/AdminPageHeader";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { useNow } from "@/hooks/use-now";
 import { useQueryClient } from "@tanstack/react-query";
 import { readResponseBody, errorMessageOf } from "@/lib/api";
@@ -385,7 +385,7 @@ export default function AdminChallenges() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <AdminPageHeader
+      <PageHeader
         eyebrow="Management"
         title="Challenge Management"
         subtitle="Create and manage challenge templates and account sizes"

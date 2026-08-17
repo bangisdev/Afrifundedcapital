@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery } from "@/hooks/use-api";
-import { AdminPageHeader } from "@/components/dashboard/AdminPageHeader";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { readResponseBody } from "@/lib/api";
 import { useState, useEffect, useCallback } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
@@ -389,7 +389,7 @@ export default function AdminKyc() {
   // ─── List View ───
   return (
     <div className="space-y-6">
-      <AdminPageHeader eyebrow="Compliance" title="KYC Verification" subtitle="Review and manage identity verification documents" />
+      <PageHeader eyebrow="Compliance" title="KYC Verification" subtitle="Review and manage identity verification documents" />
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

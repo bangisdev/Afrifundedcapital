@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -186,10 +187,11 @@ export default function Affiliate() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-lg font-medium tracking-tight">Affiliate Program</h1>
-        <p className="text-xs text-muted-foreground mt-1">Earn commissions by referring new traders</p>
-      </div>
+      <PageHeader
+        eyebrow="Account"
+        title="Affiliate Program"
+        subtitle="Earn commissions by referring new traders"
+      />
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

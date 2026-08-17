@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery } from "@/hooks/use-api";
-import { AdminPageHeader } from "@/components/dashboard/AdminPageHeader";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,7 +70,7 @@ export default function AdminCertificates() {
 
   return (
     <div className="space-y-6">
-      <AdminPageHeader eyebrow="Operations" title="Certificates" subtitle="All issued certificates and verification records" />
+      <PageHeader eyebrow="Operations" title="Certificates" subtitle="All issued certificates and verification records" />
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

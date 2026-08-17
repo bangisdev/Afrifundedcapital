@@ -489,7 +489,7 @@ describe("Support Page", () => {
       expect(screen.getByText("General")).toBeTruthy();
       expect(screen.getByText("Technical")).toBeTruthy();
       expect(screen.getByText("Billing")).toBeTruthy();
-      expect(screen.getByText("Account")).toBeTruthy();
+      expect(screen.getByRole("option", { name: "Account" })).toBeTruthy();
     });
 
     it("defaults to general category", async () => {

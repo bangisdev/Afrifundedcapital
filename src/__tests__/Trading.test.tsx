@@ -573,7 +573,7 @@ describe("Trading Page", () => {
   describe("Page Header", () => {
     it("renders the Trading page title and description", () => {
       render(<Trading />);
-      expect(screen.getByText("Trading")).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "Trading" })).toBeTruthy();
       expect(screen.getByText(/Monitor your trading performance/)).toBeTruthy();
     });
   });
@@ -622,7 +622,7 @@ describe("Trading Page", () => {
       render(<Trading />);
 
       // Header
-      expect(screen.getByText("Trading")).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "Trading" })).toBeTruthy();
 
       // Metric cards
       expect(screen.getByText("Total Balance")).toBeTruthy();

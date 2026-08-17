@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
-import { AdminPageHeader } from "@/components/dashboard/AdminPageHeader";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { readResponseBody } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -260,7 +260,7 @@ export default function AdminPayouts() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <AdminPageHeader
+      <PageHeader
         eyebrow="Finance"
         title="Payouts"
         subtitle={`${(payouts || []).length} total · ${allPending.length} pending`}

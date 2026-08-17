@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
-import { AdminPageHeader } from "@/components/dashboard/AdminPageHeader";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -114,7 +114,7 @@ export default function AdminNotifications() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <AdminPageHeader eyebrow="System" title="Notifications" subtitle="Send broadcast notifications and manage notification history" />
+      <PageHeader eyebrow="System" title="Notifications" subtitle="Send broadcast notifications and manage notification history" />
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

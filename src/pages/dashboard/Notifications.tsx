@@ -3,6 +3,7 @@ import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { useState, useEffect } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import {
   Loader2, Bell, Search, CheckCheck, DollarSign, ShieldCheck,
   ShieldX, AlertTriangle, Award, UserPlus, Ticket, Gift,
@@ -144,19 +145,18 @@ export default function Notifications() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-medium tracking-tight">Notifications</h1>
-          <p className="text-xs text-muted-foreground mt-1">Stay updated on your challenges, payments, and account activity</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {hasUnread && (
+      <PageHeader
+        eyebrow="Account"
+        title="Notifications"
+        subtitle="Stay updated on your challenges, payments, and account activity"
+        actions={
+          hasUnread ? (
             <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => markAllRead.mutateAsync({}).then(() => toast.success("All marked as read"))}>
               <CheckCheck className="h-3.5 w-3.5 mr-1.5" /> Mark all read
             </Button>
-          )}
-        </div>
-      </div>
+          ) : undefined
+        }
+      />
 
       {/* Search & Filters */}
       <div className="flex flex-col sm:flex-row gap-3">

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
-import { AdminPageHeader } from "@/components/dashboard/AdminPageHeader";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { readResponseBody, errorMessageOf } from "@/lib/api";
 import { useState } from "react";
 import { useNow } from "@/hooks/use-now";
@@ -111,7 +111,7 @@ export default function AdminCoupons() {
 
   return (
     <div className="space-y-8">
-      <AdminPageHeader
+      <PageHeader
         eyebrow="Growth"
         title="Coupons"
         subtitle={`${totalCoupons} coupons · ${totalRedemptions} total redemptions`}

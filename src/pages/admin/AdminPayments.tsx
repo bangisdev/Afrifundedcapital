@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
-import { AdminPageHeader } from "@/components/dashboard/AdminPageHeader";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { useState, useEffect, useMemo } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Badge } from "@/components/ui/badge";
@@ -223,7 +223,7 @@ export default function AdminPayments() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <AdminPageHeader
+      <PageHeader
         eyebrow="Finance"
         title="Payments"
         subtitle="Manage transactions, refunds, and revenue"

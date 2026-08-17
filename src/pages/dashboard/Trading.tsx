@@ -4,6 +4,7 @@ import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import {
   ChartContainer,
   ChartTooltip,
@@ -191,16 +192,17 @@ export default function Trading() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-medium tracking-tight">Trading</h1>
-          <p className="text-xs text-muted-foreground mt-1">Monitor your trading performance, account details, and real-time metrics</p>
-        </div>
-        <Button variant="outline" size="sm" className="text-xs" onClick={handleSync} disabled={syncing}>
-          {syncing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}
-          {syncing ? "Syncing..." : "Sync Now"}
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Trading"
+        title="Trading"
+        subtitle="Monitor your trading performance, account details, and real-time metrics"
+        actions={
+          <Button variant="outline" size="sm" className="text-xs" onClick={handleSync} disabled={syncing}>
+            {syncing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+            {syncing ? "Syncing..." : "Sync Now"}
+          </Button>
+        }
+      />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard label="Total Balance" value={`$${totalBalance.toLocaleString()}`} />

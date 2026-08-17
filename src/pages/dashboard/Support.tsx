@@ -3,6 +3,7 @@ import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -124,16 +125,17 @@ export default function Support() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-medium tracking-tight">Support</h1>
-          <p className="text-xs text-muted-foreground mt-1">Get help with your account and challenges</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {total > 0 && <span className="text-xs text-muted-foreground">{total} ticket{total === 1 ? "" : "s"}</span>}
-          <Button size="sm" className="text-xs" onClick={() => setShowCreate(true)}><Plus className="h-3 w-3 mr-1" /> New Ticket</Button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Account"
+        title="Support"
+        subtitle="Get help with your account and challenges"
+        actions={
+          <>
+            {total > 0 && <span className="text-xs text-muted-foreground">{total} ticket{total === 1 ? "" : "s"}</span>}
+            <Button size="sm" className="text-xs" onClick={() => setShowCreate(true)}><Plus className="h-3 w-3 mr-1" /> New Ticket</Button>
+          </>
+        }
+      />
 
       {/* ─── Quick answers ─── */}
       <div className="card-subtle p-5">

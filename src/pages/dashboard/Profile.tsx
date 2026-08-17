@@ -3,6 +3,7 @@ import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { useState, useRef, useCallback } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
@@ -281,10 +282,11 @@ export default function Profile() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-lg font-medium tracking-tight">Profile</h1>
-        <p className="text-xs text-muted-foreground mt-1">Manage your personal information and verification documents</p>
-      </div>
+      <PageHeader
+        eyebrow="Account"
+        title="Profile"
+        subtitle="Manage your personal information and verification documents"
+      />
 
       <Tabs defaultValue="profile" className="space-y-6">
         <TabsList className="border border-border bg-transparent p-0.5">

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
-import { AdminPageHeader } from "@/components/dashboard/AdminPageHeader";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { useState, useRef, useEffect } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
@@ -386,7 +386,7 @@ export default function AdminSupport() {
   // List view
   return (
     <div className="space-y-6">
-      <AdminPageHeader eyebrow="Operations" title="Support Tickets" subtitle="Manage and respond to customer support requests" />
+      <PageHeader eyebrow="Operations" title="Support Tickets" subtitle="Manage and respond to customer support requests" />
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
