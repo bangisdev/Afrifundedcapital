@@ -2,6 +2,7 @@ import { createMiddleware } from "hono/factory";
 import { getDb } from "./db";
 import { sessions, users } from "./schema";
 import { eq, and, gt } from "drizzle-orm";
+import { resolveUserPermissions, hasPermission, PERMISSIONS } from "./lib/rbac";
 
 // ═══════════════════════════════════════════════════════════════
 //  RATE LIMITER — in-memory sliding window with account lockout
@@ -268,6 +269,7 @@ declare module "hono" {
   interface ContextVariableMap {
     user: AuthUser;
     userId: number;
+    permissions: Set<string>;
   }
 }
 
@@ -330,6 +332,7 @@ export const requireAuth = createMiddleware(async (c, next) => {
     isDemoSeeded: user.isDemoSeeded,
   });
   c.set("userId", user.id);
+  c.set("permissions", resolveUserPermissions(db, user));
 
   await next();
 });
@@ -387,24 +390,62 @@ export const optionalAuth = createMiddleware(async (c, next) => {
   await next();
 });
 
+const ADMIN_ROLES = [
+  "super_admin",
+  "support_admin",
+  "finance_admin",
+  "client_manager",
+  "compliance_admin",
+  "marketing_admin",
+  "affiliate_manager",
+];
+
+/**
+ * Coarse admin gate: passes for the legacy admin role values AND for any
+ * user whose assigned roles (with parent inheritance) grant `admin.access`
+ * (or the "*" wildcard). Most admin routes still use this; the granular
+ * `requirePermission` gate below replaces it on sensitive endpoints.
+ */
 export const requireAdmin = createMiddleware(async (c, next) => {
   const user = c.get("user");
-  const adminRoles = [
-    "super_admin",
-    "support_admin",
-    "finance_admin",
-    "client_manager",
-    "compliance_admin",
-    "marketing_admin",
-    "affiliate_manager",
-  ];
+  if (!user) {
+    return c.json({ error: "Admin access required" }, 403);
+  }
 
-  if (!user || !adminRoles.includes(user.role || "")) {
+  const db = getDb();
+  const permissions = c.get("permissions") ?? resolveUserPermissions(db, user);
+  const isLegacyAdmin = ADMIN_ROLES.includes(user.role || "");
+  const hasAdminAccess = hasPermission(permissions, PERMISSIONS.ADMIN_ACCESS);
+
+  if (!isLegacyAdmin && !hasAdminAccess) {
     return c.json({ error: "Admin access required" }, 403);
   }
 
   await next();
 });
+
+/**
+ * Granular permission gate. Resolves the caller's effective permissions
+ * (legacy `users.role` mapping + assigned `roles`/`user_roles`, including
+ * parent-role inheritance) and requires `permission`. Users holding the "*"
+ * wildcard (super_admin/admin) always pass.
+ */
+export function requirePermission(permission: string) {
+  return createMiddleware(async (c, next) => {
+    const user = c.get("user");
+    if (!user) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    const db = getDb();
+    const permissions = c.get("permissions") ?? resolveUserPermissions(db, user);
+    if (!hasPermission(permissions, permission)) {
+      return c.json({ error: `Insufficient permissions: ${permission} required` }, 403);
+    }
+
+    await next();
+  });
+}
 
 export const requireSuperAdmin = createMiddleware(async (c, next) => {
   const user = c.get("user");

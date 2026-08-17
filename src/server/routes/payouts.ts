@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { getDb } from "../db";
 import { profitPayouts, fundedAccounts, users } from "../schema";
 import { eq, desc, asc, and, count, sql, type SQL, type SQLWrapper } from "drizzle-orm";
-import { requireAuth, requireAdmin } from "../middleware";
+import { requireAuth, requirePermission } from "../middleware";
 import { createNotification } from "../lib/notifications";
 import { writeAuditLog } from "../lib/audit";
 import { sendEmail, payoutApprovedEmail, payoutRejectedEmail, payoutPaidEmail } from "../lib/email";
@@ -150,7 +150,7 @@ app.post("/request", requireAuth, async (c) => {
 });
 
 // Admin: Payout stats (supports ?startDate=&endDate= in ms timestamps)
-app.get("/admin/stats", requireAuth, requireAdmin, (c) => {
+app.get("/admin/stats", requireAuth, requirePermission("payouts.view"), (c) => {
   const db = getDb();
   const startDate = c.req.query("startDate");
   const endDate = c.req.query("endDate");
@@ -198,7 +198,7 @@ app.get("/admin/stats", requireAuth, requireAdmin, (c) => {
 });
 
 // Admin: Per-user payout breakdown within date range
-app.get("/admin/by-user", requireAuth, requireAdmin, (c) => {
+app.get("/admin/by-user", requireAuth, requirePermission("payouts.view"), (c) => {
   const db = getDb();
   const startDate = c.req.query("startDate");
   const endDate = c.req.query("endDate");
@@ -273,7 +273,7 @@ app.get("/admin/by-user", requireAuth, requireAdmin, (c) => {
 });
 
 // Admin: List all payouts (supports ?startDate=&endDate=, ?status=, ?userId= filters)
-app.get("/admin/all", requireAuth, requireAdmin, (c) => {
+app.get("/admin/all", requireAuth, requirePermission("payouts.view"), (c) => {
   const db = getDb();
   const startDate = c.req.query("startDate");
   const endDate = c.req.query("endDate");
@@ -307,7 +307,7 @@ app.get("/admin/all", requireAuth, requireAdmin, (c) => {
 });
 
 // Admin: Search users by name or email for the user filter autocomplete
-app.get("/admin/search-users", requireAuth, requireAdmin, (c) => {
+app.get("/admin/search-users", requireAuth, requirePermission("payouts.view"), (c) => {
   const db = getDb();
   const q = c.req.query("q") || "";
   if (!q || q.length < 1) return c.json([]);
@@ -321,7 +321,7 @@ app.get("/admin/search-users", requireAuth, requireAdmin, (c) => {
 });
 
 // Admin: Approve payout
-app.post("/admin/:id/approve", requireAuth, requireAdmin, async (c) => {
+app.post("/admin/:id/approve", requireAuth, requirePermission("payouts.manage"), async (c) => {
   const id = parseInt(c.req.param("id"));
   const db = getDb();
   const payout = db.select().from(profitPayouts).where(eq(profitPayouts.id, id)).get();
@@ -360,7 +360,7 @@ app.post("/admin/:id/approve", requireAuth, requireAdmin, async (c) => {
 });
 
 // Admin: Bulk approve payouts
-app.post("/admin/bulk-approve", requireAuth, requireAdmin, async (c) => {
+app.post("/admin/bulk-approve", requireAuth, requirePermission("payouts.manage"), async (c) => {
   const body = await c.req.json();
   const ids: number[] = body.ids || [];
   if (!ids.length) return c.json({ error: "No IDs provided" }, 400);
@@ -401,7 +401,7 @@ app.post("/admin/bulk-approve", requireAuth, requireAdmin, async (c) => {
 });
 
 // Admin: Reject payout
-app.post("/admin/:id/reject", requireAuth, requireAdmin, async (c) => {
+app.post("/admin/:id/reject", requireAuth, requirePermission("payouts.manage"), async (c) => {
   const id = parseInt(c.req.param("id"));
   const body = await c.req.json();
   const db = getDb();
@@ -442,7 +442,7 @@ app.post("/admin/:id/reject", requireAuth, requireAdmin, async (c) => {
 });
 
 // Admin: Bulk mark payouts as paid
-app.post("/admin/bulk-mark-paid", requireAuth, requireAdmin, async (c) => {
+app.post("/admin/bulk-mark-paid", requireAuth, requirePermission("payouts.manage"), async (c) => {
   const body = await c.req.json();
   const ids: number[] = body.ids || [];
   if (!ids.length) return c.json({ error: "No IDs provided" }, 400);
@@ -489,7 +489,7 @@ app.post("/admin/bulk-mark-paid", requireAuth, requireAdmin, async (c) => {
 });
 
 // Admin: Mark payout as paid
-app.post("/admin/:id/mark-paid", requireAuth, requireAdmin, async (c) => {
+app.post("/admin/:id/mark-paid", requireAuth, requirePermission("payouts.manage"), async (c) => {
   const id = parseInt(c.req.param("id"));
   const db = getDb();
   const payout = db.select().from(profitPayouts).where(eq(profitPayouts.id, id)).get();

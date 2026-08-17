@@ -26,6 +26,7 @@ import payoutsRouter from "./src/server/routes/payouts";
 import seedRouter from "./src/server/routes/seed";
 import metricsRouter, { metricsHandler } from "./src/server/routes/metrics";
 import { metricsMiddleware } from "./src/server/lib/metrics";
+import rolesRouter from "./src/server/routes/roles";
 import { startMT5Scheduler } from "./src/server/lib/mt5/scheduler";
 import { startViolationDigestScheduler } from "./src/server/lib/violation-digest";
 
@@ -257,6 +258,7 @@ app.route("/api/coupons", couponsRouter);
 app.route("/api/certificates", certificatesRouter);
 app.route("/api/payouts", payoutsRouter);
 app.route("/api/seed", seedRouter);
+app.route("/api/admin/roles", rolesRouter);
 app.route("/api/metrics", metricsRouter);
 // Conventional unscraped-path alias: /metrics → same handler as /api/metrics.
 app.get("/metrics", metricsHandler);

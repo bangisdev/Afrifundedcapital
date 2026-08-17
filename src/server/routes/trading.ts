@@ -25,7 +25,7 @@ import {
   type SQL,
   type SQLWrapper,
 } from "drizzle-orm";
-import { requireAuth, requireAdmin } from "../middleware";
+import { requireAuth, requireAdmin, requirePermission } from "../middleware";
 import { getMT5Provider } from "../lib/mt5";
 import { getMT5Config, redactMT5Config, MT5_CONFIG_SETTING, isMT5GatewayConfigured } from "../lib/mt5/config";
 import { setSecretOverride } from "../lib/secrets";
@@ -494,7 +494,7 @@ app.get("/admin/mt5", requireAuth, requireAdmin, (c) => {
 
 // ─── Admin: Provider Status ────────────────────────────
 
-app.get("/admin/status", requireAuth, requireAdmin, (c) => {
+app.get("/admin/status", requireAuth, requirePermission("mt5.view"), (c) => {
   const db = getDb();
   const provider = getMT5Provider(db);
   const config = getMT5Config(db);
@@ -521,7 +521,7 @@ app.get("/admin/status", requireAuth, requireAdmin, (c) => {
 
 // ─── Admin: Gateway Connection Test ─────────────────────
 
-app.post("/admin/test-connection", requireAuth, requireAdmin, async (c) => {
+app.post("/admin/test-connection", requireAuth, requirePermission("mt5.manage"), async (c) => {
   const db = getDb();
   const provider = getMT5Provider(db);
 
@@ -540,7 +540,7 @@ app.post("/admin/test-connection", requireAuth, requireAdmin, async (c) => {
 // ─── Admin: Rule Engine overview ───────────────────────
 // Live challenges with their template rules + latest metrics + violations,
 // so ops can see which rules are enforced and what tripped.
-app.get("/admin/rules", requireAuth, requireAdmin, (c) => {
+app.get("/admin/rules", requireAuth, requirePermission("mt5.view"), (c) => {
   const db = getDb();
   const activeStatuses = ["active", "phase_1_passed", "phase_2_passed", "funded", "violated"];
 
@@ -607,12 +607,12 @@ app.get("/admin/rules", requireAuth, requireAdmin, (c) => {
 
 // ─── Admin: MT5 Config (read/write) ────────────────────
 
-app.get("/admin/config", requireAuth, requireAdmin, (c) => {
+app.get("/admin/config", requireAuth, requirePermission("mt5.view"), (c) => {
   const db = getDb();
   return c.json({ config: redactMT5Config(getMT5Config(db)) });
 });
 
-app.put("/admin/config", requireAuth, requireAdmin, async (c) => {
+app.put("/admin/config", requireAuth, requirePermission("mt5.manage"), async (c) => {
   const body = await c.req.json();
   const db = getDb();
   const current = getMT5Config(db);
@@ -713,7 +713,7 @@ app.put("/admin/config", requireAuth, requireAdmin, async (c) => {
 
 // ─── Admin: Retry Queue ────────────────────────────────
 
-app.get("/admin/queue", requireAuth, requireAdmin, (c) => {
+app.get("/admin/queue", requireAuth, requirePermission("mt5.view"), (c) => {
   const db = getDb();
   const status = c.req.query("status") || "";
   const page = Math.max(1, parseInt(c.req.query("page") || "1") || 1);
@@ -724,7 +724,7 @@ app.get("/admin/queue", requireAuth, requireAdmin, (c) => {
   });
 });
 
-app.post("/admin/queue/process", requireAuth, requireAdmin, async (c) => {
+app.post("/admin/queue/process", requireAuth, requirePermission("mt5.manage"), async (c) => {
   const db = getDb();
   const provider = getMT5Provider(db);
   const body = await c.req.json().catch(() => ({}));
@@ -752,7 +752,7 @@ app.post("/admin/queue/retry-all", requireAuth, requireAdmin, (c) => {
 
 // ─── Admin: Reconciliation ─────────────────────────────
 
-app.post("/admin/reconcile", requireAuth, requireAdmin, async (c) => {
+app.post("/admin/reconcile", requireAuth, requirePermission("mt5.manage"), async (c) => {
   const db = getDb();
   const provider = getMT5Provider(db);
   const body = await c.req.json().catch(() => ({}));
@@ -763,7 +763,7 @@ app.post("/admin/reconcile", requireAuth, requireAdmin, async (c) => {
   return c.json(summary);
 });
 
-app.get("/admin/reconcile/history", requireAuth, requireAdmin, (c) => {
+app.get("/admin/reconcile/history", requireAuth, requirePermission("mt5.view"), (c) => {
   const db = getDb();
   const limit = Math.min(200, Math.max(1, parseInt(c.req.query("limit") || "25") || 25));
   return c.json({ items: getReconciliationHistory(db, { limit }) });

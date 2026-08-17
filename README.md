@@ -129,6 +129,27 @@ SecretKeyField  →  PUT/DELETE /api/admin/secrets/:name      (admin-only, audit
 - **E2E (Playwright):** `e2e/admin-flow.spec.ts` is split into greppable chunks (see package.json `test:e2e:*` scripts); each chunk boots its own Vite server on port 5174 with `E2E_TESTING=1` and an isolated `.e2e/` DB.
 - **CI:** `.github/workflows/e2e.yml` / `e2e-matrix.yml` run the e2e chunks in parallel plus a `secrets-scan` job; `secret-scan.yml` runs gitleaks.
 
+## Role-Based Access Control (RBAC)
+
+The `roles` / `user_roles` tables are fully wired into authorization (`src/server/lib/rbac.ts` + `src/server/middleware.ts`). Two gates coexist:
+
+- **`requireAdmin`** (coarse) — passes for the legacy admin `users.role` values **and** for any user whose assigned roles grant `admin.access` (or the `*` wildcard). Most admin routes still use this.
+- **`requirePermission("<perm>")`** (granular) — resolves the caller's effective permissions (legacy role mapping ∪ `user_roles` → `roles`, with transitive `parentRoleId` inheritance, cycle-safe) and requires the named permission. Applied today to the sensitive surfaces: audit logs (`audit.view`), the secrets store (`settings.manage`), KYC review (`kyc.view`/`kyc.manage`), payouts (`payouts.view`/`payouts.manage`), and MT5 config/queue/reconciliation (`mt5.view`/`mt5.manage`). `super_admin`/`admin` and any role with `*` always pass.
+
+Built-in system roles (`support_admin`, `finance_admin`, `client_manager`, `compliance_admin`, `marketing_admin`, `affiliate_manager`) are seeded idempotently at boot (`ensureSystemRoles` from `migrate.ts`) and mirror the legacy `users.role` permission mapping.
+
+### Roles API (all super-admin, under `/api/admin/roles`, audit-logged)
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /` | List roles (+ permission catalog, user counts) |
+| `POST /` | Create a custom role `{ name, description?, permissions[], parentRoleId? }` (unknown permissions are dropped) |
+| `PUT /:id` | Update role (name/description/permissions/parent) |
+| `DELETE /:id` | Delete a custom role (system roles are protected); assignments are removed, children are detached |
+| `GET /users/:userId/roles` | A user's assigned roles |
+| `PUT /users/:userId/roles` | Replace a user's assignments `{ roleIds: number[] }` |
+| `GET /me` | Caller's effective permissions (for UI gating) |
+
 ## Observability (Prometheus + Grafana)
 
 The app exposes a dependency-free Prometheus **`/api/metrics`** endpoint (and a `/metrics` alias in production) — unauthenticated **aggregates only** (no emails, names, keys, or per-user data). Do not publish it to the public internet; Prometheus scrapes the app directly on the internal Docker network.

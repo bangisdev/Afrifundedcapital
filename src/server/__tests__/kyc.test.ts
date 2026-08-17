@@ -249,7 +249,8 @@ describe("GET /api/kyc/admin/all", () => {
     const { status, body } = await authGet(app, "/api/kyc/admin/all", userCookie);
 
     expect(status).toBe(403);
-    expect((body as Record<string, unknown>).error).toMatch(/admin/i);
+    // kyc.view is a granular permission gate — the error names the permission.
+    expect((body as Record<string, unknown>).error).toMatch(/kyc\.view/i);
   });
 });
 

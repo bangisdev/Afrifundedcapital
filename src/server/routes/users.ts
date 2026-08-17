@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { getDb } from "../db";
 import { users, sessions, auditLogs, settings, affiliates } from "../schema";
 import { eq, desc, asc, like, count, sql, and, or, type SQL, type SQLWrapper } from "drizzle-orm";
-import { requireAuth, requireAdmin } from "../middleware";
+import { requireAuth, requireAdmin, requirePermission } from "../middleware";
 import { createNotification, notifyAdminsOfSecurityEvent } from "../lib/notifications";
 import { writeAuditLog, redactSetting, attachSettingsLastChanged } from "../lib/audit";
 
@@ -364,8 +364,9 @@ app.delete("/:id", requireAuth, requireAdmin, async (c) => {
   return c.json({ success: true });
 });
 
-// Admin: List audit logs
-app.get("/audit-logs", requireAuth, requireAdmin, (c) => {
+// Admin: List audit logs — granular `audit.view` (custom roles with only this
+// permission can read the trail without entering the full admin area).
+app.get("/audit-logs", requireAuth, requirePermission("audit.view"), (c) => {
   const db = getDb();
 
   // Pagination params (clamped)

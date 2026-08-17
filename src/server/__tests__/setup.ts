@@ -357,6 +357,7 @@ export async function buildTestApp(): Promise<Hono> {
   const testEmailModule = await import("../routes/test-email");
   const securityModule = await import("../routes/security");
   const metricsModule = await import("../routes/metrics");
+  const rolesModule = await import("../routes/roles");
 
   app.route("/api/kyc", kycModule.default);
   app.route("/api/payments", paymentsModule.default);
@@ -372,6 +373,7 @@ export async function buildTestApp(): Promise<Hono> {
   app.route("/api/users", usersModule.default);
   app.route("/api/seed", seedModule.default);
   app.route("/api/admin/secrets", secretsModule.default);
+  app.route("/api/admin/roles", rolesModule.default);
   app.route("/api/test-email", testEmailModule.default);
   app.route("/api/auth", securityModule.default);
   app.route("/api/metrics", metricsModule.default);

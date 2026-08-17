@@ -1,4 +1,7 @@
 import Database from "better-sqlite3";
+import { drizzle } from "drizzle-orm/better-sqlite3";
+import * as schema from "./schema";
+import { ensureSystemRoles } from "./lib/rbac";
 
 /**
  * Run all table creation migrations on startup.
@@ -856,6 +859,13 @@ export function runMigrations(sqlite: Database.Database) {
   console.log("[DB] All tables created/verified successfully.");
 
   scrubStoredSecrets(sqlite);
+
+  // Seed the built-in RBAC system roles (idempotent).
+  try {
+    ensureSystemRoles(drizzle(sqlite, { schema }));
+  } catch (e) {
+    console.warn("[Migrate] Failed to seed system roles:", e);
+  }
 }
 
 // Field names that must never be persisted in the settings table: API keys,

@@ -10,7 +10,7 @@
  */
 import { Hono } from "hono";
 import { getDb } from "../db";
-import { requireAuth, requireAdmin } from "../middleware";
+import { requireAuth, requirePermission } from "../middleware";
 import {
   SECRET_NAMES,
   getSecretStatus,
@@ -24,7 +24,7 @@ import { notifyAdminsOfSecurityEvent } from "../lib/notifications";
 
 const app = new Hono();
 
-app.get("/", requireAuth, requireAdmin, (c) => {
+app.get("/", requireAuth, requirePermission("settings.manage"), (c) => {
   return c.json({
     items: listSecretStatuses(),
     // False when no APP_SECRETS_KEY / JWT_PRIVATE_KEY is set — overrides are
@@ -33,7 +33,7 @@ app.get("/", requireAuth, requireAdmin, (c) => {
   });
 });
 
-app.put("/:name", requireAuth, requireAdmin, async (c) => {
+app.put("/:name", requireAuth, requirePermission("settings.manage"), async (c) => {
   const name = c.req.param("name");
   if (!(SECRET_NAMES as readonly string[]).includes(name)) {
     return c.json({ error: `Unknown secret '${name}'. Managed names: ${SECRET_NAMES.join(", ")}` }, 400);
@@ -85,7 +85,7 @@ app.put("/:name", requireAuth, requireAdmin, async (c) => {
   return c.json(getSecretStatus(name));
 });
 
-app.delete("/:name", requireAuth, requireAdmin, (c) => {
+app.delete("/:name", requireAuth, requirePermission("settings.manage"), (c) => {
   const name = c.req.param("name");
   if (!(SECRET_NAMES as readonly string[]).includes(name)) {
     return c.json({ error: `Unknown secret '${name}'. Managed names: ${SECRET_NAMES.join(", ")}` }, 400);

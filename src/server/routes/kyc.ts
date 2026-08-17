@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { getDb } from "../db";
 import { kycDocuments, users, auditLogs } from "../schema";
 import { eq, desc, asc, and, or, like, count, sql, type SQL, type SQLWrapper } from "drizzle-orm";
-import { requireAuth, requireAdmin } from "../middleware";
+import { requireAuth, requirePermission } from "../middleware";
 import { notify } from "../lib/notifications";
 import { writeAuditLog } from "../lib/audit";
 import { kycApprovedEmail, kycRejectedEmail, kycDocumentUploadedEmail } from "../lib/email";
@@ -286,7 +286,7 @@ app.delete("/my/:id", requireAuth, async (c) => {
 // ─── Admin Endpoints ──────────────────────────────────
 
 // Admin: List all KYC documents (paginated + searchable)
-app.get("/admin/all", requireAuth, requireAdmin, (c) => {
+app.get("/admin/all", requireAuth, requirePermission("kyc.view"), (c) => {
   const db = getDb();
 
   // Pagination params (clamped)
@@ -375,7 +375,7 @@ app.get("/admin/all", requireAuth, requireAdmin, (c) => {
 });
 
 // Admin: Get single document with file data for preview
-app.get("/admin/:id", requireAuth, requireAdmin, (c) => {
+app.get("/admin/:id", requireAuth, requirePermission("kyc.view"), (c) => {
   const id = parseInt(c.req.param("id"));
   const db = getDb();
   const doc = db.select().from(kycDocuments).where(eq(kycDocuments.id, id)).get();
@@ -390,7 +390,7 @@ app.get("/admin/:id", requireAuth, requireAdmin, (c) => {
 });
 
 // Admin: Approve KYC
-app.post("/admin/:id/approve", requireAuth, requireAdmin, async (c) => {
+app.post("/admin/:id/approve", requireAuth, requirePermission("kyc.manage"), async (c) => {
   const adminId = c.get("userId");
   const id = parseInt(c.req.param("id"));
   const db = getDb();
@@ -465,7 +465,7 @@ app.post("/admin/:id/approve", requireAuth, requireAdmin, async (c) => {
 });
 
 // Admin: Reject KYC
-app.post("/admin/:id/reject", requireAuth, requireAdmin, async (c) => {
+app.post("/admin/:id/reject", requireAuth, requirePermission("kyc.manage"), async (c) => {
   const adminId = c.get("userId");
   const id = parseInt(c.req.param("id"));
   const body = await c.req.json();
