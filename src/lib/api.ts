@@ -20,6 +20,7 @@ export class ApiError extends Error {
  * `{ error: <raw text> }` so callers can surface a meaningful message instead
  * of a raw `SyntaxError: Unexpected token 'S', "Service unavailable" ...`.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- tolerant reader: returns whatever JSON shape the server sent (or a plain-text fallback), so `any` is the honest type for callers to narrow
 export async function readResponseBody(res: Response): Promise<any> {
   try {
     return await res.json();
@@ -39,12 +40,13 @@ export async function readResponseBody(res: Response): Promise<any> {
  * `error` / `message`, then the raw body text, with friendlier wording for
  * reverse-proxy 502/503 pages ("Service unavailable").
  */
-export function errorMessageOf(body: any, status: number): string {
+export function errorMessageOf(body: unknown, status: number): string {
+  const record = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
   const raw =
-    typeof body?.error === "string"
-      ? body.error
-      : typeof body?.message === "string"
-        ? body.message
+    typeof record.error === "string"
+      ? record.error
+      : typeof record.message === "string"
+        ? record.message
         : "";
   if (/service unavailable/i.test(raw) || (status >= 502 && status <= 503)) {
     return "The server is temporarily unavailable — please try again in a moment.";

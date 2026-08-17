@@ -35,7 +35,7 @@ test.describe("5. Payments", () => {
       .get("/api/payments/admin/all?pageSize=50")
       .then((r) => r.json());
     const rows = data.payments || [];
-    const withLabel = rows.find((p: any) => p.challengeLabel?.includes("One-Step Challenge"));
+    const withLabel = rows.find((p) => p.challengeLabel?.includes("One-Step Challenge"));
     expect(withLabel).toBeTruthy();
     expect(withLabel.challengeLabel).toMatch(/One-Step Challenge · \$50,000/);
     expect(withLabel.challengeName).toBe("One-Step Challenge");

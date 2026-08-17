@@ -4,8 +4,8 @@
  * engine after each metrics sync and terminates challenges on hard violations
  * (status → violated, account suspension hook, notification, audit entry).
  */
-import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
-import { eq, desc } from "drizzle-orm";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { eq } from "drizzle-orm";
 import * as schema from "../schema";
 import { getTestDb, getTestSqlite, cleanupTestDb } from "./setup";
 import { syncChallenge } from "../lib/mt5/sync-service";

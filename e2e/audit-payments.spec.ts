@@ -64,23 +64,23 @@ test.describe("11. Purchase label & audit trail — payments table", () => {
 
     // The payment row carries the purchase label in the admin list.
     const payments = await adminGet(request, cookie, "/api/payments/admin/all?pageSize=50");
-    const row = (payments.payments || []).find((p: any) => p.id === initiated.paymentId);
+    const row = (payments.payments || []).find((p) => p.id === initiated.paymentId);
     expect(row).toBeTruthy();
     expect(row.challengeLabel).toMatch(/One-Step Challenge · \$25,000/);
 
     // All three lifecycle actions were audited with the label stamped on.
     const completed = await getAuditEntries(request, cookie, "payment.completed");
-    const completedEntry = completed.find((e: any) => e.entityId === String(initiated.paymentId));
+    const completedEntry = completed.find((e) => e.entityId === String(initiated.paymentId));
     expect(completedEntry, "expected a payment.completed audit entry").toBeTruthy();
     expect(completedEntry.details.challengeLabel).toMatch(/One-Step Challenge · \$25,000/);
 
     const refunded = await getAuditEntries(request, cookie, "payment.refunded");
-    const refundedEntry = refunded.find((e: any) => e.entityId === String(initiated.paymentId));
+    const refundedEntry = refunded.find((e) => e.entityId === String(initiated.paymentId));
     expect(refundedEntry, "expected a payment.refunded audit entry").toBeTruthy();
     expect(refundedEntry.details.challengeLabel).toMatch(/One-Step Challenge · \$25,000/);
 
     const resumed = await getAuditEntries(request, cookie, "payment.resumed");
-    const resumedEntry = resumed.find((e: any) => e.entityId === String(initiated.paymentId));
+    const resumedEntry = resumed.find((e) => e.entityId === String(initiated.paymentId));
     expect(resumedEntry, "expected a payment.resumed audit entry").toBeTruthy();
     expect(resumedEntry.details.challengeLabel).toMatch(/One-Step Challenge · \$25,000/);
   });

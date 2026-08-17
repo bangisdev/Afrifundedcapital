@@ -92,12 +92,12 @@ export function AccountSecurity() {
 
   // Sessions
   const [sessionsKey, setSessionsKey] = useState(0);
-  const sessionsQuery = useApiQuery<any>(["auth", "sessions", String(sessionsKey)], "/api/auth/sessions");
+  const sessionsQuery = useApiQuery<{ sessions: SessionRow[] }>(["auth", "sessions", String(sessionsKey)], "/api/auth/sessions");
   const sessions: SessionRow[] = sessionsQuery.data?.sessions || [];
 
   // Login history
-  const [historyKey, setHistoryKey] = useState(0);
-  const historyQuery = useApiQuery<any>(["auth", "login-history", String(historyKey)], "/api/auth/login-history");
+  const [historyKey] = useState(0);
+  const historyQuery = useApiQuery<{ history: LoginRow[] }>(["auth", "login-history", String(historyKey)], "/api/auth/login-history");
   const history: LoginRow[] = historyQuery.data?.history || [];
 
   const flash = (kind: "ok" | "err", text: string) => {
@@ -129,7 +129,7 @@ export function AccountSecurity() {
     setTwoFactorBusy(true);
     setMessage(null);
     try {
-      const data = await api.post<any>("/api/auth/2fa/setup");
+      const data = await api.post<{ secret: string; otpauthUrl: string; qrDataUrl: string; backupCodes?: string[] }>("/api/auth/2fa/setup");
       setSetup({ secret: data.secret, otpauthUrl: data.otpauthUrl, qrDataUrl: data.qrDataUrl, backupCodes: data.backupCodes || [] });
     } catch (err) {
       flash("err", err instanceof Error ? err.message : "Failed to start 2FA setup.");
@@ -179,7 +179,7 @@ export function AccountSecurity() {
 
   const handleRevokeOthers = async () => {
     try {
-      const res = await api.post<any>("/api/auth/sessions/revoke-others");
+      const res = await api.post<{ revoked?: number }>("/api/auth/sessions/revoke-others");
       setSessionsKey((k) => k + 1);
       flash("ok", `Signed out ${res?.revoked ?? 0} other device(s).`);
     } catch (err) {

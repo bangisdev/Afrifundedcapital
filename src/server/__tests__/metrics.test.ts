@@ -10,7 +10,6 @@ import {
   buildTestApp,
   cleanupTestDb,
   signUp,
-  signIn,
   authPost,
   getTestDb,
 } from "./setup";

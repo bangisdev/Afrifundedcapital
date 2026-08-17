@@ -38,7 +38,7 @@ test.describe("10. MT5 Background Scheduler — sync pass", () => {
 
     // The account row now carries a lastSyncAt timestamp.
     const accounts = await adminGet(request, cookie, "/api/trading/admin/mt5?pageSize=50");
-    const account = accounts.items.find((a: any) => a.id === setup.mt5AccountId) || accounts.items[0];
+    const account = accounts.items.find((a) => a.id === setup.mt5AccountId) || accounts.items[0];
     expect(account.lastSyncAt).toBeTruthy();
   });
 });

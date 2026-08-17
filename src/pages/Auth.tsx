@@ -51,7 +51,9 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  // Verify deep links start in the loading state — the auto-run effect below
+  // only needs to flip it back to false once verification settles.
+  const [isLoading, setIsLoading] = useState(initialMode === "verify");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [rememberMe, setRememberMe] = useState(
@@ -63,13 +65,15 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   const [code, setCode] = useState("");
   const [useBackupCode, setUseBackupCode] = useState(false);
 
-  // Verify-email auto-run on mount
+  // Verify-email auto-run on mount. The loading/reset state is applied inside
+  // the async callback (the sanctioned pattern for effects that sync with an
+  // external system) rather than synchronously in the effect body.
   useEffect(() => {
     if (mode !== "verify" || !verifyToken || success) return;
     let cancelled = false;
-    setIsLoading(true);
-    setError(null);
     void (async () => {
+      setIsLoading(true);
+      setError(null);
       try {
         const res = await fetch("/api/auth/verify-email", {
           method: "POST",

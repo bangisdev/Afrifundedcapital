@@ -13,7 +13,7 @@ test.describe("4. Challenges", () => {
     const res = await request.get("/api/challenges/templates");
     expect(res.status()).toBe(200);
     const templates = await res.json();
-    const names = (templates as any[]).map((t) => t.name);
+    const names = templates.map((t) => t.name);
     expect(names).toContain("Two-Step Evaluation");
     expect(names).toContain("One-Step Challenge");
     expect(names).toContain("Instant Funding");
@@ -35,7 +35,7 @@ test.describe("4. Challenges", () => {
     expect(res.status()).toBe(200);
     const body = await res.json();
     const mine = body.challenges || body || [];
-    expect(mine.some((c: any) => c.id === challengeId)).toBeTruthy();
+    expect(mine.some((c) => c.id === challengeId)).toBeTruthy();
 
     await signInAdminFast(page, request, "/dashboard/challenges");
     await expect(page.getByText("Two-Step Evaluation").first()).toBeVisible({ timeout: 15_000 });

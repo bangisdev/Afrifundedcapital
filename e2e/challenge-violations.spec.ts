@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- e2e specs work with dynamic JSON response shapes */
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
 import {
   ensureSeeded,

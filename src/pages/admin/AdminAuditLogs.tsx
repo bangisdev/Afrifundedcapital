@@ -53,7 +53,6 @@ const PAYMENT_LIFECYCLE_CHIPS: Array<{ action: string; label: string; icon: Luci
 ];
 
 function FilterChip({
-  action,
   label,
   icon: Icon,
   active,
@@ -120,7 +119,6 @@ function DetailsLine({ details }: { details: string | object | null | undefined 
   }
 
   if (parsed && typeof parsed === "object" && parsed.challengeLabel) {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- omit pattern
     const { challengeLabel, ...rest } = parsed;
     const restRaw = Object.keys(rest).length > 0 ? JSON.stringify(rest) : "";
     return (

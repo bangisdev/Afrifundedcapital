@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { getDb } from "../db";
+import { getDb, type Db } from "../db";
 import { payments, paymentLogs, flutterwaveTransactions, challengeTemplates, accountSizes, userChallenges, mt5Accounts, fundedAccounts, settings, coupons, couponRedemptions, users, referrals, affiliates, commissions } from "../schema";
 import { eq, desc, asc, count, and, or, like, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middleware";
@@ -35,7 +35,7 @@ interface FlutterwaveVerifyResponse {
  * confirmations often carry a generic "Challenge Purchase" description.
  */
 function resolveChallengeLabel(
-  db: any,
+  db: Db,
   templateId: number | null,
   accountSizeId: number | null,
 ): string | null {

@@ -1,6 +1,5 @@
 import { test, expect } from "@playwright/test";
 import {
-  adminPost,
   adminPut,
   createDemoPurchase,
   ensureSeeded,
@@ -36,7 +35,7 @@ test.describe("11. Purchase label & audit trail — audit log chips & lifecycle"
       expect(res.newStatus).toBe(status);
 
       const entries = await getAuditEntries(request, cookie, action);
-      const mine = entries.find((e: any) => e.entityId === String(challengeId));
+      const mine = entries.find((e) => e.entityId === String(challengeId));
       expect(mine, `expected an audit entry for ${action}`).toBeTruthy();
       // Every lifecycle entry is stamped with the challenge label.
       expect(mine.details.challengeLabel).toBe(label);

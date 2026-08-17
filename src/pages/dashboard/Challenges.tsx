@@ -197,13 +197,23 @@ export default function Challenges() {
   // Clamp coupons page if the current page exceeds total pages
   useResetOnChange([cTotalPages, cPage], () => setCPage(1), cPage > cTotalPages && cTotalPages > 0);
 
-  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
-  const [selectedSize, setSelectedSize] = useState<string | null>(null);
+  // Deep link support: ?template=<id>&size=<id> preselects the challenge and
+  // account size and opens the purchase dialog (e.g. from the landing page
+  // cards). The params are read once at mount into the state initializers
+  // below; the cleanup effect only strips them so refreshing (or closing the
+  // dialog) doesn't re-trigger anything.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTemplate = searchParams.get("template");
+  const urlSize = searchParams.get("size");
+  const deepLinkConsumed = useRef(false);
+
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(urlTemplate);
+  const [selectedSize, setSelectedSize] = useState<string | null>(urlTemplate && urlSize ? urlSize : null);
   const [couponCode, setCouponCode] = useState("");
   const [couponResult, setCouponResult] = useState<any>(null);
   const [couponError, setCouponError] = useState("");
   const [validatingCoupon, setValidatingCoupon] = useState(false);
-  const [showPurchase, setShowPurchase] = useState(false);
+  const [showPurchase, setShowPurchase] = useState(() => !!urlTemplate && !!urlSize);
 
   const isAdmin = user?.role === "super_admin" || user?.role === "support_admin" || user?.role === "finance_admin";
   const demoPurchase = useApiMutation<any, any>("post", "/api/challenges/demo-purchase");
@@ -216,41 +226,37 @@ export default function Challenges() {
     { enabled: !!selectedTemplate },
   );
 
-  // Deep link support: ?template=<id>&size=<id> preselects the challenge and
-  // account size and opens the purchase dialog (e.g. from the landing page cards).
-  const [searchParams, setSearchParams] = useSearchParams();
-  const urlTemplate = searchParams.get("template");
-  const urlSize = searchParams.get("size");
-  const deepLinkConsumed = useRef(false);
-
   useEffect(() => {
     if (deepLinkConsumed.current) return;
     if (!urlTemplate) return;
     deepLinkConsumed.current = true;
-    setSelectedTemplate(urlTemplate);
-    if (urlSize) {
-      setSelectedSize(urlSize);
-      setShowPurchase(true);
-    }
     // Clean the URL so refreshing (or closing the dialog) doesn't re-trigger it.
     setSearchParams({}, { replace: true });
-  }, [urlTemplate, urlSize, setSearchParams]);
+  }, [urlTemplate, setSearchParams]);
 
-  // Clear a deep-linked selection if it doesn't match the loaded templates.
-  useEffect(() => {
-    if (!templates || !selectedTemplate) return;
-    if (!templates.some((t: Doc) => String(t.id) === selectedTemplate)) {
+  // Clear a deep-linked selection if it doesn't match the loaded templates —
+  // adjusted during render (React's documented "adjust state when data changes"
+  // pattern) instead of an effect, so no cascading render pass.
+  const [prevTemplates, setPrevTemplates] = useState<Doc[] | undefined>(templates);
+  const [prevSelectedTemplate, setPrevSelectedTemplate] = useState<string | null>(selectedTemplate);
+  if (templates !== prevTemplates || selectedTemplate !== prevSelectedTemplate) {
+    setPrevTemplates(templates);
+    setPrevSelectedTemplate(selectedTemplate);
+    if (templates && selectedTemplate && !templates.some((t: Doc) => String(t.id) === selectedTemplate)) {
       setSelectedTemplate(null);
     }
-  }, [templates, selectedTemplate]);
+  }
 
   // Clear a deep-linked size if it doesn't belong to the selected template.
-  useEffect(() => {
-    if (!sizes || !selectedSize) return;
-    if (!sizes.some((s: Doc) => String(s.id) === selectedSize)) {
+  const [prevSizes, setPrevSizes] = useState<Doc[] | undefined>(sizes);
+  const [prevSelectedSize, setPrevSelectedSize] = useState<string | null>(selectedSize);
+  if (sizes !== prevSizes || selectedSize !== prevSelectedSize) {
+    setPrevSizes(sizes);
+    setPrevSelectedSize(selectedSize);
+    if (sizes && selectedSize && !sizes.some((s: Doc) => String(s.id) === selectedSize)) {
       setSelectedSize(null);
     }
-  }, [sizes, selectedSize]);
+  }
 
   const isLoading = templatesLoading || myLoading;
 

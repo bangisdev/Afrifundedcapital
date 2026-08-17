@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- helpers return dynamic JSON response shapes */
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
 /**

@@ -113,10 +113,14 @@ export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boole
     if (isAuthenticated) hasSeenAuth.current = true;
   }, [isAuthenticated]);
 
-  // Close the mobile drawer whenever the route changes.
-  useEffect(() => {
+  // Close the mobile drawer whenever the route changes — adjusted during
+  // render (React's documented "adjust state when a prop changes" pattern)
+  // rather than in an effect, so the reset doesn't trigger a cascading pass.
+  const [prevPathname, setPrevPathname] = useState(location.pathname);
+  if (prevPathname !== location.pathname) {
+    setPrevPathname(location.pathname);
     setSidebarOpen(false);
-  }, [location.pathname]);
+  }
 
   useEffect(() => {
     if (location.pathname.startsWith("/auth")) return;
