@@ -1475,42 +1475,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Schema.org JSON-LD for FAQ (SEO) */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "FAQPage",
-            mainEntity: [
-              {
-                "@type": "Question",
-                name: "How does the prop firm challenge work?",
-                acceptedAnswer: {
-                  "@type": "Answer",
-                  text: "You purchase a challenge account (from $5,000 to $200,000) and trade within our rules. Hit the profit target without breaching drawdown limits, and you get funded with real capital.",
-                },
-              },
-              {
-                "@type": "Question",
-                name: "What profit split do funded traders receive?",
-                acceptedAnswer: {
-                  "@type": "Answer",
-                  text: "Funded traders receive up to 80% profit share on their trading profits. Payouts are processed within 24-48 hours via bank transfer.",
-                },
-              },
-              {
-                "@type": "Question",
-                name: "What trading platforms are supported?",
-                acceptedAnswer: {
-                  "@type": "Answer",
-                  text: "We support MetaTrader 5 (MT5) for all challenge and funded accounts.",
-                },
-              },
-            ],
-          }),
-        }}
-      />
       {/* ─── FAQ ─── */}
       <section id="faq" className="py-28 px-4">
         <div className="container-page max-w-3xl">
