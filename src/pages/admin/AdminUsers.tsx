@@ -6,6 +6,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useNow } from "@/hooks/use-now";
 import { Button } from "@/components/ui/button";
+import { PageLoader } from "@/components/dashboard/PageLoader";
+import { formatRelativeTime } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import {
   Loader2,
@@ -102,7 +104,7 @@ const KYC_COLORS: Record<string, string> = {
 
 function formatTimestamp(ts: number | null) {
   if (!ts) return "—";
-  return new Date(ts).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+  return formatRelativeTime(ts) || new Date(ts).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
 function formatDateTime(ts: number | null) {
@@ -253,11 +255,7 @@ export default function AdminUsers() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   return (

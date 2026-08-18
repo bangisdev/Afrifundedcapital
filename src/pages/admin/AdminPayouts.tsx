@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { PageLoader } from "@/components/dashboard/PageLoader";
 import { readResponseBody } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -255,7 +256,7 @@ export default function AdminPayouts() {
     toast.success(`Exported ${items.length} payout${items.length !== 1 ? 's' : ''} to CSV`);
   }, [payouts, statusFilter, userFilter]);
 
-  if (isLoading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
+  if (isLoading) return <PageLoader />;
 
   return (
     <div className="space-y-6">

@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { PageLoader } from "@/components/dashboard/PageLoader";
 import { readResponseBody, errorMessageOf } from "@/lib/api";
 import { useState } from "react";
 import { useNow } from "@/hooks/use-now";
@@ -70,7 +71,7 @@ export default function AdminCoupons() {
   const [discountValue, setDiscountValue] = useState("");
   const [maxUses, setMaxUses] = useState("");
 
-  if (isLoading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
+  if (isLoading) return <PageLoader />;
 
   const handleCreate = async () => {
     if (!code || !discountValue) { toast.error("Fill in all fields"); return; }

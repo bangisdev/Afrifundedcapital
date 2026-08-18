@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery } from "@/hooks/use-api";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { PageLoader } from "@/components/dashboard/PageLoader";
 import { readResponseBody } from "@/lib/api";
 import { useState, useEffect, useCallback } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
@@ -199,7 +200,7 @@ export default function AdminKyc() {
   const hasActiveFilters = debouncedSearch || statusFilter !== "all" || typeFilter !== "all";
 
   if (isLoading) {
-    return <div className="flex items-center justify-center h-64"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
+    return <PageLoader />;
   }
 
   // ─── Image Preview Overlay ───

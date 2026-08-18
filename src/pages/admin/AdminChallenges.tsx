@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { newsBlackoutWindow, RULE_HINTS } from "@/lib/utils";
+import { newsBlackoutWindow, RULE_HINTS, formatMoney } from "@/lib/utils";
 import { parseStoredViolations, ruleCodeLabel, timeAgo } from "@/lib/challenge-violations";
 import {
   Loader2,
@@ -97,9 +97,7 @@ const TEMPLATE_TYPES = [
   { value: "evaluation", label: "Evaluation" },
 ];
 
-function formatNgn(n: number) {
-  return `₦${n.toLocaleString()}`;
-}
+
 
 // Compact news-trading rule label for the challenges table — mirrors the
 // dashboard/landing "No · 15m" formatting via the shared blackout formatter.
@@ -396,7 +394,7 @@ export default function AdminChallenges() {
           { label: "Templates", value: stats.templates, icon: Trophy },
           { label: "Active Challenges", value: stats.active, icon: Users },
           { label: "Funded Traders", value: stats.funded, icon: CheckCircle },
-          { label: "Revenue", value: formatNgn(stats.revenue), icon: DollarSign },
+          { label: "Revenue", value: formatMoney(stats.revenue), icon: DollarSign },
         ].map((s) => (
           <div key={s.label} className="card-subtle p-3 flex items-center gap-3">
             <div className="h-8 w-8 rounded-md bg-secondary flex items-center justify-center">
@@ -472,7 +470,7 @@ export default function AdminChallenges() {
                             </Badge>
                           </div>
                           <div className="text-xs text-muted-foreground mt-0.5">
-                            {t.description || "No description"} · Base price: {formatNgn(t.price)} · {sizes.length} sizes
+                            {t.description || "No description"} · Base price: {formatMoney(t.price)} · {sizes.length} sizes
                           </div>
                         </div>
                       </div>
@@ -543,7 +541,7 @@ export default function AdminChallenges() {
                                 <div className="flex items-center gap-3 text-xs">
                                   <span className="font-medium w-16">{s.label}</span>
                                   <span className="text-muted-foreground">${s.size.toLocaleString()}</span>
-                                  <span className="font-medium">{formatNgn(s.price)}</span>
+                                  <span className="font-medium">{formatMoney(s.price)}</span>
                                 </div>
                                 <div className="flex items-center gap-1">
                                   <Link
@@ -567,7 +565,7 @@ export default function AdminChallenges() {
                                     size="icon-sm"
                                     className="h-6 w-6"
                                     onClick={() =>
-                                      setDeleteTarget({ type: "size", id: s.id, label: `${s.label} (${formatNgn(s.price)})` })
+                                      setDeleteTarget({ type: "size", id: s.id, label: `${s.label} (${formatMoney(s.price)})` })
                                     }
                                   >
                                     <Trash2 className="h-3 w-3 text-destructive" />
@@ -655,7 +653,7 @@ export default function AdminChallenges() {
                           </td>
                           <td className="p-3">User {ch.userId}</td>
                           <td className="p-3">${(ch.accountSize || 0).toLocaleString()}</td>
-                          <td className="p-3">{formatNgn(ch.amountPaid || 0)}</td>
+                          <td className="p-3">{formatMoney(ch.amountPaid || 0)}</td>
                           <td className="p-3">
                             <Badge
                               variant={

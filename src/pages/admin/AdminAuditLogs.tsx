@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery } from "@/hooks/use-api";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { PageLoader } from "@/components/dashboard/PageLoader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -24,6 +25,7 @@ import {
 import { useState, useEffect } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useSearchParams } from "react-router";
+import { formatRelativeTime } from "@/lib/utils";
 
 interface AuditLogsResponse {
   logs: any[];
@@ -36,8 +38,6 @@ interface AuditLogsResponse {
 
 const PAGE_SIZES = [10, 25, 50];
 
-// Quick-filter chips for challenge lifecycle events — one tap filters the
-// action dropdown to exactly that transition (clicking again clears it).
 const CHALLENGE_LIFECYCLE_CHIPS: Array<{ action: string; label: string; icon: LucideIcon }> = [
   { action: "challenge.phase_passed", label: "Phase Passed", icon: Award },
   { action: "challenge.funded", label: "Funded", icon: Trophy },
@@ -45,7 +45,6 @@ const CHALLENGE_LIFECYCLE_CHIPS: Array<{ action: string; label: string; icon: Lu
   { action: "challenge.expired", label: "Expired", icon: Clock },
 ];
 
-// Payment lifecycle quick filters — same one-tap toggle behavior.
 const PAYMENT_LIFECYCLE_CHIPS: Array<{ action: string; label: string; icon: LucideIcon }> = [
   { action: "payment.completed", label: "Completed", icon: BadgeCheck },
   { action: "payment.refunded", label: "Refunded", icon: RotateCcw },
@@ -83,7 +82,7 @@ function FilterChip({
 
 function formatDateTime(ts: number | null) {
   if (!ts) return "—";
-  return new Date(ts).toLocaleString("en-US", {
+  return formatRelativeTime(ts) || new Date(ts).toLocaleString("en-US", {
     year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
   });
 }
@@ -98,9 +97,6 @@ function getInitials(name: string | null | undefined): string {
     .join("");
 }
 
-// Renders an audit entry's details. When the details carry a challengeLabel
-// (e.g. payment.completed / payment.refunded entries), the purchase label is
-// surfaced prominently instead of being buried in the raw JSON dump.
 function DetailsLine({ details }: { details: string | object | null | undefined }) {
   if (!details) return null;
 
@@ -157,7 +153,6 @@ function ActorCell({ log }: { log: any }) {
     );
   }
 
-  // Actor's account no longer exists — show a clear label instead of a bare id
   return (
     <div className="flex items-center gap-2 min-w-0">
       <div className="h-6 w-6 rounded-full bg-secondary/50 flex items-center justify-center shrink-0">
@@ -177,11 +172,6 @@ export default function AdminAuditLogs() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  // Precise entity scoping from the URL — e.g. Admin Settings' "Last changed
-  // by" links here with ?entity=setting&entityId=flutterwave_config.
-  // Derived straight from the URL (no state mirroring) so same-route navigation
-  // from a deep link stays in sync with zero extra effects, and clearing just
-  // strips the params.
   const [searchParams, setSearchParams] = useSearchParams();
   const entityFilter = searchParams.get("entity") || "";
   const entityIdFilter = searchParams.get("entityId") || "";
@@ -216,7 +206,7 @@ export default function AdminAuditLogs() {
   const stats = data?.stats || { total: 0, byAction: {} };
 
   if (isLoading) {
-    return <div className="flex items-center justify-center h-64"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
+    return <PageLoader />;
   }
 
   const topActions = Object.entries(stats.byAction || {}).sort((a, b) => b[1] - a[1]).slice(0, 4);
@@ -225,7 +215,6 @@ export default function AdminAuditLogs() {
     <div className="space-y-6">
       <PageHeader eyebrow="System" title="Audit Logs" subtitle="Security and activity trail across the platform" />
 
-      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="card-subtle p-3 flex items-center gap-3">
           <div className="h-8 w-8 rounded-md bg-secondary flex items-center justify-center"><ScrollText className="h-4 w-4 text-muted-foreground" /></div>
@@ -245,7 +234,6 @@ export default function AdminAuditLogs() {
         ))}
       </div>
 
-      {/* Search & Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -276,7 +264,6 @@ export default function AdminAuditLogs() {
         )}
       </div>
 
-      {/* Quick filter chips — challenge + payment lifecycle */}
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-[10px] font-medium text-muted-foreground mr-1">Challenge lifecycle:</span>
         {CHALLENGE_LIFECYCLE_CHIPS.map((chip) => (
@@ -300,7 +287,6 @@ export default function AdminAuditLogs() {
         ))}
       </div>
 
-      {/* Entity scope chip (from deep links) */}
       {(entityFilter || entityIdFilter) && (
         <div className="flex items-center gap-2 text-[10px]">
           <span className="text-muted-foreground font-medium">Scoped to:</span>
@@ -318,7 +304,6 @@ export default function AdminAuditLogs() {
         </div>
       )}
 
-      {/* List */}
       <div className="space-y-1">
         {logs.length === 0 ? (
           <div className="card-subtle p-8 text-center text-muted-foreground text-xs">No audit log entries found</div>
@@ -344,7 +329,6 @@ export default function AdminAuditLogs() {
         )}
       </div>
 
-      {/* Pagination Footer */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
         <div>Showing {logs.length} of {total} entries · Page {page} of {totalPages}</div>
         <div className="flex items-center gap-2">

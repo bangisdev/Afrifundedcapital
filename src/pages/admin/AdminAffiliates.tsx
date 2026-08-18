@@ -16,9 +16,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  Loader2,
+} from "@/components/ui/alert-dialog";import { Loader2,
   CheckCircle,
   XCircle,
   DollarSign,
@@ -38,12 +36,14 @@ import {
   ArrowDown,
   ArrowUpDown,
 } from "lucide-react";
+import { PageLoader } from "@/components/dashboard/PageLoader";
+import { formatRelativeTime, formatMoney } from "@/lib/utils";
 import { toast } from "sonner";
 
 // ─── Helpers ───────────────────────────────────────────
 function formatTime(ts: number | null | undefined) {
   if (!ts) return "—";
-  return new Date(ts).toLocaleDateString("en-US", {
+  return formatRelativeTime(ts) || new Date(ts).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -294,11 +294,7 @@ function AffiliatePayoutsTab() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   return (
@@ -307,9 +303,9 @@ function AffiliatePayoutsTab() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { label: "Total Requests", value: stats.total, icon: DollarSign, color: "text-foreground" },
-          { label: "Pending", value: `${stats.pending} (${stats.pending.toLocaleString("en-NG", { style: "currency", currency: "NGN", minimumFractionDigits: 0 })})`, icon: Clock, color: "text-amber-600" },
+          { label: "Pending", value: `${stats.pending} (${formatMoney(stats.pending)})`, icon: Clock, color: "text-amber-600" },
           { label: "Approved", value: stats.approved, icon: CheckCircle, color: "text-emerald-600" },
-          { label: "Total Paid", value: stats.paid.toLocaleString("en-NG", { style: "currency", currency: "NGN", minimumFractionDigits: 0 }), icon: Banknote, color: "text-blue-600" },
+          { label: "Total Paid", value: formatMoney(stats.paid), icon: Banknote, color: "text-blue-600" },
         ].map((s) => (
           <div key={s.label} className="card-subtle p-3 flex items-center gap-3">
             <div className="h-8 w-8 rounded-md bg-secondary flex items-center justify-center">
@@ -767,11 +763,7 @@ function AffiliatesListTab() {
   const stats = data?.stats || EMPTY_AFFILIATE_STATS;
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   return (
@@ -784,11 +776,7 @@ function AffiliatesListTab() {
           { label: "Total Referrals", value: stats.totalReferrals, icon: TrendingUp },
           {
             label: "Total Commissions",
-            value: stats.totalCommissions.toLocaleString("en-NG", {
-              style: "currency",
-              currency: "NGN",
-              minimumFractionDigits: 0,
-            }),
+            value: formatMoney(stats.totalCommissions),
             icon: DollarSign,
           },
         ].map((s) => (
@@ -884,7 +872,7 @@ function AffiliatesListTab() {
                 <div className="flex items-center gap-4 shrink-0 text-right">
                   <div>
                     <div className="text-sm font-medium">
-                      {affiliate.pendingCommissions.toLocaleString("en-NG", {
+                      {formatMoney(affiliate.pendingCommissions)
                         style: "currency",
                         currency: "NGN",
                         minimumFractionDigits: 0,
@@ -894,7 +882,7 @@ function AffiliatesListTab() {
                   </div>
                   <div>
                     <div className="text-sm font-medium text-emerald-600">
-                      {affiliate.paidCommissions.toLocaleString("en-NG", {
+                      {formatMoney(affiliate.paidCommissions)
                         style: "currency",
                         currency: "NGN",
                         minimumFractionDigits: 0,
@@ -904,7 +892,7 @@ function AffiliatesListTab() {
                   </div>
                   <div>
                     <div className="text-sm font-medium">
-                      {affiliate.totalCommissions.toLocaleString("en-NG", {
+                      {formatMoney(affiliate.totalCommissions)
                         style: "currency",
                         currency: "NGN",
                         minimumFractionDigits: 0,
