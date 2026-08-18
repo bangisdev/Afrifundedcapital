@@ -83,8 +83,8 @@ describe("AdminPayments Page", () => {
   beforeEach(() => { clearAll(); vi.clearAllMocks(); mockFetch.mockResolvedValue({ ok: true, json: async () => ({ message: "ok" }) }); });
 
   describe("Loading State", () => {
-    it("shows spinner when loading", () => { clearAll(); const { container } = render(<AdminPayments />); expect(container.querySelector(".animate-spin")).toBeTruthy(); });
-    it("hides spinner when loaded", () => { setQueryData({}); const { container } = render(<AdminPayments />); expect(container.querySelector(".animate-spin")).toBeNull(); });
+    it("shows spinner when loading", () => { clearAll(); const { container } = render(<AdminPayments />); expect(container.querySelector("[aria-label='Loading']")).toBeTruthy(); });
+    it("hides spinner when loaded", () => { setQueryData({}); const { container } = render(<AdminPayments />); expect(container.querySelector("[aria-label='Loading']")).toBeNull(); });
   });
 
   describe("Page Header", () => {

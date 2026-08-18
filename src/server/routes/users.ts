@@ -18,8 +18,9 @@ app.get("/current", requireAuth, (c) => {
 // Update profile (validated)
 app.put("/profile", requireAuth, async (c) => {
   const userId = c.get("userId");
-  const body = await validate(c, schemas.profileUpdate);
-  if (!body) return c.json({ error: "Validation failed" }, 400);
+  const result = await validate(c, schemas.profileUpdate);
+  if (result instanceof Response) return result;
+  const body = result;
   const db = getDb();
 
   // Dynamic update map: any is required here because drizzle's .set() accepts
@@ -46,8 +47,9 @@ app.put("/profile", requireAuth, async (c) => {
 // Complete onboarding (validated)
 app.post("/onboarding", requireAuth, async (c) => {
   const userId = c.get("userId");
-  const body = await validate(c, schemas.onboarding);
-  if (!body) return c.json({ error: "Validation failed" }, 400);
+  const result = await validate(c, schemas.onboarding);
+  if (result instanceof Response) return result;
+  const body = result;
   const db = getDb();
 
   db.update(users).set({
@@ -68,8 +70,9 @@ app.post("/onboarding", requireAuth, async (c) => {
 // Update notification preferences (validated)
 app.put("/preferences", requireAuth, async (c) => {
   const userId = c.get("userId");
-  const body = await validate(c, schemas.notificationPreferences);
-  if (!body) return c.json({ error: "Validation failed" }, 400);
+  const result = await validate(c, schemas.notificationPreferences);
+  if (result instanceof Response) return result;
+  const body = result;
   const db = getDb();
 
   db.update(users).set({
@@ -229,8 +232,9 @@ app.get("/growth", requireAuth, requireAdmin, (c) => {
 // Admin: Update user role (validated)
 app.put("/:id/role", requireAuth, requireAdmin, async (c) => {
   const id = parseInt(c.req.param("id"));
-  const body = await validate(c, schemas.updateRole);
-  if (!body) return c.json({ error: "Validation failed" }, 400);
+  const result = await validate(c, schemas.updateRole);
+  if (result instanceof Response) return result;
+  const body = result;
   const db = getDb();
 
   const target = db.select().from(users).where(eq(users.id, id)).get();
@@ -262,8 +266,9 @@ app.put("/:id/role", requireAuth, requireAdmin, async (c) => {
 // Admin: Toggle user status (validated)
 app.put("/:id/status", requireAuth, requireAdmin, async (c) => {
   const id = parseInt(c.req.param("id"));
-  const body = await validate(c, schemas.updateStatus);
-  if (!body) return c.json({ error: "Validation failed" }, 400);
+  const result = await validate(c, schemas.updateStatus);
+  if (result instanceof Response) return result;
+  const body = result;
   const db = getDb();
 
   const target = db.select().from(users).where(eq(users.id, id)).get();
@@ -297,8 +302,9 @@ app.put("/:id/status", requireAuth, requireAdmin, async (c) => {
 // Admin: Update user profile fields (validated)
 app.put("/:id/profile", requireAuth, requireAdmin, async (c) => {
   const id = parseInt(c.req.param("id"));
-  const body = await validate(c, schemas.updateProfileAdmin);
-  if (!body) return c.json({ error: "Validation failed" }, 400);
+  const result = await validate(c, schemas.updateProfileAdmin);
+  if (result instanceof Response) return result;
+  const body = result;
   const db = getDb();
 
   // Dynamic update map — see note above for why any is intentional here.
@@ -468,8 +474,9 @@ app.get("/brief", requireAuth, requireAdmin, (c) => {
 // actions — every change is audited with secret values redacted from the trail.
 app.put("/settings/:key", requireAuth, requireAdmin, async (c) => {
   const key = c.req.param("key");
-  const body = await validate(c, schemas.updateSetting);
-  if (!body) return c.json({ error: "Validation failed" }, 400);
+  const result = await validate(c, schemas.updateSetting);
+  if (result instanceof Response) return result;
+  const body = result;
   const db = getDb();
 
   const existing = db.select().from(settings).where(eq(settings.key, key)).get();

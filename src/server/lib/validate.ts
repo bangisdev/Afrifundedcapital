@@ -3,25 +3,27 @@
  *
  * Usage:
  *   import { validate, schemas } from "../lib/validate";
- *   const body = await validate(c, schemas.signIn);
+ *   const result = await validate(c, schemas.signIn);
+ *   if (result instanceof Response) return result;
+ *   const body = result;
  */
 import { z } from "zod";
 import type { Context } from "hono";
 
 /**
- * Parse and validate the JSON body of a Hono request. Returns the validated
- * data on success, or sends a 400 response and returns null on failure.
+ * Parse and validate the JSON body of a Hono request.
+ * Returns the validated data on success, or a 400 Response on failure.
+ * Callers MUST check `if (result instanceof Response) return result;`.
  */
 export async function validate<T extends z.ZodType>(
   c: Context,
   schema: T,
-): Promise<z.infer<T> | null> {
+): Promise<z.infer<T> | Response> {
   let raw: unknown;
   try {
     raw = await c.req.json();
   } catch {
-    c.json({ error: "Invalid JSON body" }, 400);
-    return null;
+    return c.json({ error: "Invalid JSON body" }, 400);
   }
   const result = schema.safeParse(raw);
   if (!result.success) {
@@ -29,8 +31,7 @@ export async function validate<T extends z.ZodType>(
       path: i.path.join("."),
       message: i.message,
     }));
-    c.json({ error: "Validation failed", issues }, 400);
-    return null;
+    return c.json({ error: "Validation failed", issues }, 400);
   }
   return result.data;
 }

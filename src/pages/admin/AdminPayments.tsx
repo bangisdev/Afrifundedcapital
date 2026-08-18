@@ -2,6 +2,7 @@
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { PageLoader } from "@/components/dashboard/PageLoader";
+import { formatMoney, formatRelativeTime } from "@/lib/utils";
 import { useState, useEffect, useMemo } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Badge } from "@/components/ui/badge";
@@ -59,20 +60,7 @@ const RESTORE_REASON_LABELS: Record<string, string> = {
   per_user_limit: "Coupon usage limit reached for this user",
 };
 
-function formatNgn(n: number) {
-  return `₦${n.toLocaleString()}`;
-}
 
-function formatTime(ts: number | null) {
-  if (!ts) return "";
-  const d = new Date(ts);
-  const now = new Date();
-  const diff = now.getTime() - d.getTime();
-  if (diff < 60000) return "Just now";
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
 
 interface PaymentsResponse {
   payments: any[];
@@ -260,10 +248,10 @@ export default function AdminPayments() {
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: "Total Revenue", value: formatNgn(paymentStats.revenue), icon: DollarSign, accent: "text-emerald-600" },
+          { label: "Total Revenue", value: formatMoney(paymentStats.revenue), icon: DollarSign, accent: "text-emerald-600" },
           { label: "Total Transactions", value: paymentStats.total, icon: CreditCard },
-          { label: "This Month", value: formatNgn(revenueGrowth?.thisMonth || 0), icon: TrendingUp, accent: "text-blue-600" },
-          { label: "Last Month", value: formatNgn(revenueGrowth?.lastMonth || 0), icon: TrendingUp, accent: "text-muted-foreground" },
+          { label: "This Month", value: formatMoney(revenueGrowth?.thisMonth || 0), icon: TrendingUp, accent: "text-blue-600" },
+          { label: "Last Month", value: formatMoney(revenueGrowth?.lastMonth || 0), icon: TrendingUp, accent: "text-muted-foreground" },
         ].map((s) => (
           <div key={s.label} className="card-subtle p-3 flex items-center gap-3">
             <div className="h-8 w-8 rounded-md bg-secondary flex items-center justify-center">
@@ -345,7 +333,7 @@ export default function AdminPayments() {
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <span>Showing {payments.length} of {total} transactions</span>
             <span>·</span>
-            <span>Total (current page): {formatNgn(payments.reduce((s, p) => s + (p.amount || 0), 0))}</span>
+            <span>Total (current page): {formatMoney(payments.reduce((s, p) => s + (p.amount || 0), 0))}</span>
           </div>
 
           {/* Transactions Table */}
@@ -395,7 +383,7 @@ export default function AdminPayments() {
                               `User ${p.userId}`
                             )}
                           </td>
-                          <td className="p-3 text-right font-medium">{formatNgn(p.amount || 0)}</td>
+                          <td className="p-3 text-right font-medium">{formatMoney(p.amount || 0)}</td>
                           <td className="p-3 hidden lg:table-cell">
                             <Badge variant="outline" className="text-[10px] capitalize">{p.provider}</Badge>
                           </td>
@@ -404,7 +392,7 @@ export default function AdminPayments() {
                               {statusCfg.label}
                             </span>
                           </td>
-                          <td className="p-3 hidden xl:table-cell text-muted-foreground">{formatTime(p.createdAt)}</td>
+                          <td className="p-3 hidden xl:table-cell text-muted-foreground">{formatRelativeTime(p.createdAt)}</td>
                           <td className="p-3 text-right">
                             <Link
                               to={`/admin/audit-logs?entity=payment&entityId=${p.id}`}
@@ -494,14 +482,14 @@ export default function AdminPayments() {
           <div className="grid md:grid-cols-3 gap-4">
             <div className="card-subtle p-4">
               <div className="text-xs text-muted-foreground mb-1">Total Revenue</div>
-              <div className="text-2xl font-medium">{formatNgn(paymentStats.revenue)}</div>
+              <div className="text-2xl font-medium">{formatMoney(paymentStats.revenue)}</div>
               <div className="text-[10px] text-muted-foreground mt-1">
                 {paymentStats.completed} completed transactions
               </div>
             </div>
             <div className="card-subtle p-4">
               <div className="text-xs text-muted-foreground mb-1">This Month</div>
-              <div className="text-2xl font-medium">{formatNgn(revenueGrowth?.thisMonth || 0)}</div>
+              <div className="text-2xl font-medium">{formatMoney(revenueGrowth?.thisMonth || 0)}</div>
               <div className="flex items-center gap-1 text-[10px] mt-1">
                 {(revenueGrowth?.thisMonth || 0) > (revenueGrowth?.lastMonth || 0) ? (
                   <span className="text-emerald-600 flex items-center gap-0.5">
@@ -524,7 +512,7 @@ export default function AdminPayments() {
             </div>
             <div className="card-subtle p-4">
               <div className="text-xs text-muted-foreground mb-1">Last Month</div>
-              <div className="text-2xl font-medium">{formatNgn(revenueGrowth?.lastMonth || 0)}</div>
+              <div className="text-2xl font-medium">{formatMoney(revenueGrowth?.lastMonth || 0)}</div>
               <div className="text-[10px] text-muted-foreground mt-1">Previous period</div>
             </div>
           </div>
@@ -564,7 +552,7 @@ export default function AdminPayments() {
                 <div key={bar.label}>
                   <div className="flex items-center justify-between text-xs mb-1">
                     <span className="text-muted-foreground">{bar.label}</span>
-                    <span className="font-medium">{formatNgn(bar.value)}</span>
+                    <span className="font-medium">{formatMoney(bar.value)}</span>
                   </div>
                   <div className="h-2 bg-secondary rounded-full overflow-hidden">
                     <div
@@ -585,7 +573,7 @@ export default function AdminPayments() {
           <AlertDialogHeader>
             <AlertDialogTitle>Refund Payment</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to refund <strong>{formatNgn(refundTarget?.amount || 0)}</strong> for
+              Are you sure you want to refund <strong>{formatMoney(refundTarget?.amount || 0)}</strong> for
               reference <strong className="font-mono">{refundTarget?.reference}</strong>?
               This will mark the payment as refunded, <strong>deactivate the linked challenge</strong>,
               suspend its MT5 account, void any coupon used, and notify the user.

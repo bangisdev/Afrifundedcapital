@@ -3,6 +3,7 @@ import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { PageLoader } from "@/components/dashboard/PageLoader";
 import { readResponseBody, errorMessageOf } from "@/lib/api";
+import { formatRelativeTime } from "@/lib/utils";
 import { useState, type ReactNode } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
@@ -26,18 +27,7 @@ interface ProviderConfig {
   mode?: "test" | "live";
 }
 
-/** Compact relative time — "just now", "12m ago", "3h ago", "5d ago". */
-function formatRelativeTime(ts: number): string {
-  const diff = Date.now() - ts;
-  if (diff < 60_000) return "just now";
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(ts).toLocaleDateString();
-}
+
 
 /**
  * Pull the last-changed metadata (attached server-side from the audit trail)
