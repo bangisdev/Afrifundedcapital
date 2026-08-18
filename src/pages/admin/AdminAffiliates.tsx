@@ -872,31 +872,19 @@ function AffiliatesListTab() {
                 <div className="flex items-center gap-4 shrink-0 text-right">
                   <div>
                     <div className="text-sm font-medium">
-                      {formatMoney(affiliate.pendingCommissions)
-                        style: "currency",
-                        currency: "NGN",
-                        minimumFractionDigits: 0,
-                      })}
+                      {formatMoney(affiliate.pendingCommissions)}
                     </div>
                     <div className="text-[10px] text-muted-foreground">Pending</div>
                   </div>
                   <div>
                     <div className="text-sm font-medium text-emerald-600">
-                      {formatMoney(affiliate.paidCommissions)
-                        style: "currency",
-                        currency: "NGN",
-                        minimumFractionDigits: 0,
-                      })}
+                      {formatMoney(affiliate.paidCommissions)}
                     </div>
                     <div className="text-[10px] text-muted-foreground">Paid</div>
                   </div>
                   <div>
                     <div className="text-sm font-medium">
-                      {formatMoney(affiliate.totalCommissions)
-                        style: "currency",
-                        currency: "NGN",
-                        minimumFractionDigits: 0,
-                      })}
+                      {formatMoney(affiliate.totalCommissions)}
                     </div>
                     <div className="text-[10px] text-muted-foreground">Total</div>
                   </div>

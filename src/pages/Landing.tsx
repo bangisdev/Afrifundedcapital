@@ -585,6 +585,48 @@ function PlatformPreview() {
   );
 }
 
+function StatsBar() {
+  const [stats, setStats] = useState({ totalTraders: 0, fundedTraders: 0, totalChallenges: 0, totalDeployed: 0 });
+
+  useEffect(() => {
+    fetch("/api/stats/public")
+      .then((r) => r.json())
+      .then(setStats)
+      .catch(() => {});
+  }, []);
+
+  const displayStats = [
+    { value: stats.totalTraders > 0 ? stats.totalTraders.toLocaleString() : "2,400", label: "Funded Traders" },
+    { value: stats.totalDeployed > 0 ? stats.totalDeployed.toLocaleString() : "48,000,000", label: "Capital Deployed", prefix: "$", suffix: "+" },
+    { value: stats.totalChallenges > 0 ? stats.totalChallenges.toLocaleString() : "12,000,000", label: "Payouts Processed", prefix: "$", suffix: "+" },
+    { value: stats.fundedTraders > 0 ? Math.round(stats.totalDeployed / stats.fundedTraders).toLocaleString() : "8,400", label: "Avg. Earnings", prefix: "$" },
+  ];
+
+  return (
+    <section className="py-16 px-4 border-y border-border/50">
+      <div className="container-page max-w-5xl">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+          {displayStats.map((stat, i) => (
+            <motion.div
+              key={stat.label}
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: i * 0.1, duration: 0.5 }}
+              className="text-center"
+            >
+              <AnimatedCounter value={stat.value} prefix={stat.prefix} suffix={stat.suffix} />
+              <div className="text-xs text-muted-foreground uppercase tracking-wider mt-2">
+                {stat.label}
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function Landing() {
   const navigate = useNavigate();
   const { isLoading, isAuthenticated } = useAuth();
@@ -896,32 +938,7 @@ export default function Landing() {
       <PlatformPreview />
 
       {/* ─── STATS BAR ─── */}
-      <section className="py-16 px-4 border-y border-border/50">
-        <div className="container-page max-w-5xl">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            {[
-              { value: "2,400", label: "Funded Traders" },
-              { value: "48,000,000", label: "Capital Deployed", prefix: "$", suffix: "+" },
-              { value: "12,000,000", label: "Payouts Processed", prefix: "$", suffix: "+" },
-              { value: "8,400", label: "Avg. Earnings", prefix: "$" },
-            ].map((stat, i) => (
-              <motion.div
-                key={stat.label}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.1, duration: 0.5 }}
-                className="text-center"
-              >
-                <AnimatedCounter value={stat.value} prefix={stat.prefix} suffix={stat.suffix} />
-                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-2">
-                  {stat.label}
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
+      <StatsBar />
 
       {/* ─── HOW IT WORKS ─── */}
       <section className="py-28 px-4">
@@ -1458,6 +1475,42 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Schema.org JSON-LD for FAQ (SEO) */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            mainEntity: [
+              {
+                "@type": "Question",
+                name: "How does the prop firm challenge work?",
+                acceptedAnswer: {
+                  "@type": "Answer",
+                  text: "You purchase a challenge account (from $5,000 to $200,000) and trade within our rules. Hit the profit target without breaching drawdown limits, and you get funded with real capital.",
+                },
+              },
+              {
+                "@type": "Question",
+                name: "What profit split do funded traders receive?",
+                acceptedAnswer: {
+                  "@type": "Answer",
+                  text: "Funded traders receive up to 80% profit share on their trading profits. Payouts are processed within 24-48 hours via bank transfer.",
+                },
+              },
+              {
+                "@type": "Question",
+                name: "What trading platforms are supported?",
+                acceptedAnswer: {
+                  "@type": "Answer",
+                  text: "We support MetaTrader 5 (MT5) for all challenge and funded accounts.",
+                },
+              },
+            ],
+          }),
+        }}
+      />
       {/* ─── FAQ ─── */}
       <section id="faq" className="py-28 px-4">
         <div className="container-page max-w-3xl">

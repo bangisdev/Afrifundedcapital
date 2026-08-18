@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { getDb } from "./db";
-import { users, sessions, settings, loginHistory } from "./schema";
-import { eq, and, gt } from "drizzle-orm";
+import { users, sessions, settings, loginHistory, userChallenges, payments } from "./schema";
+import { eq, and, gt, sql, isNull } from "drizzle-orm";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { initDatabase } from "./db";
@@ -139,6 +139,27 @@ app.use("*", async (c, next) => {
 
 // Health check
 app.get("/api/health", (c) => c.json({ status: "ok", timestamp: Date.now() }));
+
+// Public stats (no auth) — powers the landing page counters so marketing
+// numbers stay honest as the business grows.
+app.get("/api/stats/public", (c) => {
+  try {
+    const db = getDb();
+    const totalTraders = db.select({ count: sql`count(*)` }).from(users).where(isNull(users.role)).get();
+    const fundedTraders = db.select({ count: sql`count(*)` }).from(userChallenges).where(eq(userChallenges.status, "funded")).get();
+    const totalChallenges = db.select({ count: sql`count(*)` }).from(userChallenges).get();
+    const completedPayments = db.select({ total: sql`coalesce(sum(amount), 0)` }).from(payments).where(eq(payments.status, "completed")).get();
+    return c.json({
+      totalTraders: Number(totalTraders?.count) || 0,
+      fundedTraders: Number(fundedTraders?.count) || 0,
+      totalChallenges: Number(totalChallenges?.count) || 0,
+      totalDeployed: Number(completedPayments?.total) || 0,
+    });
+  } catch (err) {
+    console.error("[Stats] Public stats error:", err);
+    return c.json({ totalTraders: 0, fundedTraders: 0, totalChallenges: 0, totalDeployed: 0 });
+  }
+});
 
 // ═══════════════════════════════════════════════
 //  SETTINGS API
