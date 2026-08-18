@@ -104,8 +104,8 @@ app.post("/generate", requireAuth, async (c) => {
     db.run(
       sql`INSERT INTO audit_logs (user_id, action, entity, entity_id, details, timestamp) VALUES (${userId}, ${"certificate_generated"}, ${"certificate"}, ${String(result.id)}, ${JSON.stringify({ certType, certNumber })}, ${Date.now()})`
     );
-  } catch {
-    // Audit log is non-critical
+  } catch (e) {
+    console.warn("[Certificates] Audit log write failed:", e);
   }
 
   return c.json(result, 201);

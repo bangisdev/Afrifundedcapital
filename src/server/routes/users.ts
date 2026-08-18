@@ -5,6 +5,7 @@ import { eq, desc, asc, like, count, sql, and, or, type SQL, type SQLWrapper } f
 import { requireAuth, requireAdmin, requirePermission } from "../middleware";
 import { createNotification, notifyAdminsOfSecurityEvent } from "../lib/notifications";
 import { writeAuditLog, redactSetting, attachSettingsLastChanged } from "../lib/audit";
+import { validate, schemas } from "../lib/validate";
 
 const app = new Hono();
 
@@ -14,34 +15,39 @@ app.get("/current", requireAuth, (c) => {
   return c.json(user);
 });
 
-// Update profile
+// Update profile (validated)
 app.put("/profile", requireAuth, async (c) => {
   const userId = c.get("userId");
-  const body = await c.req.json();
+  const body = await validate(c, schemas.profileUpdate);
+  if (!body) return c.json({ error: "Validation failed" }, 400);
   const db = getDb();
 
-  const allowedFields = ["name", "phone", "address", "country", "tradingExperience", "timezone", "dateOfBirth", "image"];
   // Dynamic update map: any is required here because drizzle's .set() accepts
   // it, and the union of column types rejects a narrow index signature.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updates: Record<string, any> = {};
 
-  for (const field of allowedFields) {
-    if (body[field] !== undefined) {
-      updates[field] = body[field];
+  for (const [key, value] of Object.entries(body)) {
+    if (value !== undefined) {
+      updates[key] = value;
     }
   }
   updates.updatedAt = Date.now();
+
+  if (Object.keys(updates).length <= 1) {
+    return c.json({ error: "No valid fields to update" }, 400);
+  }
 
   db.update(users).set(updates).where(eq(users.id, userId)).run();
 
   return c.json({ success: true });
 });
 
-// Complete onboarding
+// Complete onboarding (validated)
 app.post("/onboarding", requireAuth, async (c) => {
   const userId = c.get("userId");
-  const body = await c.req.json();
+  const body = await validate(c, schemas.onboarding);
+  if (!body) return c.json({ error: "Validation failed" }, 400);
   const db = getDb();
 
   db.update(users).set({
@@ -59,10 +65,11 @@ app.post("/onboarding", requireAuth, async (c) => {
   return c.json({ success: true });
 });
 
-// Update notification preferences
+// Update notification preferences (validated)
 app.put("/preferences", requireAuth, async (c) => {
   const userId = c.get("userId");
-  const body = await c.req.json();
+  const body = await validate(c, schemas.notificationPreferences);
+  if (!body) return c.json({ error: "Validation failed" }, 400);
   const db = getDb();
 
   db.update(users).set({
@@ -219,10 +226,11 @@ app.get("/growth", requireAuth, requireAdmin, (c) => {
   });
 });
 
-// Admin: Update user role
+// Admin: Update user role (validated)
 app.put("/:id/role", requireAuth, requireAdmin, async (c) => {
   const id = parseInt(c.req.param("id"));
-  const body = await c.req.json();
+  const body = await validate(c, schemas.updateRole);
+  if (!body) return c.json({ error: "Validation failed" }, 400);
   const db = getDb();
 
   const target = db.select().from(users).where(eq(users.id, id)).get();
@@ -251,10 +259,11 @@ app.put("/:id/role", requireAuth, requireAdmin, async (c) => {
   return c.json({ success: true });
 });
 
-// Admin: Toggle user status
+// Admin: Toggle user status (validated)
 app.put("/:id/status", requireAuth, requireAdmin, async (c) => {
   const id = parseInt(c.req.param("id"));
-  const body = await c.req.json();
+  const body = await validate(c, schemas.updateStatus);
+  if (!body) return c.json({ error: "Validation failed" }, 400);
   const db = getDb();
 
   const target = db.select().from(users).where(eq(users.id, id)).get();
@@ -285,18 +294,18 @@ app.put("/:id/status", requireAuth, requireAdmin, async (c) => {
   return c.json({ success: true });
 });
 
-// Admin: Update user profile fields
+// Admin: Update user profile fields (validated)
 app.put("/:id/profile", requireAuth, requireAdmin, async (c) => {
   const id = parseInt(c.req.param("id"));
-  const body = await c.req.json();
+  const body = await validate(c, schemas.updateProfileAdmin);
+  if (!body) return c.json({ error: "Validation failed" }, 400);
   const db = getDb();
 
-  const allowedFields = ["name", "phone", "country", "tradingExperience", "timezone", "kycStatus"];
   // Dynamic update map — see note above for why any is intentional here.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updates: Record<string, any> = {};
-  for (const field of allowedFields) {
-    if (body[field] !== undefined) updates[field] = body[field];
+  for (const [key, value] of Object.entries(body)) {
+    if (value !== undefined) updates[key] = value;
   }
   updates.updatedAt = Date.now();
 
@@ -459,7 +468,8 @@ app.get("/brief", requireAuth, requireAdmin, (c) => {
 // actions — every change is audited with secret values redacted from the trail.
 app.put("/settings/:key", requireAuth, requireAdmin, async (c) => {
   const key = c.req.param("key");
-  const body = await c.req.json();
+  const body = await validate(c, schemas.updateSetting);
+  if (!body) return c.json({ error: "Validation failed" }, 400);
   const db = getDb();
 
   const existing = db.select().from(settings).where(eq(settings.key, key)).get();
@@ -467,7 +477,8 @@ app.put("/settings/:key", requireAuth, requireAdmin, async (c) => {
   if (existing) {
     try {
       oldValue = JSON.parse(existing.value);
-    } catch {
+    } catch (e) {
+      console.warn(`[Settings] Failed to parse existing value for key "${key}":`, e);
       oldValue = existing.value;
     }
     db.update(settings).set({ value: JSON.stringify(body.value) }).where(eq(settings.key, key)).run();

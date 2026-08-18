@@ -99,7 +99,7 @@ function recordLoginHistory(userId: number, success: boolean, c: { req: { header
         timestamp: Date.now(),
       })
       .run();
-  } catch { /* non-critical */ }
+  } catch (e) { console.warn("[LoginHistory] Write failed:", e); }
 }
 
 const app = new Hono();
@@ -112,6 +112,30 @@ app.use("*", cors({
 
 // Prometheus request counters (non-critical; never throws)
 app.use("*", metricsMiddleware);
+
+// Security response headers
+app.use("*", async (c, next) => {
+  await next();
+  c.header("X-Content-Type-Options", "nosniff");
+  c.header("X-Frame-Options", "DENY");
+  c.header("X-XSS-Protection", "1; mode=block");
+  c.header("Referrer-Policy", "strict-origin-when-cross-origin");
+  c.header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(self)");
+  // HSTS only when the request arrived over TLS (behind a reverse proxy)
+  if (c.req.header("x-forwarded-proto") === "https") {
+    c.header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  c.header(
+    "Content-Security-Policy",
+    "default-src 'self'; " +
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+    "style-src 'self' 'unsafe-inline'; " +
+    "img-src 'self' data: blob:; " +
+    "font-src 'self'; " +
+    "connect-src 'self' https://api.flutterwave.com https://api.resend.com; " +
+    "frame-ancestors 'none';",
+  );
+});
 
 // Health check
 app.get("/api/health", (c) => c.json({ status: "ok", timestamp: Date.now() }));
@@ -129,12 +153,11 @@ app.get("/api/settings/public", (c) => {
     for (const s of allSettings) {
       try {
         result[s.key] = JSON.parse(s.value);
-      } catch {
-        result[s.key] = s.value;
-      }
+      } catch { result[s.key] = s.value; }
     }
     return c.json(result);
-  } catch {
+  } catch (err) {
+    console.error("[Settings] Failed to load public settings:", err);
     return c.json({ error: "Failed to load settings" }, 500);
   }
 });
@@ -154,7 +177,7 @@ app.put("/api/settings", async (c) => {
     if (!caller || (caller.role !== "super_admin" && caller.role !== "admin")) {
       return c.json({ error: "Admin access required" }, 403);
     }
-  } catch { return c.json({ error: "Auth check failed" }, 401); }
+  } catch (e) { console.warn("[Settings] Auth check failed:", e); return c.json({ error: "Auth check failed" }, 401); }
 
   try {
     const body = await c.req.json();
@@ -190,7 +213,7 @@ app.get("/api/payments/flutterwave-config", (c) => {
       const config = JSON.parse(setting.value);
       if (config.publicKey) publicKey = config.publicKey;
     }
-  } catch { /* non-critical */ }
+  } catch (e) { console.warn("[Payments] Could not read Flutterwave config:", e); }
   return c.json({ publicKey });
 });
 
@@ -202,7 +225,7 @@ app.get("/api/payments/flutterwave-config", (c) => {
 app.post("/api/auth/sign-up/email", signUpRateLimit, async (c) => {
   try {
     let body: Record<string, unknown> = {};
-    try { body = await c.req.json(); } catch { /* non-critical */ }
+    try { body = await c.req.json(); } catch (e) { console.warn("[Auth] sign-up: invalid JSON body:", e); }
 
     const name = (body.name as string)?.trim();
     const email = (body.email as string)?.trim().toLowerCase();
@@ -274,7 +297,7 @@ app.post("/api/auth/sign-up/email", signUpRateLimit, async (c) => {
     void sendEmail({
       ...emailVerificationEmail(user.name || user.email?.split("@")[0] || "Trader", verifyUrl),
       to: email,
-    }).catch(() => {});
+    }).catch((e) => console.warn("[Auth] Verification email failed:", e));
 
     recordLoginHistory(user.id, true, c);
     writeAuditLog(db, {
@@ -286,7 +309,7 @@ app.post("/api/auth/sign-up/email", signUpRateLimit, async (c) => {
       ipAddress: getClientIp(c),
     });
 
-    c.header("Set-Cookie", `${COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_DURATION_MS / 1000}`);
+    c.header("Set-Cookie", `${COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=${SESSION_DURATION_MS / 1000}`);
 
     return c.json({
       user: { id: user.id, name: user.name, email: user.email, role: user.role, emailVerified: false },
@@ -302,7 +325,7 @@ app.post("/api/auth/sign-up/email", signUpRateLimit, async (c) => {
 app.post("/api/auth/sign-in/email", signInRateLimit, loginAccountLockout, async (c) => {
   try {
     let body: Record<string, unknown> = {};
-    try { body = await c.req.json(); } catch { /* non-critical */ }
+    try { body = await c.req.json(); } catch (e) { console.warn("[Auth] sign-in: invalid JSON body:", e); }
 
     const email = (body.email as string)?.trim().toLowerCase();
     const password = body.password as string;
@@ -337,7 +360,7 @@ app.post("/api/auth/sign-in/email", signInRateLimit, loginAccountLockout, async 
         const sqlite = getSqlite();
         const row = sqlite.prepare("SELECT password FROM users WHERE id = ?").get(user.id) as { password?: string } | undefined;
         if (row?.password) passwordHash = row.password;
-      } catch { /* non-critical */ }
+      } catch (e) { console.warn("[Auth] users table password read failed:", e); }
     }
 
     if (!passwordHash) {
@@ -388,7 +411,7 @@ app.post("/api/auth/sign-in/email", signInRateLimit, loginAccountLockout, async 
       ipAddress: getClientIp(c),
     });
 
-    c.header("Set-Cookie", `${COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_DURATION_MS / 1000}`);
+    c.header("Set-Cookie", `${COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=${SESSION_DURATION_MS / 1000}`);
 
     return c.json({
       user: { id: user.id, name: user.name, email: user.email, role: user.role, emailVerified: !!user.emailVerified },
@@ -413,10 +436,10 @@ app.post("/api/auth/reset-admin", async (c) => {
     if (!session) return c.json({ error: "Invalid session" }, 401);
     const caller = db.select().from(users).where(eq(users.id, session.userId)).get();
     if (!caller || caller.role !== "super_admin") return c.json({ error: "Super admin access required" }, 403);
-  } catch { return c.json({ error: "Auth check failed" }, 401); }
+  } catch (e) { console.warn("[Auth] reset-admin auth check failed:", e); return c.json({ error: "Auth check failed" }, 401); }
   try {
     let body: Record<string, unknown> = {};
-    try { body = await c.req.json(); } catch { /* non-critical */ }
+    try { body = await c.req.json(); } catch (e) { console.warn("[Auth] reset-admin: invalid JSON body:", e); }
 
     const email = (body.email as string) || "admin@afrifundedcapital.com";
     const password = (body.password as string) || "Admin@123456";
@@ -465,7 +488,7 @@ app.post("/api/auth/reset-admin", async (c) => {
       sqlite.prepare(
         "INSERT OR IGNORE INTO wallets (user_id, balance, referral_balance, bonus_balance, currency, created_at, updated_at) VALUES (?, 0, 0, 0, 'NGN', ?, ?)"
       ).run(user.id, now, now);
-    } catch { /* non-critical */ }
+    } catch (e) { console.warn("[Auth] reset-admin wallet creation failed:", e); }
 
     return c.json({
       success: true,
@@ -482,7 +505,7 @@ app.post("/api/auth/reset-admin", async (c) => {
 app.post("/api/auth/promote-admin", promoteAdminRateLimit, async (c) => {
   try {
     let body: Record<string, unknown> = {};
-    try { body = await c.req.json(); } catch { /* non-critical */ }
+    try { body = await c.req.json(); } catch (e) { console.warn("[Auth] promote-admin: invalid JSON body:", e); }
 
     const userId = body.userId as number;
     if (!userId) return c.json({ error: "userId is required" }, 400);
@@ -542,7 +565,7 @@ app.get("/api/auth/session", (c) => {
     // Touch the session so "active sessions" reflect real usage.
     try {
       db.update(sessions).set({ lastActiveAt: Date.now() }).where(eq(sessions.id, session.id)).run();
-    } catch { /* non-critical */ }
+    } catch (e) { console.warn("[Auth] Session touch failed:", e); }
 
     return c.json({
       user: {
@@ -587,10 +610,10 @@ app.post("/api/auth/sign-out", (c) => {
       try {
         const db = getDb();
         db.delete(sessions).where(eq(sessions.token, token)).run();
-      } catch { /* non-critical */ }
+      } catch (e) { console.warn("[Auth] Sign-out session delete failed:", e); }
     }
 
-    c.header("Set-Cookie", `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+    c.header("Set-Cookie", `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0`);
     return c.json({ success: true });
   } catch (err) {
     console.error("[Auth] sign-out error:", err);
@@ -611,10 +634,10 @@ app.post("/api/auth/cleanup-orphan", async (c) => {
     if (!session) return c.json({ error: "Invalid session" }, 401);
     const caller = db.select().from(users).where(eq(users.id, session.userId)).get();
     if (!caller || caller.role !== "super_admin") return c.json({ error: "Super admin access required" }, 403);
-  } catch { return c.json({ error: "Auth check failed" }, 401); }
+  } catch (e) { console.warn("[Auth] cleanup-orphan auth check failed:", e); return c.json({ error: "Auth check failed" }, 401); }
   try {
     let body: Record<string, unknown> = {};
-    try { body = await c.req.json(); } catch { /* non-critical */ }
+    try { body = await c.req.json(); } catch (e) { console.warn("[Auth] cleanup-orphan: invalid JSON body:", e); }
 
     const email = (body.email as string)?.trim().toLowerCase();
     const action = (body.action as string) || "reset-password"; // "reset-password" or "delete"
@@ -682,10 +705,10 @@ app.post("/api/auth/nuke-duplicate", async (c) => {
     if (!session) return c.json({ error: "Invalid session" }, 401);
     const caller = db.select().from(users).where(eq(users.id, session.userId)).get();
     if (!caller || caller.role !== "super_admin") return c.json({ error: "Super admin access required" }, 403);
-  } catch { return c.json({ error: "Auth check failed" }, 401); }
+  } catch (e) { console.warn("[Auth] nuke-duplicate auth check failed:", e); return c.json({ error: "Auth check failed" }, 401); }
   try {
     let body: Record<string, unknown> = {};
-    try { body = await c.req.json(); } catch { /* non-critical */ }
+    try { body = await c.req.json(); } catch (e) { console.warn("[Auth] nuke-duplicate: invalid JSON body:", e); }
 
     const keepEmail = (body.email as string)?.trim().toLowerCase() || "admin@afrifundedcapital.com";
     const sqlite = (await import("./db")).getSqlite();
@@ -737,7 +760,7 @@ app.post("/api/auth/delete-user", async (c) => {
     }
 
     let body: Record<string, unknown> = {};
-    try { body = await c.req.json(); } catch { /* non-critical */ }
+    try { body = await c.req.json(); } catch (e) { console.warn("[Auth] delete-user: invalid JSON body:", e); }
 
     const email = (body.email as string)?.trim().toLowerCase();
     if (!email) return c.json({ error: "Email is required" }, 400);
@@ -793,7 +816,7 @@ app.put("/api/auth/update-user", async (c) => {
     if (!session) return c.json({ error: "Invalid session" }, 401);
 
     let body: Record<string, unknown> = {};
-    try { body = await c.req.json(); } catch { /* non-critical */ }
+    try { body = await c.req.json(); } catch (e) { console.warn("[Auth] update-user: invalid JSON body:", e); }
 
     const allowedFields = [
       "name", "tradingExperience", "country", "timezone",
@@ -819,7 +842,7 @@ app.put("/api/auth/update-user", async (c) => {
         const { getSqlite } = await import("./db");
         const sqlite = getSqlite();
         sqlite.prepare("UPDATE users SET role = ?, updated_at = ? WHERE id = ?").run(updates.role, Date.now(), session.userId);
-      } catch { /* non-critical */ }
+      } catch (e) { console.warn("[Auth] update-user role sync failed:", e); }
     }
 
     return c.json({ success: true });

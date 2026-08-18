@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Sidebar } from "./Sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { NotificationBell } from "@/components/NotificationBell";
+import { CommandPalette } from "@/components/dashboard/CommandPalette";
 import { MailWarning, ChevronRight, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -187,6 +188,7 @@ export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boole
             <span className="font-medium text-foreground truncate">{sectionTitle}</span>
           </div>
           <div className="flex items-center gap-3">
+            <CommandPalette isAdmin={isAdmin} />
             <NotificationBell isAdmin={isAdmin} />
             <ThemeToggle />
             <div className="hidden sm:flex items-center gap-2.5 pl-3 border-l border-border">

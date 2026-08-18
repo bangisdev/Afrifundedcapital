@@ -44,7 +44,7 @@ export function formatMoney(
       style: "currency",
       currency,
       currencyDisplay: "narrowSymbol",
-      minimumFractionDigits: 0,
+      minimumFractionDigits: currency === "NGN" ? 0 : 2,
       maximumFractionDigits: currency === "NGN" ? 0 : 2,
     }).format(n);
   } catch {
@@ -95,4 +95,3 @@ export const RULE_HINTS: Record<
   copyTrading:
     "When restricted, trades matching another account's trade signatures within a short window are flagged.",
 };
-

@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { PageLoader } from "@/components/dashboard/PageLoader";
 import { useNow } from "@/hooks/use-now";
 import { useQueryClient } from "@tanstack/react-query";
 import { readResponseBody, errorMessageOf } from "@/lib/api";
@@ -376,9 +377,7 @@ export default function AdminChallenges() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
+<PageLoader />
     );
   }
 

@@ -2,7 +2,7 @@ import { motion, useScroll, useTransform, useInView, type Variants } from "frame
 import { useNavigate, Link } from "react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect, useRef, useState, useCallback } from "react";
-import { newsBlackoutWindow, RULE_HINTS } from "@/lib/utils";
+import { newsBlackoutWindow, RULE_HINTS, formatMoney } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -332,12 +332,6 @@ function formatPrice(price: number | string) {
   return typeof price === "number" ? `₦${price.toLocaleString()}` : price;
 }
 
-function formatNgn(price: number | string | null | undefined) {
-  if (price === null || price === undefined || price === "") return "N/A";
-  const n = typeof price === "number" ? price : parseFloat(String(price));
-  if (Number.isNaN(n) || n <= 0) return "N/A";
-  return `₦${n.toLocaleString()}`;
-}
 
 /**
  * Public-facing news-trading rule label. When a template allows news trading
@@ -681,7 +675,7 @@ export default function Landing() {
     { label: "Leverage", values: orderedTypes.map((t) => `1:${t.maxLeverage}`) },
     { label: "Min. Trading Days", values: orderedTypes.map((t) => (t.minTradingDays ? String(t.minTradingDays) : "None")) },
     { label: "Duration", values: orderedTypes.map((t) => (t.durationDays ? `${t.durationDays} days` : "Unlimited")) },
-    { label: "Reset Fee", values: orderedTypes.map((t) => formatNgn(t.resetFee)) },
+    { label: "Reset Fee", values: orderedTypes.map((t) => formatMoney(t.resetFee)) },
     { label: "Consistency Rule", values: orderedTypes.map((t) => (t.consistencyTarget ? `Max ${t.consistencyTarget}% daily` : "No restriction")) },
     { label: "Weekend Holding", values: orderedTypes.map((t) => (t.allowWeekendHolding ? "Allowed" : "Restricted")), hint: RULE_HINTS.weekendHolding },
     { label: "News Trading", values: orderedTypes.map(newsTradingLabel), hint: RULE_HINTS.newsTrading },
@@ -1244,11 +1238,11 @@ export default function Landing() {
                 </div>
                 <div>
                   <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Reset Fee</div>
-                  <div className="text-sm font-medium tabular-nums">{formatNgn(activeType.resetFee)}</div>
+                  <div className="text-sm font-medium tabular-nums">{formatMoney(activeType.resetFee)}</div>
                 </div>
                 <div>
                   <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Extension Fee</div>
-                  <div className="text-sm font-medium tabular-nums">{formatNgn(activeType.extensionFee)}</div>
+                  <div className="text-sm font-medium tabular-nums">{formatMoney(activeType.extensionFee)}</div>
                 </div>
                 <div>
                   <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Consistency Rule</div>
