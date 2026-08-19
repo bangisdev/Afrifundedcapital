@@ -9,7 +9,7 @@ import {
   Bell, Search, CheckCheck, DollarSign, ShieldCheck,
   ShieldX, AlertTriangle, Award, UserPlus, Ticket, Gift,
   Settings, BarChart3, ChevronDown, ChevronLeft, ChevronRight,
-  ArrowUp, ArrowDown, ArrowUpDown,
+  ArrowUp, ArrowDown, ArrowUpDown, Trash2, Eye,
 } from "lucide-react";
 import { formatRelativeTime } from "@/lib/utils";
 import { toast } from "sonner";
@@ -100,6 +100,17 @@ export default function Notifications() {
   };
 
   const markAllRead = useApiMutation<any, any>("put", "/api/notifications/read-all");
+  const handleMarkRead = async (id: string) => {
+    try {
+      await fetch(`/api/notifications/${id}/read`, { method: "PUT" });
+    } catch { /* ignore */ }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await fetch(`/api/notifications/${id}`, { method: "DELETE" });
+    } catch { /* ignore */ }
+  };
 
   // Debounce the search input so we don't hit the API on every keystroke
   useEffect(() => {
@@ -187,7 +198,7 @@ export default function Notifications() {
             <p className="text-xs text-muted-foreground">No notifications</p>
           </div>
         ) : notifications.map((n: any) => (
-          <div key={n.id} className={`card-subtle p-4 flex items-start gap-3 transition-colors ${!n.read ? "bg-secondary/20" : ""}`}>
+          <div key={n.id} className={`card-subtle p-4 flex items-start gap-3 transition-colors group ${!n.read ? "bg-secondary/20" : ""}`}>
             <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${NOTIFICATION_ICON_BG[n.type] || "bg-secondary"}`}>
               {NOTIFICATION_ICONS[n.type] || <Bell className="h-4 w-4 text-muted-foreground" />}
             </div>
@@ -198,6 +209,26 @@ export default function Notifications() {
               </div>
               <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.message}</p>
               <span className="text-[10px] text-muted-foreground mt-1 block">{formatRelativeTime(n.createdAt)}</span>
+            </div>
+            <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+              {!n.read && (
+                <button
+                  onClick={() => handleMarkRead(n.id)}
+                  className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                  title="Mark as read"
+                  aria-label="Mark as read"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                </button>
+              )}
+              <button
+                onClick={() => handleDelete(n.id)}
+                className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-red-600 hover:bg-red-500/10 transition-colors"
+                title="Delete notification"
+                aria-label="Delete notification"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
             </div>
           </div>
         ))}
