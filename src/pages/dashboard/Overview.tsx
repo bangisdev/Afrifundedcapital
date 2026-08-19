@@ -31,7 +31,6 @@ import {
   AlertTriangle,
   MessageSquare,
   Plus,
-  ArrowUpRight,
   Zap,
 } from "lucide-react";
 import { cn, formatMoney, formatRelativeTime } from "@/lib/utils";
@@ -132,12 +131,6 @@ export default function Overview() {
       icon: <Plus className="h-4 w-4" />,
       path: "/dashboard/challenges",
       color: "bg-brand/10 text-brand",
-    },
-    {
-      label: "Deposit",
-      icon: <ArrowUpRight className="h-4 w-4" />,
-      path: "/dashboard/wallet",
-      color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
     },
     {
       label: "Trading",
@@ -399,11 +392,11 @@ export default function Overview() {
               <p className="text-lg font-semibold mt-1">{formatMoney(wallet.balance, wallet.currency || "NGN")}</p>
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Deposits</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Spent</p>
               <p className="text-lg font-semibold mt-1">{formatMoney(wallet.totalDeposits || 0, wallet.currency || "NGN")}</p>
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Withdrawn</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Payouts</p>
               <p className="text-lg font-semibold mt-1">{formatMoney(wallet.totalWithdrawals || 0, wallet.currency || "NGN")}</p>
             </div>
             <div>

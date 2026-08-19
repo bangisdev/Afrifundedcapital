@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useApiQuery, useApiMutation } from "@/hooks/use-api";
+import { useApiQuery } from "@/hooks/use-api";
 import { useState, useEffect } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,6 @@ import {
   EmptyContent,
   EmptyMedia,
 } from "@/components/ui/empty";
-import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Loader2, ArrowUpRight, ArrowDownLeft, RefreshCw, Search, Filter,
@@ -46,11 +45,7 @@ interface PaymentsResponse {
 
 export default function Wallet() {
   const { data: wallet, isLoading: wLoading } = useApiQuery<any>(["wallet", "my"], "/api/wallets/my");
-  const requestWithdrawal = useApiMutation<any, any>("post", "/api/wallets/withdraw");
-  const [showWithdraw, setShowWithdraw] = useState(false);
-  const [withdrawAmount, setWithdrawAmount] = useState("");
-  const [withdrawMethod] = useState("bank_transfer");
-  const [withdrawDetails, setWithdrawDetails] = useState("");
+
   const [activeTab, setActiveTab] = useState<TabView>("transactions");
   const [txFilter, setTxFilter] = useState("all");
   const [txSearch, setTxSearch] = useState("");
@@ -121,18 +116,6 @@ export default function Wallet() {
   if (wLoading) {
     return <PageLoader />;
   }
-
-  const handleWithdraw = async () => {
-    const amount = parseInt(withdrawAmount);
-    if (!amount || amount <= 0) { toast.error("Invalid amount"); return; }
-    if (amount > (wallet?.balance || 0)) { toast.error("Insufficient balance"); return; }
-    try {
-      await requestWithdrawal.mutateAsync({ amount, paymentMethod: withdrawMethod, paymentDetails: withdrawDetails });
-      toast.success("Withdrawal request submitted");
-      setShowWithdraw(false);
-      setWithdrawAmount("");
-    } catch (error: any) { toast.error(error.message); }
-  };
 
   const txIcon = (type: string) => {
     switch (type) { case "deposit": case "credit": case "referral_bonus": case "commission": case "refund": return <ArrowDownLeft className="h-3.5 w-3.5" />; case "withdrawal": case "challenge_purchase": return <ArrowUpRight className="h-3.5 w-3.5" />; default: return <RefreshCw className="h-3.5 w-3.5" />; }
@@ -229,7 +212,7 @@ export default function Wallet() {
       <PageHeader
         eyebrow="Finance"
         title="Wallet"
-        subtitle="Manage your funds, view transactions, and request withdrawals"
+        subtitle="View your transaction history and challenge purchase records"
       />
 
       <div className="grid md:grid-cols-3 gap-4">
@@ -241,11 +224,7 @@ export default function Wallet() {
           <div className="flex items-center gap-2 mb-2"><TrendingUp className="h-3.5 w-3.5 text-muted-foreground" /><span className="stat-label">This Month</span></div>
           <div className="text-sm font-light">{completedPayments} completed payments</div>
         </div>
-        <div className="card-subtle p-6 flex flex-col items-start justify-center gap-3">
-          <Button size="sm" variant="outline" className="text-xs w-full" onClick={() => setShowWithdraw(true)}>
-            <ArrowUpRight className="h-3 w-3 mr-1.5" /> Withdraw Funds
-          </Button>
-        </div>
+
       </div>
 
       <div className="flex items-center border-b border-border/50">
@@ -262,9 +241,7 @@ export default function Wallet() {
             <div className="relative">
               <select value={txFilter} onChange={(e) => setTxFilter(e.target.value)} className="h-9 pl-3 pr-8 rounded-md border border-input bg-background text-xs cursor-pointer outline-none appearance-none">
                 <option value="all">All</option>
-                <option value="deposit">Deposits</option>
-                <option value="withdrawal">Withdrawals</option>
-                <option value="challenge_purchase">Purchases</option>
+                <option value="challenge_purchase">Challenge Purchases</option>
               </select>
               <Filter className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
             </div>
@@ -299,7 +276,7 @@ export default function Wallet() {
                   <FileText className="h-6 w-6" />
                 </EmptyMedia>
                 <EmptyTitle>No transactions found</EmptyTitle>
-                <EmptyDescription>Your wallet activity will appear here once you make a deposit or purchase a challenge.</EmptyDescription>
+                <EmptyDescription>Your wallet activity will appear here once you purchase a challenge.</EmptyDescription>
               </EmptyHeader>
             </Empty>
           ) : (
@@ -414,18 +391,6 @@ export default function Wallet() {
           )}
         </div>
       )}
-
-      <Dialog open={showWithdraw} onOpenChange={setShowWithdraw}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader><DialogTitle className="text-base font-medium">Request Withdrawal</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div className="card-subtle p-3 text-center"><span className="text-xs text-muted-foreground">Available Balance</span><div className="text-xl font-light tabular-nums mt-1">{formatMoney(wallet?.balance, wallet?.currency || "NGN")}</div></div>
-            <div><label className="text-xs text-muted-foreground block mb-1">Amount (NGN)</label><Input type="number" placeholder="5000" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="text-xs h-9" /></div>
-            <div><label className="text-xs text-muted-foreground block mb-1">Account Details</label><Input placeholder="Bank name, account number" value={withdrawDetails} onChange={(e) => setWithdrawDetails(e.target.value)} className="text-xs h-9" /></div>
-            <Button className="w-full text-xs" size="sm" onClick={handleWithdraw}>Submit Withdrawal Request</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
         <DialogContent className="sm:max-w-sm">

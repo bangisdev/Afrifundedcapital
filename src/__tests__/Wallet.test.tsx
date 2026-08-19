@@ -38,7 +38,7 @@ vi.mock("@/hooks/use-auth", () => ({
 
 // ─── Mock: useApiQuery / useApiMutation ────────────────────
 const queryDataMap: Record<string, any> = {};
-const mockWithdrawAsync = vi.fn(async () => ({ message: "ok" }));
+
 
 vi.mock("@/hooks/use-api", () => ({
   useApiQuery: vi.fn((key: string[], path: string, _opts?: any) => {
@@ -107,7 +107,7 @@ vi.mock("@/hooks/use-api", () => ({
     return { data: base, isLoading: false };
   }),
   useApiMutation: vi.fn((_method: string, _path: string, _onSuccess?: any) => ({
-    mutateAsync: mockWithdrawAsync,
+
     mutate: vi.fn(),
     isPending: false,
   })),
@@ -193,7 +193,6 @@ describe("Wallet Page", () => {
   beforeEach(() => {
     clearAllQueryData();
     vi.clearAllMocks();
-    mockWithdrawAsync.mockResolvedValue({ message: "ok" });
   });
 
   // ─── Loading state ─────────────────────────────────────
@@ -230,7 +229,7 @@ describe("Wallet Page", () => {
     it("renders the page description", () => {
       setQueryData({});
       render(<Wallet />);
-      expect(screen.getByText(/Manage your funds/)).toBeTruthy();
+      expect(screen.getByText(/View your transaction history/)).toBeTruthy();
     });
   });
 
@@ -279,11 +278,6 @@ describe("Wallet Page", () => {
       expect(screen.getByText("0 completed payments")).toBeTruthy();
     });
 
-    it("renders Withdraw Funds button", () => {
-      setQueryData({});
-      render(<Wallet />);
-      expect(screen.getByText("Withdraw Funds")).toBeTruthy();
-    });
 
     it("formats large balances with commas", () => {
       setQueryData({ "wallet/my": makeWallet({ balance: 1234567 }) });
@@ -496,42 +490,6 @@ describe("Wallet Page", () => {
 
   // ─── Transaction filter ────────────────────────────────
   describe("Transaction Filter", () => {
-    it("filters by deposits", async () => {
-      const user = userEvent.setup();
-      setQueryData({
-        "wallet/txns": [
-          makeTransaction({ id: 1, type: "deposit", amount: 50000, description: "Deposit" }),
-          makeTransaction({ id: 2, type: "withdrawal", amount: 25000, description: "Withdrawal" }),
-          makeTransaction({ id: 3, type: "challenge_purchase", amount: 15000, description: "Challenge Fee" }),
-        ],
-      });
-      render(<Wallet />);
-
-      const filter = screen.getByDisplayValue("All");
-      await user.selectOptions(filter, "deposit");
-
-      expect(screen.getByText("Deposit")).toBeTruthy();
-      expect(screen.queryByText("Withdrawal")).toBeNull();
-      expect(screen.queryByText("Challenge Fee")).toBeNull();
-    });
-
-    it("filters by withdrawals", async () => {
-      const user = userEvent.setup();
-      setQueryData({
-        "wallet/txns": [
-          makeTransaction({ id: 1, type: "deposit", amount: 50000, description: "Deposit" }),
-          makeTransaction({ id: 2, type: "withdrawal", amount: 25000, description: "Withdrawal" }),
-        ],
-      });
-      render(<Wallet />);
-
-      const filter = screen.getByDisplayValue("All");
-      await user.selectOptions(filter, "withdrawal");
-
-      expect(screen.getByText("Withdrawal")).toBeTruthy();
-      expect(screen.queryByText("Deposit")).toBeNull();
-    });
-
     it("filters by purchases", async () => {
       const user = userEvent.setup();
       setQueryData({
@@ -572,7 +530,7 @@ describe("Wallet Page", () => {
       render(<Wallet />);
 
       const filter = screen.getByDisplayValue("All");
-      await user.selectOptions(filter, "withdrawal");
+      await user.selectOptions(filter, "challenge_purchase");
 
       expect(screen.getByText("No transactions found")).toBeTruthy();
     });
@@ -811,192 +769,6 @@ describe("Wallet Page", () => {
     });
   });
 
-  // ─── Withdraw dialog ───────────────────────────────────
-  describe("Withdraw Dialog", () => {
-    it("does not show withdraw dialog initially", () => {
-      setQueryData({});
-      render(<Wallet />);
-      expect(screen.queryByTestId("dialog")).toBeNull();
-    });
-
-    it("opens withdraw dialog on Withdraw Funds click", async () => {
-      const user = userEvent.setup();
-      setQueryData({});
-      render(<Wallet />);
-
-      await user.click(screen.getByText("Withdraw Funds"));
-      expect(screen.getByTestId("dialog")).toBeTruthy();
-    });
-
-    it("shows available balance in withdraw dialog", async () => {
-      const user = userEvent.setup();
-      setQueryData({ "wallet/my": makeWallet({ balance: 888000 }) });
-      render(<Wallet />);
-
-      await user.click(screen.getByText("Withdraw Funds"));
-      expect(screen.getByText("Available Balance")).toBeTruthy();
-      // ₦888,000 appears in both balance card and withdraw dialog
-      const balances = screen.getAllByText("₦888,000");
-      expect(balances.length).toBeGreaterThanOrEqual(2);
-    });
-
-    it("renders amount input in withdraw dialog", async () => {
-      const user = userEvent.setup();
-      setQueryData({});
-      render(<Wallet />);
-
-      await user.click(screen.getByText("Withdraw Funds"));
-      expect(screen.getByText("Amount (NGN)")).toBeTruthy();
-      expect(screen.getByPlaceholderText("5000")).toBeTruthy();
-    });
-
-    it("renders account details input in withdraw dialog", async () => {
-      const user = userEvent.setup();
-      setQueryData({});
-      render(<Wallet />);
-
-      await user.click(screen.getByText("Withdraw Funds"));
-      expect(screen.getByText("Account Details")).toBeTruthy();
-      expect(screen.getByPlaceholderText("Bank name, account number")).toBeTruthy();
-    });
-
-    it("renders Submit Withdrawal Request button", async () => {
-      const user = userEvent.setup();
-      setQueryData({});
-      render(<Wallet />);
-
-      await user.click(screen.getByText("Withdraw Funds"));
-      expect(screen.getByText("Submit Withdrawal Request")).toBeTruthy();
-    });
-
-    it("shows error toast for invalid amount (zero)", async () => {
-      const user = userEvent.setup();
-      setQueryData({});
-      render(<Wallet />);
-
-      await user.click(screen.getByText("Withdraw Funds"));
-      await user.click(screen.getByText("Submit Withdrawal Request"));
-      expect(toast.error).toHaveBeenCalledWith("Invalid amount");
-    });
-
-    it("shows error toast for amount exceeding balance", async () => {
-      const user = userEvent.setup();
-      setQueryData({ "wallet/my": makeWallet({ balance: 10000 }) });
-      render(<Wallet />);
-
-      await user.click(screen.getByText("Withdraw Funds"));
-      const amountInput = screen.getAllByRole("spinbutton")[0];
-      await user.type(amountInput, "50000");
-      await user.click(screen.getByText("Submit Withdrawal Request"));
-      expect(toast.error).toHaveBeenCalledWith("Insufficient balance");
-    });
-
-    it("allows entering withdrawal amount", async () => {
-      const user = userEvent.setup();
-      setQueryData({});
-      render(<Wallet />);
-
-      await user.click(screen.getByText("Withdraw Funds"));
-      const amountInput = screen.getAllByRole("spinbutton")[0];
-      await user.type(amountInput, "25000");
-      expect(amountInput).toHaveValue(25000);
-    });
-
-    it("allows entering account details", async () => {
-      const user = userEvent.setup();
-      setQueryData({});
-      render(<Wallet />);
-
-      await user.click(screen.getByText("Withdraw Funds"));
-      const detailsInput = screen.getByPlaceholderText("Bank name, account number");
-      await user.type(detailsInput, "GTBank - 0123456789");
-      expect(detailsInput).toHaveValue("GTBank - 0123456789");
-    });
-
-    it("submits withdrawal request with correct data", async () => {
-      const user = userEvent.setup();
-      setQueryData({ "wallet/my": makeWallet({ balance: 100000 }) });
-      render(<Wallet />);
-
-      await user.click(screen.getByText("Withdraw Funds"));
-      const amountInput = screen.getAllByRole("spinbutton")[0];
-      await user.type(amountInput, "25000");
-      const detailsInput = screen.getByPlaceholderText("Bank name, account number");
-      await user.type(detailsInput, "GTBank - 0123456789");
-
-      await user.click(screen.getByText("Submit Withdrawal Request"));
-
-      await waitFor(() => {
-        expect(mockWithdrawAsync).toHaveBeenCalledWith({
-          amount: 25000,
-          paymentMethod: "bank_transfer",
-          paymentDetails: "GTBank - 0123456789",
-        });
-      });
-    });
-
-    it("shows success toast after submission", async () => {
-      const user = userEvent.setup();
-      setQueryData({ "wallet/my": makeWallet({ balance: 100000 }) });
-      render(<Wallet />);
-
-      await user.click(screen.getByText("Withdraw Funds"));
-      const amountInput = screen.getAllByRole("spinbutton")[0];
-      await user.type(amountInput, "25000");
-
-      await user.click(screen.getByText("Submit Withdrawal Request"));
-
-      await waitFor(() => {
-        expect(toast.success).toHaveBeenCalledWith("Withdrawal request submitted");
-      });
-    });
-
-    it("closes dialog after successful submission", async () => {
-      const user = userEvent.setup();
-      setQueryData({ "wallet/my": makeWallet({ balance: 100000 }) });
-      render(<Wallet />);
-
-      await user.click(screen.getByText("Withdraw Funds"));
-      const amountInput = screen.getAllByRole("spinbutton")[0];
-      await user.type(amountInput, "25000");
-
-      await user.click(screen.getByText("Submit Withdrawal Request"));
-
-      await waitFor(() => {
-        expect(screen.queryByTestId("dialog")).toBeNull();
-      });
-    });
-
-    it("shows error toast on failed submission", async () => {
-      const user = userEvent.setup();
-      mockWithdrawAsync.mockRejectedValueOnce(new Error("Network error"));
-      setQueryData({ "wallet/my": makeWallet({ balance: 100000 }) });
-      render(<Wallet />);
-
-      await user.click(screen.getByText("Withdraw Funds"));
-      const amountInput = screen.getAllByRole("spinbutton")[0];
-      await user.type(amountInput, "25000");
-
-      await user.click(screen.getByText("Submit Withdrawal Request"));
-
-      await waitFor(() => {
-        expect(toast.error).toHaveBeenCalledWith("Network error");
-      });
-    });
-
-    it("closes withdraw dialog on close button", async () => {
-      const user = userEvent.setup();
-      setQueryData({});
-      render(<Wallet />);
-
-      await user.click(screen.getByText("Withdraw Funds"));
-      expect(screen.getByTestId("dialog")).toBeTruthy();
-
-      await user.click(screen.getByTestId("dialog-close"));
-      expect(screen.queryByTestId("dialog")).toBeNull();
-    });
-  });
-
   // ─── Full integration ──────────────────────────────────
   // ─── Sortable Headers ──────────────────────────────────
   describe("Sortable Headers", () => {
@@ -1090,14 +862,13 @@ describe("Wallet Page", () => {
 
       // Header
       expect(screen.getByText("Wallet")).toBeTruthy();
-      expect(screen.getByText(/Manage your funds/)).toBeTruthy();
+      expect(screen.getByText(/View your transaction history/)).toBeTruthy();
 
       // Balance cards
       expect(screen.getByText("Main Balance")).toBeTruthy();
       expect(screen.getByText("₦200,000")).toBeTruthy();
       expect(screen.getByText("This Month")).toBeTruthy();
       expect(screen.getByText("2 completed payments")).toBeTruthy();
-      expect(screen.getByText("Withdraw Funds")).toBeTruthy();
 
       // Tabs
       expect(screen.getByText("Transactions")).toBeTruthy();
@@ -1132,16 +903,15 @@ describe("Wallet Page", () => {
       });
       render(<Wallet />);
 
-      // Filter to deposits only
-      await user.selectOptions(screen.getByDisplayValue("All"), "deposit");
+      // Filter to purchases only
+      await user.selectOptions(screen.getByDisplayValue("All"), "challenge_purchase");
 
-      // Then search within deposits (server-driven + debounced)
+      // Then search within purchases (server-driven + debounced)
       await user.type(screen.getByPlaceholderText("Search transactions..."), "bank");
 
       await waitFor(() => {
-        expect(screen.getByText("Bank Transfer")).toBeTruthy();
+        expect(screen.queryByText("Bank Transfer")).toBeNull();
         expect(screen.queryByText("Flutterwave")).toBeNull();
-        expect(screen.queryByText("Bank Transfer Withdrawal")).toBeNull();
       });
     });
   });

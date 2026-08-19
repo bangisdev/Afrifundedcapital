@@ -1,6 +1,5 @@
 import { useNavigate, useLocation } from "react-router";
 import { useAuth } from "@/hooks/use-auth";
-import { useApiQuery } from "@/hooks/use-api";
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard,
@@ -9,7 +8,6 @@ import {
   Users,
   Award,
   Ticket,
-  Bell,
   FileText,
   Settings,
   Shield,
@@ -29,7 +27,6 @@ interface NavItem {
   label: string;
   icon: React.ReactNode;
   path: string;
-  showBadge?: boolean;
 }
 
 interface NavGroup {
@@ -61,7 +58,6 @@ const clientNavGroups: NavGroup[] = [
       { label: "Affiliate", icon: <Users className="h-4 w-4" />, path: "/dashboard/affiliate" },
       { label: "Certificates", icon: <Award className="h-4 w-4" />, path: "/dashboard/certificates" },
       { label: "Support", icon: <Ticket className="h-4 w-4" />, path: "/dashboard/support" },
-      { label: "Notifications", icon: <Bell className="h-4 w-4" />, path: "/dashboard/notifications", showBadge: true },
       { label: "Profile", icon: <UserCircle className="h-4 w-4" />, path: "/dashboard/profile" },
     ],
   },
@@ -90,7 +86,7 @@ const adminNavGroups: NavGroup[] = [
       { label: "Support", icon: <Ticket className="h-4 w-4" />, path: "/admin/support" },
       { label: "Certificates", icon: <Award className="h-4 w-4" />, path: "/admin/certificates" },
       { label: "MT5", icon: <TrendingUp className="h-4 w-4" />, path: "/admin/mt5" },
-      { label: "Notifications", icon: <Bell className="h-4 w-4" />, path: "/admin/notifications", showBadge: true },
+
       { label: "Reports", icon: <FileText className="h-4 w-4" />, path: "/admin/reports" },
     ],
   },
@@ -122,20 +118,13 @@ export function Sidebar({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { signOut, user } = useAuth();
-  const [collapsed, setCollapsed] = useState(false);
+  const { signOut, user } = useAuth();  const [collapsed, setCollapsed] = useState(false);
 
   const navGroups = isAdmin ? adminNavGroups : clientNavGroups;
   const consoleLabel = isAdmin ? "Admin Console" : "Client Portal";
 
   // On mobile the drawer is always expanded (collapsed state is desktop-only).
   const effCollapsed = collapsed && !mobileOpen;
-
-  // Fetch unread notification count for badge
-  const { data: unreadCount } = useApiQuery<number>(
-    ["notifications", "unread-count"],
-    "/api/notifications/unread-count"
-  );
 
   const go = (path: string) => {
     navigate(path);
@@ -213,7 +202,6 @@ export function Sidebar({
             <div className="space-y-0.5">
               {group.items.map((item) => {
                 const active = isActive(item.path, location.pathname);
-                const showNotificationBadge = item.showBadge && unreadCount && unreadCount > 0;
                 return (
                   <button
                     key={item.path}
@@ -233,14 +221,7 @@ export function Sidebar({
                       {item.icon}
                     </span>
                     {!effCollapsed && <span className="truncate">{item.label}</span>}
-                    {showNotificationBadge && !effCollapsed && (
-                      <span className="ml-auto h-4 min-w-4 flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[9px] font-medium px-1">
-                        {unreadCount > 99 ? "99+" : unreadCount}
-                      </span>
-                    )}
-                    {showNotificationBadge && effCollapsed && (
-                      <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-destructive" />
-                    )}
+
                   </button>
                 );
               })}
