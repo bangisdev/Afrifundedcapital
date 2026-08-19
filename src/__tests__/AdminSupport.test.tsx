@@ -61,7 +61,7 @@ describe("AdminSupport Page", () => {
   beforeEach(() => { clearAll(); vi.clearAllMocks(); });
 
   describe("Loading State", () => {
-    it("shows spinner when loading", () => { clearAll(); const { container } = render(<AdminSupport />); expect(container.querySelector(".animate-spin")).toBeTruthy(); });
+    it("shows spinner when loading", () => { clearAll(); const { container } = render(<AdminSupport />); expect(container.querySelector("[aria-label='Loading']")).toBeTruthy(); });
   });
 
   describe("Page Header", () => {

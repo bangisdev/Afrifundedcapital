@@ -180,13 +180,13 @@ describe("AdminChallenges Page", () => {
     it("shows spinner when loading", () => {
       clearAll();
       const { container } = render(<AdminChallenges />);
-      expect(container.querySelector(".animate-spin")).toBeTruthy();
+      expect(container.querySelector("[aria-label='Loading']")).toBeTruthy();
     });
 
     it("hides spinner once loaded", () => {
       setQueryData({});
       const { container } = render(<AdminChallenges />);
-      expect(container.querySelector(".animate-spin")).toBeNull();
+      expect(container.querySelector("[aria-label='Loading']")).toBeNull();
     });
   });
 

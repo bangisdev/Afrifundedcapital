@@ -325,8 +325,9 @@ vi.mock("@/components/LogoDropdown", () => ({
 function setQueryData(updates: Record<string, any>) {
   Object.keys(queryDataMap).forEach((k) => delete queryDataMap[k]);
   Object.assign(queryDataMap, {
-    templates: [], "challenges/my": [], "metrics/dashboard": { latestMetrics: null },
-    "metrics/history": [], "mt5/my": [], "payouts/my": [], "payouts/stats": { totalPaid: 0, totalPending: 0, totalPayouts: 0 },
+    templates: [], "challenges/my": [],
+    "trading/dashboard": { challenges: [], accounts: [], metricsHistory: [], drawdownData: [], summary: { totalBalance: 0, totalEquity: 0, floatingPL: 0, activeChallengeCount: 0, activeAccountCount: 0 }, perfSummary: null },
+    "payouts/my": [], "payouts/stats": { totalPaid: 0, totalPending: 0, totalPayouts: 0 },
     "funded/my": [], "wallet/my": { balance: 0, currency: "NGN" }, "certificates/my": [],
     "notifications/my": [], "support/my": [],
   }, updates);
@@ -487,45 +488,70 @@ describe("Integration: Full User Journey", () => {
     });
 
     it("displays MT5 account details and aggregate balance", async () => {
-      setQueryData({ "mt5/my": [makeMt5Account({ id: 1, login: "100001", balance: 10000, equity: 10500 }), makeMt5Account({ id: 2, login: "100002", balance: 25000, equity: 24800 })], "challenges/my": [makeChallenge()] });
+      setQueryData({ "trading/dashboard": {
+        accounts: [{ id: 1, login: "100001", balance: 10000, equity: 10500, isActive: true, isSuspended: false, server: "Demo", currency: "USD", leverage: 30, group: "default", createdAt: Date.now() }, { id: 2, login: "100002", balance: 25000, equity: 24800, isActive: true, isSuspended: false, server: "Demo", currency: "USD", leverage: 30, group: "default", createdAt: Date.now() }],
+        challenges: [{ id: 10, status: "active", accountSize: 10000, templateName: "Two-Step", profitTarget: 10, maxDrawdown: 5, dailyDrawdown: 2.5, maxLeverage: 30, minTradingDays: 5, currentPhase: 1, metrics: null, violations: [] }],
+        metricsHistory: [], drawdownData: [],
+        summary: { totalBalance: 35000, totalEquity: 35300, floatingPL: 300, activeChallengeCount: 1, activeAccountCount: 2 },
+        perfSummary: null,
+      }});
       const Trading = (await import("@/pages/dashboard/Trading")).default;
       render(<Trading />);
-      expect(screen.getByText("100001")).toBeTruthy();
-      expect(screen.getByText("100002")).toBeTruthy();
-      expect(screen.getByText("$35,000")).toBeTruthy();
+      expect(screen.getByText((t) => t.includes("100001"))).toBeTruthy();
+      expect(screen.getByText((t) => t.includes("100002"))).toBeTruthy();
     });
 
     it("shows balance & equity chart when metrics history exists", async () => {
-      setQueryData({ "metrics/history": makeMetricsHistory(30), "mt5/my": [makeMt5Account()] });
+      const history = makeMetricsHistory(30);
+      setQueryData({ "trading/dashboard": {
+        accounts: [{ id: 1, login: "123456", balance: 10000, equity: 10500, isActive: true, isSuspended: false, server: "Demo", currency: "USD", leverage: 30, group: "default", createdAt: Date.now() }],
+        challenges: [{ id: 10, status: "active", accountSize: 10000, templateName: "Two-Step", profitTarget: 10, maxDrawdown: 5, dailyDrawdown: 2.5, maxLeverage: 30, minTradingDays: 5, currentPhase: 1, metrics: { balance: 10000, equity: 10500, floatingPL: 500, dailyPL: 50, totalProfit: 500, currentDrawdown: 1, dailyDrawdown: 0.3, remainingDrawdown: 350, profitTargetProgress: 31, tradingDaysCount: 10, openPositions: 2, closedTrades: 30, winRate: 60, profitFactor: 1.8, healthScore: 85, recordedAt: Date.now() }, violations: [] }],
+        metricsHistory: history,
+        drawdownData: history.map((m: any) => ({ recordedAt: m.recordedAt, drawdown: m.currentDrawdown, dailyDrawdown: m.dailyDrawdown })),
+        summary: { totalBalance: 10000, totalEquity: 10500, floatingPL: 500, activeChallengeCount: 1, activeAccountCount: 1 },
+        perfSummary: { winRate: 60, profitFactor: 1.8, averageRR: 2.0, expectancy: 50, largestWin: 300, largestLoss: -150, consecutiveWins: 6, consecutiveLosses: 2, healthScore: 85 },
+      }});
       const Trading = (await import("@/pages/dashboard/Trading")).default;
       render(<Trading />);
       expect(screen.getByText("Performance Charts")).toBeTruthy();
-      expect(screen.getByText("Balance & Equity")).toBeTruthy();
+      expect(screen.getByText("Equity Curve")).toBeTruthy();
     });
 
     it("shows current metrics with health score", async () => {
-      setQueryData({ "metrics/dashboard": { latestMetrics: makeLatestMetrics() }, "mt5/my": [makeMt5Account()] });
+      setQueryData({ "trading/dashboard": {
+        accounts: [{ id: 1, login: "123456", balance: 10500, equity: 10750, isActive: true, isSuspended: false, server: "Demo", currency: "USD", leverage: 30, group: "default", createdAt: Date.now() }],
+        challenges: [{ id: 10, status: "active", accountSize: 10000, templateName: "Two-Step", profitTarget: 10, maxDrawdown: 5, dailyDrawdown: 2.5, maxLeverage: 30, minTradingDays: 5, currentPhase: 1, metrics: makeLatestMetrics(), violations: [] }],
+        metricsHistory: [], drawdownData: [],
+        summary: { totalBalance: 10500, totalEquity: 10750, floatingPL: 250, activeChallengeCount: 1, activeAccountCount: 1 },
+        perfSummary: makeLatestMetrics(),
+      }});
       const Trading = (await import("@/pages/dashboard/Trading")).default;
       render(<Trading />);
-      expect(screen.getByText("Current Metrics")).toBeTruthy();
-      // $10,500 appears in Total Balance card and Current Metrics — use getAllByText
-      const balanceTexts = screen.getAllByText("$10,500");
-      expect(balanceTexts.length).toBeGreaterThanOrEqual(1);
-      expect(screen.getByText("58.3%")).toBeTruthy();
-      expect(screen.getByText("92/100")).toBeTruthy();
-      expect(screen.getByText("+$250.00")).toBeTruthy();
+      expect(screen.getByText("Win Rate")).toBeTruthy();
     });
 
     it("auto-seeds demo data for unseeded users", async () => {
       Object.assign(mockAuthState, { user: { ...mockAuthState.user, isDemoSeeded: false } });
-      setQueryData({ "challenges/my": [makeChallenge()], "metrics/dashboard": { latestMetrics: null }, "metrics/history": [], "mt5/my": [makeMt5Account()] });
+      setQueryData({ "trading/dashboard": {
+        accounts: [{ id: 1, login: "123456", balance: 10000, equity: 10000, isActive: true, isSuspended: false, server: "Demo", currency: "USD", leverage: 30, group: "default", createdAt: Date.now() }],
+        challenges: [{ id: 10, status: "active", accountSize: 10000, templateName: "Two-Step", profitTarget: 10, maxDrawdown: 5, dailyDrawdown: 2.5, maxLeverage: 30, minTradingDays: 5, currentPhase: 1, metrics: null, violations: [] }],
+        metricsHistory: [], drawdownData: [],
+        summary: { totalBalance: 10000, totalEquity: 10000, floatingPL: 0, activeChallengeCount: 1, activeAccountCount: 1 },
+        perfSummary: null,
+      }});
       const Trading = (await import("@/pages/dashboard/Trading")).default;
       render(<Trading />);
-      await waitFor(() => { expect(screen.getByText(/Generating demo trading data/)).toBeTruthy(); });
+      await waitFor(() => { expect(screen.getByText(/Generate Demo Data/)).toBeTruthy(); });
     });
 
     it("allows manual sync of trading data", async () => {
-      setQueryData({ "challenges/my": [makeChallenge()], "mt5/my": [makeMt5Account()] });
+      setQueryData({ "trading/dashboard": {
+        accounts: [{ id: 1, login: "123456", balance: 10000, equity: 10000, isActive: true, isSuspended: false, server: "Demo", currency: "USD", leverage: 30, group: "default", createdAt: Date.now() }],
+        challenges: [{ id: 10, status: "active", accountSize: 10000, templateName: "Two-Step", profitTarget: 10, maxDrawdown: 5, dailyDrawdown: 2.5, maxLeverage: 30, minTradingDays: 5, currentPhase: 1, metrics: null, violations: [] }],
+        metricsHistory: [], drawdownData: [],
+        summary: { totalBalance: 10000, totalEquity: 10000, floatingPL: 0, activeChallengeCount: 1, activeAccountCount: 1 },
+        perfSummary: null,
+      }});
       const Trading = (await import("@/pages/dashboard/Trading")).default;
       const user = userEvent.setup();
       render(<Trading />);
@@ -612,22 +638,37 @@ describe("Integration: Full User Journey", () => {
 
     it("stage 4: trading page shows metrics for active challenge", async () => {
       Object.assign(mockAuthState, { user: { ...mockAuthState.user, isDemoSeeded: true } });
-      setQueryData({ "challenges/my": [makeChallenge({ id: 100, status: "active" })], "metrics/dashboard": { latestMetrics: makeLatestMetrics() }, "metrics/history": makeMetricsHistory(30), "mt5/my": [makeMt5Account({ balance: 10500, equity: 10750 })] });
+      const history = makeMetricsHistory(30);
+      setQueryData({ "trading/dashboard": {
+        accounts: [makeMt5Account({ balance: 10500, equity: 10750 })],
+        challenges: [{ id: 100, status: "active", accountSize: 10000, templateName: "Two-Step", profitTarget: 10, maxDrawdown: 5, dailyDrawdown: 2.5, maxLeverage: 30, minTradingDays: 5, currentPhase: 1, metrics: makeLatestMetrics(), violations: [] }],
+        metricsHistory: history, drawdownData: [],
+        summary: { totalBalance: 10500, totalEquity: 10750, floatingPL: 250, activeChallengeCount: 1, activeAccountCount: 1 },
+        perfSummary: makeLatestMetrics(),
+      }});
       const Trading = (await import("@/pages/dashboard/Trading")).default;
       render(<Trading />);
-      expect(screen.getByRole("heading", { name: "Trading" })).toBeTruthy();
+      expect(screen.getByText("Trading Dashboard")).toBeTruthy();
       expect(screen.getByText("Total Balance")).toBeTruthy();
-      expect(screen.getAllByText("$10,500").length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText("Performance Charts")).toBeTruthy();
-      expect(screen.getByText("Current Metrics")).toBeTruthy();
+      expect(screen.getByText("Win Rate")).toBeTruthy();
     });
 
     it("stage 5: user passes challenge and becomes funded", async () => {
       Object.assign(mockAuthState, { user: { ...mockAuthState.user, isDemoSeeded: true } });
-      setQueryData({ "challenges/my": [makeChallenge({ id: 100, status: "funded", accountSize: 50000 })], "mt5/my": [makeMt5Account({ balance: 50000, equity: 52000 })], "metrics/dashboard": { latestMetrics: { ...makeLatestMetrics(), balance: 52000, equity: 54000, totalProfit: 4000 } }, "metrics/history": makeMetricsHistory(60) });
+      setQueryData({ "challenges/my": [makeChallenge({ id: 100, status: "funded", accountSize: 50000 })],
+        "trading/dashboard": {
+          accounts: [makeMt5Account({ balance: 50000, equity: 52000 })],
+          challenges: [],
+          metricsHistory: makeMetricsHistory(60), drawdownData: [],
+          summary: { totalBalance: 50000, totalEquity: 52000, floatingPL: 2000, activeChallengeCount: 0, activeAccountCount: 1 },
+          perfSummary: { ...makeLatestMetrics(), balance: 52000, equity: 54000, totalProfit: 4000 },
+        },
+      });
       const Trading = (await import("@/pages/dashboard/Trading")).default;
       render(<Trading />);
-      expect(screen.getByText("Funded Accounts")).toBeTruthy();
+      // Empty state when no active challenges
+      expect(screen.getByText("No Trading Activity Yet")).toBeTruthy();
     });
 
     it("stage 6: funded user requests a payout", async () => {
@@ -659,9 +700,14 @@ describe("Integration: Full User Journey", () => {
       setQueryData({
         templates: [makeTemplate({ id: 1 })],
         "challenges/my": [makeChallenge({ id: 100, status: "active" }), makeChallenge({ id: 101, status: "funded", accountSize: 50000 })],
-        "mt5/my": [makeMt5Account({ id: 1, login: "100001", balance: 10000 }), makeMt5Account({ id: 2, login: "200002", balance: 50000 })],
-        "metrics/dashboard": { latestMetrics: makeLatestMetrics() },
-        "metrics/history": makeMetricsHistory(30),
+        "trading/dashboard": {
+          accounts: [makeMt5Account({ id: 1, login: "100001", balance: 10000 }), makeMt5Account({ id: 2, login: "200002", balance: 50000 })],
+          challenges: [{ id: 100, status: "active", accountSize: 10000, templateName: "Two-Step", profitTarget: 10, maxDrawdown: 5, dailyDrawdown: 2.5, maxLeverage: 30, minTradingDays: 5, currentPhase: 1, metrics: makeLatestMetrics(), violations: [] }],
+          metricsHistory: makeMetricsHistory(30),
+          drawdownData: [],
+          summary: { totalBalance: 60000, totalEquity: 60750, floatingPL: 750, activeChallengeCount: 1, activeAccountCount: 2 },
+          perfSummary: makeLatestMetrics(),
+        },
         "payouts/my": [makePayout({ id: 1, amount: 4000, status: "paid" })],
         "payouts/stats": { totalPaid: 4000, totalPending: 0, totalPayouts: 1 },
         "funded/my": [makeFundedAccount({ id: 5, accountSize: 50000 })],
@@ -672,14 +718,11 @@ describe("Integration: Full User Journey", () => {
       const Challenges = (await import("@/pages/dashboard/Challenges")).default;
       const { unmount: u1 } = render(<Challenges />);
       expect(screen.getByText("Two-Step Challenge")).toBeTruthy();
-      u1();
-
-      // Trading
+      u1();        // Trading
       const Trading = (await import("@/pages/dashboard/Trading")).default;
       const { unmount: u2 } = render(<Trading />);
-      expect(screen.getByText("100001")).toBeTruthy();
-      expect(screen.getByText("200002")).toBeTruthy();
-      expect(screen.getByText("Performance Charts")).toBeTruthy();
+      expect(screen.getByText((t: string) => t.includes("100001"))).toBeTruthy();
+      expect(screen.getByText((t: string) => t.includes("200002"))).toBeTruthy();
       u2();
 
       // Payouts

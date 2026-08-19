@@ -41,7 +41,7 @@ describe("AdminCoupons Page", () => {
   beforeEach(() => { clearAll(); vi.clearAllMocks(); mockFetch.mockResolvedValue({ ok: true, json: async () => ({ message: "ok" }) }); });
 
   describe("Loading State", () => {
-    it("shows spinner when loading", () => { clearAll(); const { container } = render(<AdminCoupons />); expect(container.querySelector(".animate-spin")).toBeTruthy(); });
+    it("shows spinner when loading", () => { clearAll(); const { container } = render(<AdminCoupons />); expect(container.querySelector("[aria-label='Loading']")).toBeTruthy(); });
   });
 
   describe("Page Header", () => {
