@@ -851,7 +851,7 @@ export default function Landing() {
               className="rounded-full px-5 py-1.5 text-xs font-normal border-border/60 bg-background/50 backdrop-blur-sm"
             >
               <Sparkles className="h-3 w-3 mr-1.5 inline-block text-brand" />
-              Africa's Premier Prop Trading Firm
+              #1 Rated African Prop Firm
             </Badge>
           </motion.div>
 
@@ -861,22 +861,18 @@ export default function Landing() {
             custom={1}
             className="text-[clamp(1.5rem,7.5vw,2.25rem)] sm:text-5xl md:text-7xl font-light tracking-tight leading-[1.05] mb-6"
           >
-            Get Funded to{" "}
-            <span className="relative inline-block">
-              <span className="font-medium">Trade</span>
+            Trade with Real
+            <br />
+            <span className="relative">
+              <span className="font-medium text-brand">Capital</span>
               <motion.span
-                className="absolute -bottom-1 left-0 right-0 h-[2px] bg-foreground/20"
+                className="absolute -bottom-1 left-0 right-0 h-[3px] bg-brand/40 rounded-full"
                 initial={{ scaleX: 0 }}
                 animate={{ scaleX: 1 }}
                 transition={{ delay: 1.2, duration: 0.8, ease: "easeOut" }}
               />
             </span>
-            <br />
-            <span className="relative">
-              Keep{" "}
-              <span className="font-medium text-brand">90%</span>
-              <span className="font-medium"> of Profits</span>
-            </span>
+            {" "}Keep <span className="font-medium">90% of Profits</span>
           </motion.h1>
 
           {/* Subtitle */}
@@ -890,22 +886,15 @@ export default function Landing() {
           </motion.p>
 
           {/* CTA Buttons */}
-          <motion.div variants={fadeUp} custom={3} className="flex w-full flex-col items-center justify-center gap-4 sm:flex-row">
-            <Button
+          <motion.div variants={fadeUp} custom={3} className="flex w-full flex-col items-center justify-center gap-4 sm:flex-row">              <Button
               size="lg"
               onClick={() => navigate("/auth")}
-              className="w-full px-8 text-sm group relative overflow-hidden sm:w-auto"
+              className="w-full px-8 text-sm group btn-brand sm:w-auto"
             >
               <span className="relative z-10 flex items-center">
                 Start Your Challenge
                 <MoveRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
               </span>
-              <motion.div
-                className="absolute inset-0 bg-foreground/10"
-                initial={{ x: "-100%" }}
-                whileHover={{ x: 0 }}
-                transition={{ duration: 0.3 }}
-              />
             </Button>
             <Button
               variant="outline"
@@ -993,9 +982,9 @@ export default function Landing() {
                 transition={{ duration: 0.6, delay: i * 0.15 }}
                 className="text-center relative group"
               >
-                <div className="relative h-24 w-24 rounded-full border border-border/60 bg-background flex items-center justify-center mx-auto mb-6 z-10 transition-all duration-300 group-hover:border-brand/40 group-hover:ring-4 group-hover:ring-brand/10">
-                  <span className="absolute inset-0 rounded-full bg-brand/[0.04] opacity-0 transition-opacity duration-300 group-hover:opacity-100" aria-hidden />
-                  <span className="relative">{item.icon}</span>
+                <div className="relative h-24 w-24 rounded-2xl border border-border/60 bg-background flex items-center justify-center mx-auto mb-6 z-10 transition-all duration-300 group-hover:border-brand/40 group-hover:ring-4 group-hover:ring-brand/10 group-hover:shadow-lg group-hover:shadow-brand/5">
+                  <span className="absolute inset-0 rounded-2xl bg-gradient-to-b from-brand/[0.06] to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" aria-hidden />
+                  <span className="relative text-brand">{item.icon}</span>
                 </div>
                 <div className="text-[10px] font-mono text-muted-foreground/40 mb-3 tracking-widest">
                   {item.step}
@@ -1042,10 +1031,10 @@ export default function Landing() {
                 className="group relative p-6 border border-border/60 rounded-lg bg-background hover:bg-secondary/50 transition-all duration-300 hover:border-foreground/20"
               >
                 {/* Hover indicator */}
-                <div className="absolute inset-0 rounded-lg bg-gradient-to-b from-foreground/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="absolute inset-0 rounded-xl bg-gradient-to-b from-brand/[0.03] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
                 <div className="relative z-10">
-                  <div className="h-10 w-10 rounded-full border border-border/60 flex items-center justify-center mb-4 group-hover:border-foreground/30 transition-colors duration-300">
+                  <div className="h-10 w-10 rounded-xl bg-brand/[0.06] flex items-center justify-center mb-4 group-hover:bg-brand/[0.1] transition-colors duration-300 text-brand">
                     {feature.icon}
                   </div>
                   <h3 className="text-sm font-medium mb-2 group-hover:text-foreground transition-colors">
@@ -1100,16 +1089,16 @@ export default function Landing() {
                 {testimonials.map((t, i) => (
                   <CarouselItem key={i}>
                     <div className="px-2">
-                      <div className="card-subtle p-8 md:p-10 text-center">
+                      <div className="glass-card p-8 md:p-10 text-center">
                         {/* Quote icon */}
-                        <Quote className="h-8 w-8 mx-auto mb-6 text-muted-foreground/20" />
+                        <Quote className="h-8 w-8 mx-auto mb-6 text-brand/30" />
 
                         {/* Stars */}
                         <div className="flex items-center justify-center gap-1 mb-6">
                           {Array.from({ length: t.rating }).map((_, j) => (
                             <Star
                               key={j}
-                              className="h-4 w-4 fill-foreground/80 text-foreground/80"
+                              className="h-4 w-4 fill-brand text-brand"
                             />
                           ))}
                         </div>
@@ -1323,7 +1312,7 @@ export default function Landing() {
                       }`}
                     >
                       {isPopular && (
-                        <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 inline-flex items-center px-2 py-0.5 text-[9px] font-medium uppercase tracking-wider bg-secondary text-secondary-foreground rounded">
+                        <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 inline-flex items-center px-2.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider bg-brand text-brand-foreground rounded-full shadow-sm">
                           Most Popular
                         </span>
                       )}
@@ -1336,7 +1325,7 @@ export default function Landing() {
                       <Button
                         variant={isPopular ? "default" : "outline"}
                         size="sm"
-                        className="w-full text-xs"
+                        className={`w-full text-xs ${isPopular ? "btn-brand" : ""}`}
                         onClick={() => {
                           // Deep-link into the real checkout with this template + size preselected.
                           const sizeId = acct.id;

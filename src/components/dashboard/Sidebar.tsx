@@ -166,16 +166,16 @@ export function Sidebar({
         {!effCollapsed && (
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <div className="h-7 w-7 rounded-lg bg-foreground text-background flex items-center justify-center text-[11px] font-semibold tracking-tight shrink-0 ring-1 ring-ring/40 shadow-sm">
+              <div className="h-7 w-7 rounded-lg bg-brand text-brand-foreground flex items-center justify-center text-[11px] font-semibold tracking-tight shrink-0 shadow-sm">
                 AFC
               </div>
-              <span className="text-sm font-medium tracking-tight truncate">AfriFundedCapital</span>
+              <span className="text-sm font-semibold tracking-tight truncate">AfriFundedCapital</span>
             </div>
             <p className="text-[10px] text-muted-foreground mt-0.5 pl-9">{consoleLabel}</p>
           </div>
         )}
         {effCollapsed && (
-          <div className="h-7 w-7 rounded-lg bg-foreground text-background flex items-center justify-center text-[11px] font-semibold shrink-0 ring-1 ring-ring/40 shadow-sm">
+          <div className="h-7 w-7 rounded-lg bg-brand text-brand-foreground flex items-center justify-center text-[11px] font-semibold shrink-0 shadow-sm">
             AFC
           </div>
         )}

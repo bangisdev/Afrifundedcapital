@@ -224,13 +224,12 @@ describe("Landing Page", () => {
   describe("Hero Section", () => {
     it("renders the main headline", () => {
       render(<Landing />);
-      expect(screen.getByText("Get Funded to")).toBeTruthy();
-      expect(screen.getByText("Trade")).toBeTruthy();
+      expect(screen.getByText(/Trade with Real/)).toBeTruthy();
     });
 
     it("renders the 90% profit headline", () => {
       render(<Landing />);
-      expect(screen.getByText("Keep")).toBeTruthy();
+      expect(screen.getByText(/90% of Profits/)).toBeTruthy();
       // "90%" appears in the hero and the comparison table — any of them proves
       // the profit-share messaging renders.
       expect(screen.getAllByText("90%").length).toBeGreaterThanOrEqual(1);
@@ -241,7 +240,7 @@ describe("Landing Page", () => {
 
     it("renders the badge", () => {
       render(<Landing />);
-      expect(screen.getByText("Africa's Premier Prop Trading Firm")).toBeTruthy();
+      expect(screen.getByText("#1 Rated African Prop Firm")).toBeTruthy();
     });
 
     it("renders the subtitle", () => {
@@ -294,7 +293,7 @@ describe("Landing Page", () => {
       render(<Landing />);
       expect(screen.getByText("Choose Your Challenge")).toBeTruthy();
       expect(screen.getByText("Pass the Evaluation")).toBeTruthy();
-      expect(screen.getByText("Get Funded")).toBeTruthy();
+      expect(screen.getByText("Capital")).toBeTruthy();
     });
 
     it("renders step numbers", () => {
@@ -537,7 +536,7 @@ describe("Landing Page", () => {
     it("renders all major sections without crashing", () => {
       render(<Landing />);
       // Hero
-      expect(screen.getByText("Get Funded to")).toBeTruthy();
+      expect(screen.getByText(/Trade with Real/)).toBeTruthy();
       // Stats
       expect(screen.getByText("Funded Traders")).toBeTruthy();
       // How it works

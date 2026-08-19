@@ -274,23 +274,44 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   );
 
   return (
-    <div className="min-h-screen flex flex-col relative overflow-hidden">
-      {/* Decorative background — dot grid + brand-tinted orbs */}
-      <div aria-hidden className="pointer-events-none absolute inset-0">
-        <div
-          className="absolute inset-0 opacity-[0.03] dark:opacity-[0.05]"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)",
-            backgroundSize: "48px 48px",
-          }}
-        />
-        <div className="absolute -top-40 -right-40 h-[480px] w-[480px] rounded-full bg-brand/10 blur-[120px]" />
-        <div className="absolute -bottom-40 -left-40 h-[420px] w-[420px] rounded-full bg-brand/5 blur-[110px]" />
+    <div className="min-h-screen flex flex-col lg:flex-row relative overflow-hidden">
+      {/* Left panel — brand showcase (visible on lg+) */}
+      <div className="hidden lg:flex lg:w-1/2 relative bg-brand/[0.03] items-center justify-center overflow-hidden">
+        <div className="absolute inset-0">
+          <div className="absolute -top-32 -right-32 h-[500px] w-[500px] rounded-full bg-brand/10 blur-[140px]" />
+          <div className="absolute -bottom-32 -left-32 h-[400px] w-[400px] rounded-full bg-brand/5 blur-[120px]" />
+          <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.04]" style={{ backgroundImage: "radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)", backgroundSize: "40px 40px" }} />
+        </div>
+        <div className="relative z-10 max-w-md px-12 text-center">
+          <div className="h-14 w-14 rounded-2xl bg-brand text-brand-foreground flex items-center justify-center text-lg font-semibold tracking-tight mx-auto mb-8">
+            AFC
+          </div>
+          <h2 className="text-2xl font-light tracking-tight mb-4">Trade with Real Capital</h2>
+          <p className="text-sm text-muted-foreground leading-relaxed">Pass our evaluation and receive up to $1M in trading capital. Keep 90% of your profits.</p>
+          <div className="flex items-center justify-center gap-6 mt-10">
+            <div className="text-center"><div className="text-lg font-medium text-brand">90%</div><div className="text-[10px] text-muted-foreground uppercase tracking-wider">Profit Split</div></div>
+            <div className="h-8 w-px bg-border" />
+            <div className="text-center"><div className="text-lg font-medium text-brand">$1M</div><div className="text-[10px] text-muted-foreground uppercase tracking-wider">Max Capital</div></div>
+            <div className="h-8 w-px bg-border" />
+            <div className="text-center"><div className="text-lg font-medium text-brand">24h</div><div className="text-[10px] text-muted-foreground uppercase tracking-wider">Payout Speed</div></div>
+          </div>
+        </div>
       </div>
-      <div className="flex-1 flex items-center justify-center relative">
-        <div className="flex items-center justify-center h-full flex-col w-full px-4">
-          <Card className="w-full max-w-[400px] min-w-0 sm:min-w-[350px] pb-0 border shadow-md">
+
+      {/* Right panel — auth form */}
+      <div className="flex-1 flex items-center justify-center relative px-4 py-12">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute -top-40 -right-40 h-[480px] w-[480px] rounded-full bg-brand/5 blur-[120px] lg:hidden" />
+          <div className="absolute -bottom-40 -left-40 h-[420px] w-[420px] rounded-full bg-brand/3 blur-[110px] lg:hidden" />
+        </div>
+        <div className="relative z-10 w-full max-w-[400px]">
+          <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
+            <div className="h-9 w-9 rounded-xl bg-brand text-brand-foreground flex items-center justify-center text-xs font-semibold">
+              AFC
+            </div>
+            <span className="text-sm font-medium tracking-tight">AfriFundedCapital</span>
+          </div>
+          <Card className="w-full min-w-0 pb-0 glass-card">
             {mode === "sign-in" && (
               <>
                 {header("Welcome Back", "Sign in to your account")}
@@ -344,7 +365,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
 
                     {errorBlock}
 
-                    <Button type="submit" className="w-full" disabled={isLoading}>
+                    <Button type="submit" className="w-full btn-brand" disabled={isLoading}>
                       {isLoading ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
@@ -426,7 +447,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                     {errorBlock}
                     {successBlock}
 
-                    <Button type="submit" className="w-full" disabled={isLoading}>
+                    <Button type="submit" className="w-full btn-brand" disabled={isLoading}>
                       {isLoading ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
@@ -472,7 +493,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                     </div>
                     {errorBlock}
                     {successBlock}
-                    <Button type="submit" className="w-full" disabled={isLoading}>
+                    <Button type="submit" className="w-full btn-brand" disabled={isLoading}>
                       {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send Reset Link"}
                     </Button>
                   </CardContent>
@@ -512,7 +533,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                     </div>
                     {errorBlock}
                     {successBlock}
-                    <Button type="submit" className="w-full" disabled={isLoading}>
+                    <Button type="submit" className="w-full btn-brand" disabled={isLoading}>
                       {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Update Password"}
                     </Button>
                   </CardContent>
