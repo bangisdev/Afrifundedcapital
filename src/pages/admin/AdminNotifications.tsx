@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { PageLoader } from "@/components/dashboard/PageLoader";
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -291,7 +292,7 @@ export default function AdminNotifications() {
           </div>
 
           {isLoading ? (
-            <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+            <PageLoader rows={3} />
           ) : filteredNotifications.length === 0 ? (
             <div className="card-subtle p-8 text-center text-sm text-muted-foreground">No notifications found</div>
           ) : (

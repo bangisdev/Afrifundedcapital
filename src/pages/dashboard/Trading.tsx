@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { PageLoader } from "@/components/dashboard/PageLoader";
+import { ProfitSplitCalculator } from "@/components/dashboard/ProfitSplitCalculator";
 import { formatMoney, formatShortDate, formatRelativeTime } from "@/lib/utils";
 import {
   ChartContainer,
@@ -466,6 +467,11 @@ export default function Trading() {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {/* ─── Profit Split Calculator ─── */}
+      {primaryMetrics && (
+        <ProfitSplitCalculator currentProfit={Math.max(0, primaryMetrics.totalProfit || 0)} />
       )}
 
       {/* ─── Performance Analytics ─── */}

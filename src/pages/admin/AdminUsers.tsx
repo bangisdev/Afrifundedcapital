@@ -359,7 +359,17 @@ export default function AdminUsers() {
                           </div>
                           <div className="min-w-0">
                             <div className="font-medium truncate">{u.name || "Unnamed"}</div>
-                            <div className="text-muted-foreground truncate">{u.email}</div>
+                            <div className="text-muted-foreground truncate text-[10px]">{u.email}</div>
+                            <div className="flex items-center gap-1.5 mt-0.5 md:hidden">
+                              <span className="inline-flex items-center rounded-md bg-secondary px-1.5 py-0.5 text-[9px] font-medium">
+                                {(u.role || "user").replace(/_/g, " ")}
+                              </span>
+                              {u.kycStatus && u.kycStatus !== "unverified" && (
+                                <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[9px] font-medium ${u.kycStatus === "approved" ? "bg-emerald-500/10 text-emerald-600" : "bg-secondary"}`}>
+                                  KYC: {u.kycStatus}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </td>
