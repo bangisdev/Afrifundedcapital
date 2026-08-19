@@ -2,18 +2,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import React from "react";
-import { useApiQuery } from "@/hooks/use-api";
 
 // ─── Mock: sonner ──────────────────────────────────────────
 vi.mock("sonner", () => ({
-  toast: {
-    success: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    warning: vi.fn(),
-  },
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
 }));
 
 // ─── Mock: useAuth ─────────────────────────────────────────
@@ -22,7 +15,6 @@ const mockUser = {
   name: "Test User",
   email: "test@example.com",
   role: "user",
-  isDemoSeeded: true, // Default to seeded so auto-seed doesn't fire
   onboardingComplete: true,
 };
 
@@ -39,82 +31,43 @@ vi.mock("@/hooks/use-auth", () => ({
 }));
 
 // ─── Mock: useApiQuery / useApiMutation ────────────────────
-const queryDataMap: Record<string, any> = {};
+let dashboardData: any = undefined;
+let dashboardLoading = true;
 
 vi.mock("@/hooks/use-api", () => ({
-  useApiQuery: vi.fn((key: string[], path: string, _opts?: any) => {
-    // The page passes query-suffixed keys (["mt5", "my", "/api/trading/mt5?..."]),
-    // so look up by the stable prefix (first two segments).
-    const dataKey = key.slice(0, 2).join("/");
-    if (queryDataMap[dataKey] === undefined) {
-      return { data: undefined, isLoading: true };
+  useApiQuery: vi.fn((_key: string[], path: string) => {
+    if (path === "/api/trading/dashboard") {
+      return { data: dashboardData, isLoading: dashboardLoading };
     }
-    const base = queryDataMap[dataKey];
-    // Simulate the server-driven mt5 accounts / challenges envelopes (both are lists on the server).
-    if ((dataKey === "mt5/my" || dataKey === "challenges/my") && Array.isArray(base)) {
-      const query = path.includes("?") ? path.split("?")[1] : "";
-      const params = new URLSearchParams(query);
-      const page = Number(params.get("page") || 1);
-      const pageSize = Number(params.get("pageSize") || 10);
-      const total = base.length;
-      const totalPages = Math.max(1, Math.ceil(total / pageSize));
-      const listKey = dataKey === "mt5/my" ? "accounts" : "challenges";
-      return {
-        data: {
-          [listKey]: base.slice((page - 1) * pageSize, page * pageSize),
-          total,
-          page,
-          pageSize,
-          totalPages,
-          stats: { total, byStatus: {} },
-        },
-        isLoading: false,
-      };
-    }
-    return { data: base, isLoading: false };
+    return { data: undefined, isLoading: true };
   }),
-  useApiMutation: vi.fn((_method: string, path: string, _onSuccess?: any) => {
-    let resolvePromise: (value: any) => void;
-    new Promise((resolve) => { resolvePromise = resolve; });
-
-    return {
-      mutateAsync: vi.fn(async (_body?: any) => {
-        if (path === "/api/trading/seed-demo") {
-          return { message: "Seeded 60 days of demo trading data" };
-        }
-        if (path === "/api/trading/sync") {
-          return { synced: 1 };
-        }
-        if (path === "/api/trading/reset-demo") {
-          return { message: "Reset demo data" };
-        }
-        return { message: "ok" };
-      }),
-      mutate: vi.fn(),
-      isPending: false,
-      _resolvePromise: () => resolvePromise!({}),
-    };
-  }),
+  useApiMutation: vi.fn((_method: string, path: string) => ({
+    mutateAsync: vi.fn(async () => {
+      if (path === "/api/trading/sync") return { synced: 1 };
+      if (path === "/api/trading/seed-demo") return { seeded: true };
+      return { message: "ok" };
+    }),
+    isPending: false,
+  })),
 }));
 
 // ─── Mock: recharts (simplified for jsdom) ────────────────
 vi.mock("recharts", () => ({
   LineChart: Object.assign(({ children }: any) => React.createElement("div", { "data-testid": "line-chart" }, children), { displayName: "LineChart" }),
   AreaChart: Object.assign(({ children }: any) => React.createElement("div", { "data-testid": "area-chart" }, children), { displayName: "AreaChart" }),
+  BarChart: Object.assign(({ children }: any) => React.createElement("div", { "data-testid": "bar-chart" }, children), { displayName: "BarChart" }),
+  Bar: () => React.createElement("div", { "data-testid": "recharts-bar" }),
   Line: (props: any) => React.createElement("div", { "data-testid": "recharts-line", "data-key": props.dataKey }),
   Area: (props: any) => React.createElement("div", { "data-testid": "recharts-area", "data-key": props.dataKey }),
+  Cell: () => null,
   XAxis: () => React.createElement("div", { "data-testid": "recharts-xaxis" }),
   YAxis: () => React.createElement("div", { "data-testid": "recharts-yaxis" }),
   CartesianGrid: () => React.createElement("div", { "data-testid": "recharts-grid" }),
-  ResponsiveContainer: ({ children }: any) =>
-    React.createElement("div", { "data-testid": "recharts-responsive-container" }, children),
-  Tooltip: () => React.createElement("div", { "data-testid": "recharts-tooltip" }),
 }));
 
 // ─── Mock: @/components/ui/chart ──────────────────────────
 vi.mock("@/components/ui/chart", () => ({
-  ChartContainer: ({ children }: any) =>
-    React.createElement("div", { "data-testid": "chart-container" }, children),
+  ChartContainer: ({ children }: any) => React.createElement("div", { "data-testid": "chart-container" }, children),
   ChartTooltip: () => React.createElement("div", { "data-testid": "chart-tooltip" }),
   ChartTooltipContent: () => React.createElement("div", { "data-testid": "chart-tooltip-content" }),
 }));
@@ -124,525 +77,328 @@ import Trading from "@/pages/dashboard/Trading";
 import { useAuth } from "@/hooks/use-auth";
 
 // ─── Test data factories ──────────────────────────────────
-function makeChallenge(overrides: any = {}) {
+function makeDashboardData(overrides: any = {}) {
   return {
-    id: 1,
-    accountSize: 10000,
-    status: "active",
-    profitTarget: 10,
-    maxDrawdown: 5,
-    maxLeverage: 30,
-    currentPhase: 1,
-    createdAt: Date.now() - 86400000 * 30,
+    challenges: [],
+    accounts: [],
+    metricsHistory: [],
+    drawdownData: [],
+    summary: {
+      totalBalance: 0,
+      totalEquity: 0,
+      floatingPL: 0,
+      activeChallengeCount: 0,
+      activeAccountCount: 0,
+    },
+    perfSummary: null,
     ...overrides,
   };
 }
 
-function makeMt5Account(overrides: any = {}) {
-  return {
-    id: 1,
-    login: "123456",
-    server: "MetaQuotes-Demo",
-    currency: "USD",
-    balance: 10000,
-    equity: 10250,
-    leverage: 30,
-    group: "default",
-    isActive: true,
-    isSuspended: false,
-    ...overrides,
-  };
-}
-
-function makeMetricsHistory(count: number = 30) {
+function makeMetricsHistory(count = 30) {
   const baseTime = Date.now() - 86400000 * count;
   return Array.from({ length: count }, (_, i) => ({
     id: i + 1,
     recordedAt: baseTime + 86400000 * i,
     balance: 10000 + i * 50,
-    equity: 10000 + i * 55 + (i * 7),
+    equity: 10000 + i * 55 + i * 7,
+    dailyPL: 50 + Math.random() * 20 - 10,
+    floatingPL: 250,
+    totalProfit: i * 50,
     currentDrawdown: (i % 5) * 0.4,
     dailyDrawdown: (i % 3) * 0.3,
-    totalProfit: i * 50,
+    remainingDrawdown: 4500 - (i % 5) * 0.4,
+    profitTargetProgress: Math.min(100, i * 3),
+    tradingDaysCount: i + 1,
+    openPositions: 2,
+    closedTrades: i * 3,
     winRate: 55 + (i % 10),
     profitFactor: 1.2 + (i % 5) * 0.1,
-    tradingDaysCount: i + 1,
+    averageRR: 1.8,
+    expectancy: 50,
+    largestWin: 200,
+    largestLoss: -100,
+    consecutiveWins: 5,
+    consecutiveLosses: 2,
+    riskScore: 30,
     healthScore: 80 + (i % 20),
   }));
-}
-
-function makeLatestMetrics() {
-  return {
-    balance: 10500,
-    equity: 10750,
-    floatingPL: 250,
-    totalProfit: 500,
-    winRate: 58.3,
-    profitFactor: 1.45,
-    healthScore: 92,
-    tradingDaysCount: 25,
-  };
-}
-
-// ─── Helper to configure mock data before each test ───────
-function setQueryData(updates: Record<string, any>) {
-  Object.keys(queryDataMap).forEach((k) => delete queryDataMap[k]);
-  const defaults: Record<string, any> = {
-    "challenges/my": [],
-    "metrics/dashboard": { latestMetrics: null },
-    "metrics/history": [],
-    "mt5/my": [],
-  };
-  Object.assign(queryDataMap, defaults, updates);
 }
 
 // ─── Tests ────────────────────────────────────────────────
 describe("Trading Page", () => {
   beforeEach(() => {
-    setQueryData({});
+    dashboardData = undefined;
+    dashboardLoading = true;
     vi.clearAllMocks();
-    // Reset user to default (seeded)
-    vi.mocked(useAuth).mockReturnValue({
-      isLoading: false,
-      isAuthenticated: true,
-      user: { ...mockUser } as any,
-      error: null,
-      signIn: vi.fn() as any,
-      signOut: vi.fn() as any,
-      refetch: vi.fn() as any,
-    });
   });
 
   // ─── Loading state ─────────────────────────────────────
   describe("Loading State", () => {
-    it("shows a spinner when data is loading", () => {
-      Object.keys(queryDataMap).forEach((k) => delete queryDataMap[k]);
+    it("shows skeleton when data is loading", () => {
       const { container } = render(<Trading />);
-      expect(container.querySelector(".animate-spin")).toBeTruthy();
+      expect(container.querySelector("[aria-label='Loading']")).toBeTruthy();
     });
   });
 
   // ─── Empty states ──────────────────────────────────────
   describe("Empty States", () => {
-    it("shows empty state when no MT5 accounts exist", () => {
+    it("shows empty state when no challenges or accounts", () => {
+      dashboardLoading = false;
+      dashboardData = makeDashboardData();
       render(<Trading />);
-      expect(screen.getByText(/don't have any trading accounts yet/)).toBeTruthy();
-    });
-
-    it("shows empty chart prompt when MT5 accounts exist but no history and user is seeded", () => {
-      setQueryData({
-        "challenges/my": [makeChallenge()],
-        "metrics/dashboard": { latestMetrics: null },
-        "metrics/history": [],
-        "mt5/my": [makeMt5Account()],
-      });
-      render(<Trading />);
-      expect(screen.getByText(/No trading metrics recorded yet/)).toBeTruthy();
+      expect(screen.getByText("No Trading Activity Yet")).toBeTruthy();
+      expect(screen.getByText("Browse Challenges")).toBeTruthy();
     });
   });
 
-  // ─── Metric cards ──────────────────────────────────────
-  describe("Metric Cards", () => {
-    it("renders metric card labels", () => {
-      setQueryData({
-        "challenges/my": [makeChallenge()],
-        "metrics/dashboard": { latestMetrics: makeLatestMetrics() },
-        "metrics/history": makeMetricsHistory(10),
-        "mt5/my": [makeMt5Account()],
+  // ─── Summary stats ─────────────────────────────────────
+  describe("Summary Stats", () => {
+    it("renders all four summary stat cards", () => {
+      dashboardLoading = false;
+      dashboardData = makeDashboardData({
+        accounts: [{ id: 1, login: "123456", balance: 10000, equity: 10250, isActive: true, isSuspended: false, server: "Demo", currency: "USD", leverage: 30, group: "default", createdAt: Date.now() }],
+        challenges: [{ id: 1, status: "active", accountSize: 10000, metrics: { balance: 10000, equity: 10250 } }],
+        summary: { totalBalance: 10000, totalEquity: 10250, floatingPL: 250, activeChallengeCount: 1, activeAccountCount: 1 },
       });
       render(<Trading />);
-
       expect(screen.getByText("Total Balance")).toBeTruthy();
       expect(screen.getByText("Total Equity")).toBeTruthy();
-      // "Active Challenges" appears twice (stat-label + section heading), use getAllByText
-      expect(screen.getAllByText("Active Challenges").length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText("MT5 Accounts").length).toBeGreaterThanOrEqual(1);
-    });
-
-    it("displays correct aggregate balance from multiple MT5 accounts", () => {
-      setQueryData({
-        "mt5/my": [
-          makeMt5Account({ balance: 15000, equity: 15300 }),
-          makeMt5Account({ id: 2, login: "789012", balance: 25000, equity: 24800 }),
-        ],
-      });
-      render(<Trading />);
-      expect(screen.getByText("$40,000")).toBeTruthy(); // 15000 + 25000
-      expect(screen.getByText("$40,100")).toBeTruthy(); // 15300 + 24800
-    });
-
-    it("shows positive floating P/L", () => {
-      setQueryData({
-        "mt5/my": [makeMt5Account({ balance: 10000, equity: 10500 })],
-      });
-      render(<Trading />);
-      expect(screen.getByText("Total Equity")).toBeTruthy();
-      expect(screen.getByText((text) => text.includes("500.00"))).toBeTruthy();
-    });
-
-    it("shows negative floating P/L", () => {
-      setQueryData({
-        "mt5/my": [makeMt5Account({ balance: 10000, equity: 9500 })],
-      });
-      render(<Trading />);
-      expect(screen.getByText((text) => text.includes("500.00"))).toBeTruthy();
-    });
-
-    it("shows active and funded challenge counts", () => {
-      setQueryData({
-        "challenges/my": [
-          makeChallenge({ id: 1, status: "active" }),
-          makeChallenge({ id: 2, status: "active" }),
-          makeChallenge({ id: 3, status: "funded" }),
-        ],
-      });
-      render(<Trading />);
-      // Active count "2" appears in the stat-value div
-      expect(screen.getByText("2")).toBeTruthy();
-      expect(screen.getByText("1 funded")).toBeTruthy();
+      expect(screen.getByText("Active Challenges")).toBeTruthy();
+      expect(screen.getByText("Total P&L")).toBeTruthy();
     });
   });
 
-  // ─── MT5 Accounts section ──────────────────────────────
-  describe("MT5 Accounts", () => {
-    it("renders MT5 account card with details", () => {
-      setQueryData({
-        "mt5/my": [makeMt5Account({ login: "555888", server: "Exness-MT5", currency: "NGN", leverage: 200 })],
+  // ─── Active challenge card ─────────────────────────────
+  describe("Active Challenge Card", () => {
+    it("renders challenge with template name and account size", () => {
+      dashboardLoading = false;
+      dashboardData = makeDashboardData({
+        challenges: [{
+          id: 1, status: "active", accountSize: 50000, templateName: "Two-Step Evaluation",
+          profitTarget: 10, maxDrawdown: 5, dailyDrawdown: 2.5, maxLeverage: 30,
+          minTradingDays: 5, currentPhase: 1,
+          metrics: { balance: 50000, equity: 51200, floatingPL: 1200, dailyPL: 200, totalProfit: 1200, currentDrawdown: 0, dailyDrawdown: 0, remainingDrawdown: 1300, profitTargetProgress: 24, tradingDaysCount: 12, openPositions: 3, closedTrades: 36, winRate: 62.5, profitFactor: 1.8, healthScore: 88, recordedAt: Date.now() },
+          violations: [],
+        }],
+        summary: { totalBalance: 50000, totalEquity: 51200, floatingPL: 1200, activeChallengeCount: 1, activeAccountCount: 1 },
       });
       render(<Trading />);
-
-      expect(screen.getAllByText("MT5 Accounts").length).toBeGreaterThanOrEqual(1);
-      // Text is split: "Account #" and "555888" are in separate elements
-      expect(screen.getByText("555888")).toBeTruthy();
-      expect(screen.getByText((text) => text.includes("200"))).toBeTruthy();
-      expect(screen.getByText((text) => text.includes("NGN"))).toBeTruthy();
-    });
-
-    it("shows suspended badge for suspended accounts", () => {
-      setQueryData({
-        "mt5/my": [makeMt5Account({ isSuspended: true, isActive: false })],
-      });
-      render(<Trading />);
-      expect(screen.getByText("Suspended")).toBeTruthy();
-    });
-
-    it("shows active badge for active accounts", () => {
-      setQueryData({
-        "mt5/my": [makeMt5Account({ isActive: true, isSuspended: false })],
-      });
-      render(<Trading />);
+      expect(screen.getByText("Two-Step Evaluation")).toBeTruthy();
       expect(screen.getByText("Active")).toBeTruthy();
     });
 
-    it("renders multiple MT5 account cards", () => {
-      setQueryData({
-        "mt5/my": [
-          makeMt5Account({ id: 1, login: "111111" }),
-          makeMt5Account({ id: 2, login: "222222" }),
-          makeMt5Account({ id: 3, login: "333333" }),
-        ],
+    it("shows drawdown gauges", () => {
+      dashboardLoading = false;
+      dashboardData = makeDashboardData({
+        challenges: [{
+          id: 1, status: "active", accountSize: 10000, templateName: "One-Step",
+          profitTarget: 8, maxDrawdown: 5, dailyDrawdown: 2.5, maxLeverage: 30,
+          minTradingDays: 3, currentPhase: 1,
+          metrics: { balance: 10000, equity: 10100, floatingPL: 100, dailyPL: 50, totalProfit: 100, currentDrawdown: 1.5, dailyDrawdown: 0.3, remainingDrawdown: 350, profitTargetProgress: 12, tradingDaysCount: 5, openPositions: 1, closedTrades: 12, winRate: 58, profitFactor: 1.5, healthScore: 85, recordedAt: Date.now() },
+          violations: [],
+        }],
+        summary: { totalBalance: 10000, totalEquity: 10100, floatingPL: 100, activeChallengeCount: 1, activeAccountCount: 1 },
       });
       render(<Trading />);
-      expect(screen.getByText("111111")).toBeTruthy();
-      expect(screen.getByText("222222")).toBeTruthy();
-      expect(screen.getByText("333333")).toBeTruthy();
+      expect(screen.getByText("Maximum Drawdown")).toBeTruthy();
+      expect(screen.getByText("Daily Drawdown")).toBeTruthy();
+      expect(screen.getByText("Profit Target")).toBeTruthy();
     });
 
-    // ─── Sortable headers ────────────────────────────────
-    it("renders sortable column headers with the default column active", () => {
-      setQueryData({ "mt5/my": [makeMt5Account()] });
+    it("shows violations warning when violations exist", () => {
+      dashboardLoading = false;
+      dashboardData = makeDashboardData({
+        challenges: [{
+          id: 1, status: "active", accountSize: 10000, templateName: "One-Step",
+          profitTarget: 8, maxDrawdown: 5, dailyDrawdown: 2.5, maxLeverage: 30,
+          minTradingDays: 3, currentPhase: 1,
+          metrics: { balance: 10000, equity: 10100, floatingPL: 100, dailyPL: 50, totalProfit: 100, currentDrawdown: 1.5, dailyDrawdown: 0.3, remainingDrawdown: 350, profitTargetProgress: 12, tradingDaysCount: 5, openPositions: 1, closedTrades: 12, winRate: 58, profitFactor: 1.5, healthScore: 85, recordedAt: Date.now() },
+          violations: [{ type: "news_trading", date: Date.now() }],
+        }],
+        summary: { totalBalance: 10000, totalEquity: 10100, floatingPL: 100, activeChallengeCount: 1, activeAccountCount: 1 },
+      });
       render(<Trading />);
-
-      // All sortable headers render
-      for (const label of ["Login", "Balance", "Equity", "Leverage", "Server", "Created"]) {
-        expect(screen.getByRole("button", { name: `Sort by ${label}` })).toBeTruthy();
-      }
-      // Default sort is createdAt desc → Created is active (aria-pressed)
-      expect(screen.getByRole("button", { name: "Sort by Created" }).getAttribute("aria-pressed")).toBe("true");
+      expect(screen.getByText("Rule Violations Detected")).toBeTruthy();
     });
+  });
 
-    it("calls the API with sortBy/sortOrder when a header is clicked", async () => {
-      const user = userEvent.setup();
-      setQueryData({ "mt5/my": [makeMt5Account()] });
+  // ─── Performance analytics ─────────────────────────────
+  describe("Performance Analytics", () => {
+    it("renders performance stats when available", () => {
+      dashboardLoading = false;
+      dashboardData = makeDashboardData({
+        accounts: [{ id: 1, login: "123456", balance: 10000, equity: 10250, isActive: true, isSuspended: false, server: "Demo", currency: "USD", leverage: 30, group: "default", createdAt: Date.now() }],
+        challenges: [{
+          id: 1, status: "active", accountSize: 10000, templateName: "One-Step",
+          profitTarget: 8, maxDrawdown: 5, dailyDrawdown: 2.5, maxLeverage: 30, minTradingDays: 3, currentPhase: 1,
+          metrics: { balance: 10000, equity: 10250, floatingPL: 250, dailyPL: 50, totalProfit: 250, currentDrawdown: 1, dailyDrawdown: 0.3, remainingDrawdown: 350, profitTargetProgress: 31, tradingDaysCount: 10, openPositions: 2, closedTrades: 30, winRate: 60, profitFactor: 1.8, averageRR: 2.0, largestWin: 300, largestLoss: -150, consecutiveWins: 6, consecutiveLosses: 2, healthScore: 85, recordedAt: Date.now() },
+          violations: [],
+        }],
+        perfSummary: { winRate: 60, profitFactor: 1.8, averageRR: 2.0, expectancy: 50, largestWin: 300, largestLoss: -150, consecutiveWins: 6, consecutiveLosses: 2, closedTrades: 30, riskScore: 30, healthScore: 85 },
+        summary: { totalBalance: 10000, totalEquity: 10250, floatingPL: 250, activeChallengeCount: 1, activeAccountCount: 1 },
+      });
       render(<Trading />);
-
-      await user.click(screen.getByRole("button", { name: "Sort by Balance" }));
-
-      // Find the mt5 query call that included the sort params
-      const calls = vi.mocked(useApiQuery).mock.calls;
-      const mt5Call = calls.find((c) => String(c[1]).includes("/api/trading/mt5?") && String(c[1]).includes("sortBy=balance"));
-      expect(mt5Call).toBeTruthy();
-      expect(String(mt5Call![1])).toContain("sortOrder=desc");
-      expect(screen.getByRole("button", { name: "Sort by Balance" }).getAttribute("aria-pressed")).toBe("true");
-    });
-
-    it("toggles to ascending when the active column is clicked again", async () => {
-      const user = userEvent.setup();
-      setQueryData({ "mt5/my": [makeMt5Account()] });
-      render(<Trading />);
-
-      await user.click(screen.getByRole("button", { name: "Sort by Balance" }));
-      await user.click(screen.getByRole("button", { name: "Sort by Balance" }));
-
-      const calls = vi.mocked(useApiQuery).mock.calls;
-      const ascCall = calls.find((c) => String(c[1]).includes("/api/trading/mt5?") && String(c[1]).includes("sortBy=balance&sortOrder=asc"));
-      expect(ascCall).toBeTruthy();
-    });
-
-    it("switching columns resets to descending order", async () => {
-      const user = userEvent.setup();
-      setQueryData({ "mt5/my": [makeMt5Account()] });
-      render(<Trading />);
-
-      // Sort by Balance asc first
-      await user.click(screen.getByRole("button", { name: "Sort by Balance" }));
-      await user.click(screen.getByRole("button", { name: "Sort by Balance" }));
-      // Switch to Equity → should default to desc
-      await user.click(screen.getByRole("button", { name: "Sort by Equity" }));
-
-      const calls = vi.mocked(useApiQuery).mock.calls;
-      const equityCall = calls.find((c) => String(c[1]).includes("/api/trading/mt5?") && String(c[1]).includes("sortBy=equity&sortOrder=desc"));
-      expect(equityCall).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Sort by Equity" }).getAttribute("aria-pressed")).toBe("true");
+      expect(screen.getAllByText("Win Rate").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText("Profit Factor").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText("Avg R:R")).toBeTruthy();
+      expect(screen.getByText("Largest Win")).toBeTruthy();
+      expect(screen.getByText("Largest Loss")).toBeTruthy();
     });
   });
 
   // ─── Charts ────────────────────────────────────────────
   describe("Charts", () => {
-    it("renders Performance Charts heading with history data", () => {
-      setQueryData({
-        "metrics/history": makeMetricsHistory(30),
-        "mt5/my": [makeMt5Account()],
+    it("renders equity curve and drawdown charts with history data", () => {
+      dashboardLoading = false;
+      const history = makeMetricsHistory(30);
+      dashboardData = makeDashboardData({
+        accounts: [{ id: 1, login: "123456", balance: 10000, equity: 10250, isActive: true, isSuspended: false, server: "Demo", currency: "USD", leverage: 30, group: "default", createdAt: Date.now() }],
+        challenges: [{
+          id: 1, status: "active", accountSize: 10000, templateName: "One-Step",
+          profitTarget: 8, maxDrawdown: 5, dailyDrawdown: 2.5, maxLeverage: 30, minTradingDays: 3, currentPhase: 1,
+          metrics: { balance: 10000, equity: 10250, floatingPL: 250, dailyPL: 50, totalProfit: 250, currentDrawdown: 1, dailyDrawdown: 0.3, remainingDrawdown: 350, profitTargetProgress: 31, tradingDaysCount: 10, openPositions: 2, closedTrades: 30, winRate: 60, profitFactor: 1.8, healthScore: 85, recordedAt: Date.now() },
+          violations: [],
+        }],
+        metricsHistory: history,
+        drawdownData: history.map((m: any) => ({ recordedAt: m.recordedAt, drawdown: m.currentDrawdown, dailyDrawdown: m.dailyDrawdown })),
+        perfSummary: { winRate: 60, profitFactor: 1.8, averageRR: 2.0, expectancy: 50, largestWin: 300, largestLoss: -150, consecutiveWins: 6, consecutiveLosses: 2, closedTrades: 30, riskScore: 30, healthScore: 85 },
+        summary: { totalBalance: 10000, totalEquity: 10250, floatingPL: 250, activeChallengeCount: 1, activeAccountCount: 1 },
       });
       render(<Trading />);
       expect(screen.getByText("Performance Charts")).toBeTruthy();
-      expect(screen.getByText("Balance & Equity")).toBeTruthy();
-    });
-
-    it("renders both line and area charts", () => {
-      setQueryData({
-        "metrics/history": makeMetricsHistory(30),
-        "mt5/my": [makeMt5Account()],
-      });
-      render(<Trading />);
+      expect(screen.getByText("Equity Curve")).toBeTruthy();
       expect(screen.getByTestId("line-chart")).toBeTruthy();
       expect(screen.getByTestId("area-chart")).toBeTruthy();
     });
 
-    it("shows balance/equity legend text", () => {
-      setQueryData({
-        "metrics/history": makeMetricsHistory(30),
-        "mt5/my": [makeMt5Account()],
+    it("shows daily P&L bar chart", () => {
+      dashboardLoading = false;
+      const history = makeMetricsHistory(30);
+      dashboardData = makeDashboardData({
+        accounts: [{ id: 1, login: "123456", balance: 10000, equity: 10250, isActive: true, isSuspended: false, server: "Demo", currency: "USD", leverage: 30, group: "default", createdAt: Date.now() }],
+        challenges: [{
+          id: 1, status: "active", accountSize: 10000, templateName: "One-Step",
+          profitTarget: 8, maxDrawdown: 5, dailyDrawdown: 2.5, maxLeverage: 30, minTradingDays: 3, currentPhase: 1,
+          metrics: { balance: 10000, equity: 10250, floatingPL: 250, dailyPL: 50, totalProfit: 250, currentDrawdown: 1, dailyDrawdown: 0.3, remainingDrawdown: 350, profitTargetProgress: 31, tradingDaysCount: 10, openPositions: 2, closedTrades: 30, winRate: 60, profitFactor: 1.8, healthScore: 85, recordedAt: Date.now() },
+          violations: [],
+        }],
+        metricsHistory: history,
+        drawdownData: history.map((m: any) => ({ recordedAt: m.recordedAt, drawdown: m.currentDrawdown, dailyDrawdown: m.dailyDrawdown })),
+        perfSummary: { winRate: 60, profitFactor: 1.8, averageRR: 2.0, expectancy: 50, largestWin: 300, largestLoss: -150, consecutiveWins: 6, consecutiveLosses: 2, closedTrades: 30, riskScore: 30, healthScore: 85 },
+        summary: { totalBalance: 10000, totalEquity: 10250, floatingPL: 250, activeChallengeCount: 1, activeAccountCount: 1 },
       });
       render(<Trading />);
-      expect(screen.getByText(/Solid line: Balance/)).toBeTruthy();
-    });
-
-    it("shows drawdown legend text", () => {
-      setQueryData({
-        "metrics/history": makeMetricsHistory(30),
-        "mt5/my": [makeMt5Account()],
-      });
-      render(<Trading />);
-      expect(screen.getByText(/Current drawdown over time/)).toBeTruthy();
-    });
-
-    it("handles large datasets without errors", () => {
-      setQueryData({
-        "metrics/history": makeMetricsHistory(200),
-        "mt5/my": [makeMt5Account()],
-      });
-      render(<Trading />);
-      expect(screen.getByTestId("line-chart")).toBeTruthy();
-      expect(screen.getByTestId("area-chart")).toBeTruthy();
+      expect(screen.getByText("Daily P&L (Last 30 Days)")).toBeTruthy();
+      expect(screen.getByTestId("bar-chart")).toBeTruthy();
     });
   });
 
-  // ─── Current Metrics section ───────────────────────────
-  describe("Current Metrics", () => {
-    it("renders latest metrics when available", () => {
-      setQueryData({
-        "metrics/dashboard": { latestMetrics: makeLatestMetrics() },
-        "mt5/my": [makeMt5Account()],
-      });
-      render(<Trading />);
-
-      expect(screen.getByText("Current Metrics")).toBeTruthy();
-      expect(screen.getByText("$10,500")).toBeTruthy();
-      expect(screen.getByText("$10,750")).toBeTruthy();
-      expect(screen.getByText("58.3%")).toBeTruthy();
-      expect(screen.getByText("1.45")).toBeTruthy();
-      expect(screen.getByText("92/100")).toBeTruthy();
-      expect(screen.getByText("25")).toBeTruthy();
-    });
-
-    it("shows positive floating P/L with plus sign", () => {
-      setQueryData({
-        "metrics/dashboard": { latestMetrics: makeLatestMetrics() },
-        "mt5/my": [makeMt5Account()],
-      });
-      render(<Trading />);
-      expect(screen.getByText("Floating P/L")).toBeTruthy();
-      expect(screen.getByText("+$250.00")).toBeTruthy();
-    });
-
-    it("shows negative floating P/L", () => {
-      setQueryData({
-        "metrics/dashboard": {
-          latestMetrics: { ...makeLatestMetrics(), floatingPL: -150 },
-        },
-        "mt5/my": [makeMt5Account()],
-      });
-      render(<Trading />);
-      expect(screen.getByText((text) => text.includes("150.00"))).toBeTruthy();
-    });
-
-    it("shows negative total profit", () => {
-      setQueryData({
-        "metrics/dashboard": {
-          latestMetrics: { ...makeLatestMetrics(), totalProfit: -500 },
-        },
-        "mt5/my": [makeMt5Account()],
-      });
-      render(<Trading />);
-      expect(screen.getByText((text) => text.includes("500.00")))
-    });
-  });
-
-  // ─── Active Challenges section ─────────────────────────
-  describe("Active Challenges", () => {
-    it("renders challenge card with account size and rules", () => {
-      setQueryData({
-        "challenges/my": [makeChallenge()],
-      });
-      render(<Trading />);
-      expect(screen.getByText(/10,000.*Challenge/)).toBeTruthy();
-      expect(screen.getByText(/Target: 10%/)).toBeTruthy();
-      expect(screen.getByText(/Max DD: 5%/)).toBeTruthy();
-      expect(screen.getByText(/Leverage: 1:30/)).toBeTruthy();
-    });
-
-    it("renders multiple active challenges", () => {
-      setQueryData({
-        "challenges/my": [
-          makeChallenge({ id: 1, accountSize: 10000 }),
-          makeChallenge({ id: 2, accountSize: 25000, maxLeverage: 50 }),
+  // ─── MT5 Accounts ──────────────────────────────────────
+  describe("MT5 Accounts", () => {
+    it("renders MT5 account cards", () => {
+      dashboardLoading = false;
+      dashboardData = makeDashboardData({
+        accounts: [
+          { id: 1, login: "111111", balance: 10000, equity: 10250, isActive: true, isSuspended: false, server: "MetaQuotes-Demo", currency: "USD", leverage: 30, group: "default", createdAt: Date.now(), lastSyncAt: Date.now() - 3600000 },
+          { id: 2, login: "222222", balance: 50000, equity: 51000, isActive: true, isSuspended: false, server: "MetaQuotes-Demo", currency: "USD", leverage: 50, group: "default", createdAt: Date.now(), lastSyncAt: null },
         ],
+        summary: { totalBalance: 60000, totalEquity: 61250, floatingPL: 1250, activeChallengeCount: 0, activeAccountCount: 2 },
       });
       render(<Trading />);
-      expect(screen.getByText(/10,000.*Challenge/)).toBeTruthy();
-      expect(screen.getByText(/25,000.*Challenge/)).toBeTruthy();
+      expect(screen.getByText("MT5 Accounts")).toBeTruthy();
+      expect(screen.getByText((text) => text.includes("111111"))).toBeTruthy();
+      expect(screen.getByText((text) => text.includes("222222"))).toBeTruthy();
     });
-  });
 
-  // ─── Funded Accounts section ───────────────────────────
-  describe("Funded Accounts", () => {
-    it("renders funded challenge card", () => {
-      setQueryData({
-        "challenges/my": [makeChallenge({ id: 5, status: "funded", accountSize: 50000 })],
+    it("shows suspended badge", () => {
+      dashboardLoading = false;
+      dashboardData = makeDashboardData({
+        accounts: [{ id: 1, login: "123456", balance: 10000, equity: 10000, isActive: false, isSuspended: true, server: "Demo", currency: "USD", leverage: 30, group: "default", createdAt: Date.now() }],
+        summary: { totalBalance: 10000, totalEquity: 10000, floatingPL: 0, activeChallengeCount: 0, activeAccountCount: 0 },
       });
       render(<Trading />);
-      expect(screen.getByText("Funded Accounts")).toBeTruthy();
-      expect(screen.getByText(/50,000.*Funded Account/)).toBeTruthy();
+      expect(screen.getByText("Suspended")).toBeTruthy();
     });
   });
 
   // ─── Sync button ───────────────────────────────────────
   describe("Sync Button", () => {
     it("renders the sync button", () => {
-      render(<Trading />);
-      expect(screen.getByText("Sync Now")).toBeTruthy();
-    });
-
-    it("button is clickable and triggers sync", async () => {
-      const user = userEvent.setup();
-      setQueryData({
-        "challenges/my": [makeChallenge()],
-        "mt5/my": [makeMt5Account()],
+      dashboardLoading = false;
+      dashboardData = makeDashboardData({
+        accounts: [{ id: 1, login: "123456", balance: 10000, equity: 10000, isActive: true, isSuspended: false, server: "Demo", currency: "USD", leverage: 30, group: "default", createdAt: Date.now() }],
+        challenges: [{
+          id: 1, status: "active", accountSize: 10000, templateName: "One-Step",
+          profitTarget: 8, maxDrawdown: 5, dailyDrawdown: 2.5, maxLeverage: 30, minTradingDays: 3, currentPhase: 1,
+          metrics: null, violations: [],
+        }],
+        summary: { totalBalance: 10000, totalEquity: 10000, floatingPL: 0, activeChallengeCount: 1, activeAccountCount: 1 },
       });
       render(<Trading />);
-
-      const syncButton = screen.getByText("Sync Now");
-      await user.click(syncButton);
-      // Button should be clickable without error
-      expect(syncButton).toBeTruthy();
+      expect(screen.getByText("Sync Now")).toBeTruthy();
     });
   });
 
   // ─── Page header ───────────────────────────────────────
   describe("Page Header", () => {
-    it("renders the Trading page title and description", () => {
+    it("renders the Trading Dashboard title when data exists", () => {
+      dashboardLoading = false;
+      dashboardData = makeDashboardData({
+        accounts: [{ id: 1, login: "123456", balance: 10000, equity: 10000, isActive: true, isSuspended: false, server: "Demo", currency: "USD", leverage: 30, group: "default", createdAt: Date.now() }],
+        summary: { totalBalance: 10000, totalEquity: 10000, floatingPL: 0, activeChallengeCount: 0, activeAccountCount: 1 },
+      });
       render(<Trading />);
-      expect(screen.getByRole("heading", { name: "Trading" })).toBeTruthy();
-      expect(screen.getByText(/Monitor your trading performance/)).toBeTruthy();
+      expect(screen.getByText("Trading Dashboard")).toBeTruthy();
+      expect(screen.getByText(/Real-time performance metrics/)).toBeTruthy();
     });
   });
 
-  // ─── Auto-seeding ──────────────────────────────────────
-  describe("Auto-seeding", () => {
-    it("shows generate demo data button when user is not seeded", () => {
-      vi.mocked(useAuth).mockReturnValue({
-        isLoading: false,
-        isAuthenticated: true,
-        user: { ...mockUser, isDemoSeeded: false } as any,
-        error: null,
-        signIn: vi.fn() as any,
-        signOut: vi.fn() as any,
-        refetch: vi.fn() as any,
-      });
-
-      setQueryData({
-        "challenges/my": [makeChallenge()],
-        "metrics/dashboard": { latestMetrics: null },
-        "metrics/history": [],
-        "mt5/my": [makeMt5Account()],
-      });
-      render(<Trading />);
-      // The auto-seed fires, but the button text should be present eventually or the spinner
-      // Since auto-seed fires immediately, we check for the spinner state
-      expect(screen.getByText(/Generating demo trading data/)).toBeTruthy();
-    });
-  });
-
-  // ─── Integration: full render with all data ────────────
+  // ─── Full integration ──────────────────────────────────
   describe("Full Integration", () => {
-    it("renders all sections together with complete data", () => {
-      setQueryData({
-        "challenges/my": [
-          makeChallenge({ id: 1, accountSize: 10000, status: "active" }),
-          makeChallenge({ id: 2, accountSize: 50000, status: "funded" }),
-        ],
-        "metrics/dashboard": { latestMetrics: makeLatestMetrics() },
-        "metrics/history": makeMetricsHistory(30),
-        "mt5/my": [
-          makeMt5Account({ id: 1, login: "111111", balance: 10000, equity: 10250 }),
-          makeMt5Account({ id: 2, login: "222222", balance: 50000, equity: 51000 }),
-        ],
+    it("renders all sections together", () => {
+      dashboardLoading = false;
+      const history = makeMetricsHistory(30);
+      dashboardData = makeDashboardData({
+        accounts: [{ id: 1, login: "111111", balance: 50000, equity: 51200, isActive: true, isSuspended: false, server: "MetaQuotes-Demo", currency: "USD", leverage: 30, group: "default", createdAt: Date.now(), lastSyncAt: Date.now() - 3600000 }],
+        challenges: [{
+          id: 1, status: "active", accountSize: 50000, templateName: "Two-Step Evaluation",
+          profitTarget: 10, maxDrawdown: 5, dailyDrawdown: 2.5, maxLeverage: 30, minTradingDays: 5, currentPhase: 1,
+          metrics: { balance: 50000, equity: 51200, floatingPL: 1200, dailyPL: 200, totalProfit: 1200, currentDrawdown: 1, dailyDrawdown: 0.3, remainingDrawdown: 1300, profitTargetProgress: 24, tradingDaysCount: 12, openPositions: 3, closedTrades: 36, winRate: 62.5, profitFactor: 1.8, averageRR: 2.0, largestWin: 300, largestLoss: -150, consecutiveWins: 6, consecutiveLosses: 2, healthScore: 88, recordedAt: Date.now() },
+          violations: [],
+        }],
+        metricsHistory: history,
+        drawdownData: history.map((m: any) => ({ recordedAt: m.recordedAt, drawdown: m.currentDrawdown, dailyDrawdown: m.dailyDrawdown })),
+        perfSummary: { winRate: 62.5, profitFactor: 1.8, averageRR: 2.0, expectancy: 50, largestWin: 300, largestLoss: -150, consecutiveWins: 6, consecutiveLosses: 2, closedTrades: 36, riskScore: 30, healthScore: 88 },
+        summary: { totalBalance: 50000, totalEquity: 51200, floatingPL: 1200, activeChallengeCount: 1, activeAccountCount: 1 },
       });
       render(<Trading />);
 
       // Header
-      expect(screen.getByRole("heading", { name: "Trading" })).toBeTruthy();
+      expect(screen.getByText("Trading Dashboard")).toBeTruthy();
 
-      // Metric cards
+      // Summary stats
       expect(screen.getByText("Total Balance")).toBeTruthy();
       expect(screen.getByText("Total Equity")).toBeTruthy();
+      expect(screen.getByText("Active Challenges")).toBeTruthy();
+      expect(screen.getByText("Total P&L")).toBeTruthy();
 
-      // MT5 accounts
-      expect(screen.getByText("111111")).toBeTruthy();
-      expect(screen.getByText("222222")).toBeTruthy();
+      // Challenge card
+      expect(screen.getByText("Two-Step Evaluation")).toBeTruthy();
+      expect(screen.getByText("Maximum Drawdown")).toBeTruthy();
+      expect(screen.getByText("Profit Target")).toBeTruthy();
+
+      // Performance stats (Win Rate appears in both challenge quick stats and analytics)
+      expect(screen.getAllByText("Win Rate").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText("Profit Factor").length).toBeGreaterThanOrEqual(1);
 
       // Charts
       expect(screen.getByText("Performance Charts")).toBeTruthy();
-      expect(screen.getByTestId("line-chart")).toBeTruthy();
-      expect(screen.getByTestId("area-chart")).toBeTruthy();
+      expect(screen.getByText("Equity Curve")).toBeTruthy();
 
-      // Current metrics
-      expect(screen.getByText("Current Metrics")).toBeTruthy();
-
-      // Challenges (use getAllByText since "Active Challenges" appears twice)
-      expect(screen.getAllByText("Active Challenges").length).toBeGreaterThanOrEqual(1);
-      expect(screen.getByText("Funded Accounts")).toBeTruthy();
+      // MT5 accounts
+      expect(screen.getByText("MT5 Accounts")).toBeTruthy();
+      expect(screen.getByText((text) => text.includes("111111"))).toBeTruthy();
 
       // Sync button
       expect(screen.getByText("Sync Now")).toBeTruthy();

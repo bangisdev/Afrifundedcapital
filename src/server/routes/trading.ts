@@ -1090,4 +1090,131 @@ app.get("/admin/sync-queue", requireAuth, requireAdmin, (c) => {
   });
 });
 
+// ─── Comprehensive Trading Dashboard ───────────────────
+// Single endpoint that returns everything the real-time trading dashboard needs:
+// active challenges with progress, metrics history, drawdown data, account summary.
+app.get("/dashboard", requireAuth, (c) => {
+  const userId = c.get("userId");
+  const db = getDb();
+
+  // 1. Active challenges with template info
+  const challenges = db
+    .select({ ch: userChallenges, tpl: challengeTemplates })
+    .from(userChallenges)
+    .leftJoin(challengeTemplates, eq(userChallenges.templateId, challengeTemplates.id))
+    .where(and(eq(userChallenges.userId, userId), eq(userChallenges.status, "active")))
+    .orderBy(desc(userChallenges.createdAt))
+    .all();
+
+  // 2. Latest metrics per active challenge
+  const challengeIds = challenges.map((r) => r.ch.id);
+  const latestMetricsMap = new Map<number, typeof tradingMetrics.$inferSelect>();
+  for (const cid of challengeIds) {
+    const latest = db
+      .select()
+      .from(tradingMetrics)
+      .where(eq(tradingMetrics.challengeId, cid))
+      .orderBy(desc(tradingMetrics.recordedAt))
+      .limit(1)
+      .get();
+    if (latest) latestMetricsMap.set(cid, latest);
+  }
+
+  // 3. Metrics history for the first active challenge (equity curve chart)
+  const primaryChallengeId = challengeIds[0] || 0;
+  const metricsHistory = primaryChallengeId
+    ? db
+        .select()
+        .from(tradingMetrics)
+        .where(eq(tradingMetrics.challengeId, primaryChallengeId))
+        .orderBy(tradingMetrics.recordedAt)
+        .all()
+    : [];
+
+  // 4. Drawdown history for charting
+  const drawdownData = primaryChallengeId
+    ? db
+        .select()
+        .from(drawdownHistory)
+        .where(eq(drawdownHistory.challengeId, primaryChallengeId))
+        .orderBy(drawdownHistory.recordedAt)
+        .all()
+    : [];
+
+  // 5. MT5 accounts
+  const accounts = db
+    .select()
+    .from(mt5Accounts)
+    .where(eq(mt5Accounts.userId, userId))
+    .orderBy(desc(mt5Accounts.createdAt))
+    .all();
+
+  // 6. Aggregate stats across all active challenges
+  const totalBalance = accounts.reduce((s, a) => s + (a.balance || 0), 0);
+  const totalEquity = accounts.reduce((s, a) => s + (a.equity || 0), 0);
+
+  const challengeDetails = challenges.map((r) => {
+    const m = latestMetricsMap.get(r.ch.id);
+    const violations: unknown[] = r.ch.violations ? (() => { try { return JSON.parse(r.ch.violations); } catch { return []; } })() : [];
+    return {
+      ...r.ch,
+      templateName: r.tpl?.name || null,
+      metrics: m
+        ? {
+            balance: m.balance,
+            equity: m.equity,
+            floatingPL: m.floatingPL,
+            dailyPL: m.dailyPL,
+            totalProfit: m.totalProfit,
+            currentDrawdown: m.currentDrawdown,
+            dailyDrawdown: m.dailyDrawdown,
+            remainingDrawdown: m.remainingDrawdown,
+            profitTargetProgress: m.profitTargetProgress,
+            tradingDaysCount: m.tradingDaysCount,
+            openPositions: m.openPositions,
+            closedTrades: m.closedTrades,
+            winRate: m.winRate,
+            profitFactor: m.profitFactor,
+            healthScore: m.healthScore,
+            recordedAt: m.recordedAt,
+          }
+        : null,
+      violations,
+    };
+  });
+
+  // 7. Performance summary from latest metrics
+  const latestMetrics = latestMetricsMap.get(primaryChallengeId);
+  const perfSummary = latestMetrics
+    ? {
+        winRate: latestMetrics.winRate,
+        profitFactor: latestMetrics.profitFactor,
+        averageRR: latestMetrics.averageRR,
+        expectancy: latestMetrics.expectancy,
+        largestWin: latestMetrics.largestWin,
+        largestLoss: latestMetrics.largestLoss,
+        consecutiveWins: latestMetrics.consecutiveWins,
+        consecutiveLosses: latestMetrics.consecutiveLosses,
+        closedTrades: latestMetrics.closedTrades,
+        riskScore: latestMetrics.riskScore,
+        healthScore: latestMetrics.healthScore,
+      }
+    : null;
+
+  return c.json({
+    challenges: challengeDetails,
+    accounts,
+    metricsHistory,
+    drawdownData,
+    summary: {
+      totalBalance,
+      totalEquity,
+      floatingPL: totalEquity - totalBalance,
+      activeChallengeCount: challenges.length,
+      activeAccountCount: accounts.filter((a) => a.isActive && !a.isSuspended).length,
+    },
+    perfSummary,
+  });
+});
+
 export default app;
