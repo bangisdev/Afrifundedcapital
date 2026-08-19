@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { Loader2, ArrowLeft, Activity, BarChart3, AlertTriangle, Check, X, ExternalLink } from "lucide-react";
+import { ArrowLeft, Activity, BarChart3, AlertTriangle, Check, X, ExternalLink } from "lucide-react";
+import { PageLoader } from "@/components/dashboard/PageLoader";
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts";
 import { useMemo } from "react";
 import { newsBlackoutWindow, RULE_HINTS } from "@/lib/utils";
@@ -90,7 +91,7 @@ export default function ChallengeDetail() {
   }, [metricsHistory]);
 
   if (cLoading || mLoading) {
-    return <div className="flex items-center justify-center h-64"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
+    return <PageLoader />;
   }
 
   if (!challenge) {
