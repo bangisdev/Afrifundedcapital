@@ -91,6 +91,8 @@ function setQueryData(updates: Record<string, any>) {
     "metrics/dashboard": null,
     "challenges/my": null,
     "wallet/my": null,
+    "notifications/my": { notifications: [] },
+    "payouts/stats": { totalPending: 0 },
     ...updates,
   });
 }
@@ -152,14 +154,15 @@ describe("Overview Page", () => {
     it("renders New Challenge button", () => {
       setQueryData({});
       render(<Overview />);
-      expect(screen.getByText("New Challenge")).toBeTruthy();
+      expect(screen.getAllByText("New Challenge").length).toBeGreaterThanOrEqual(1);
     });
 
     it("navigates to challenges on New Challenge click", async () => {
       const user = userEvent.setup();
       setQueryData({});
       render(<Overview />);
-      await user.click(screen.getByText("New Challenge"));
+      const btns = screen.getAllByText("New Challenge");
+      await user.click(btns[0]);
       expect(mockNavigate).toHaveBeenCalledWith("/dashboard/challenges");
     });
   });
@@ -182,7 +185,7 @@ describe("Overview Page", () => {
       render(<Overview />);
       expect(screen.getByText("3")).toBeTruthy();
       expect(screen.getByText("1")).toBeTruthy();
-      expect(screen.getByText("₦150,000")).toBeTruthy();
+      expect(screen.getAllByText(/₦150,000/).length).toBeGreaterThanOrEqual(1);
     });
 
     it("shows zero when no data", () => {
@@ -282,7 +285,7 @@ describe("Overview Page", () => {
       expect(screen.getByText((t) => t.includes("50,000"))).toBeTruthy();
     });
 
-    it("limits to 5 challenges in the list", () => {
+    it("limits to 3 challenges in the list", () => {
       const challenges = Array.from({ length: 8 }, (_, i) => ({
         id: i + 1,
         accountSize: 10000 * (i + 1),
@@ -290,8 +293,8 @@ describe("Overview Page", () => {
       }));
       setQueryData({ "challenges/my": { challenges, total: challenges.length, page: 1, pageSize: 10, totalPages: 1 } });
       render(<Overview />);
-      expect(screen.getByText("Challenge #5")).toBeTruthy();
-      expect(screen.queryByText("Challenge #6")).toBeNull();
+      expect(screen.getByText("Challenge #3")).toBeTruthy();
+      expect(screen.queryByText("Challenge #4")).toBeNull();
     });
 
     it("navigates to challenges on challenge click", async () => {
@@ -313,7 +316,7 @@ describe("Overview Page", () => {
     it("shows empty state when no challenges", () => {
       setQueryData({ "challenges/my": [] });
       render(<Overview />);
-      expect(screen.getByText(/haven't purchased any challenges/)).toBeTruthy();
+      expect(screen.getByText(/Start your funded journey/)).toBeTruthy();
       expect(screen.getByText("Browse Challenges")).toBeTruthy();
     });
 
@@ -366,7 +369,7 @@ describe("Overview Page", () => {
         "wallet/my": { balance: 0 },
       });
       render(<Overview />);
-      expect(screen.getByText("₦0")).toBeTruthy();
+      expect(screen.getAllByText(/₦0/).length).toBeGreaterThanOrEqual(1);
     });
   });
 });

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,18 @@ import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Loader2, Copy, Users, TrendingUp, DollarSign, Link2, ExternalLink, ArrowUpRight, Clock, CheckCircle, XCircle, Banknote, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Loader2, Copy, Users, TrendingUp, DollarSign, Link2, ExternalLink, ArrowUpRight, Clock, CheckCircle, XCircle, Banknote, ArrowUp, ArrowDown, ArrowUpDown, Award, Zap, Target } from "lucide-react";
 import { toast } from "sonner";
+import { cn, formatMoney, formatRelativeTime } from "@/lib/utils";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 
 interface PayoutsResponse {
   payouts: any[];
@@ -29,6 +39,21 @@ interface ReferralsResponse {
   stats: { total: number; byStatus: Record<string, number> };
 }
 
+// Affiliate tiers based on total commissions earned
+const TIERS = [
+  { name: "Starter", min: 0, max: 50000, color: "bg-secondary", icon: Users, rate: "10%" },
+  { name: "Silver", min: 50000, max: 200000, color: "bg-slate-300 dark:bg-slate-500", icon: Award, rate: "12%" },
+  { name: "Gold", min: 200000, max: 500000, color: "bg-yellow-400 dark:bg-yellow-500", icon: Zap, rate: "15%" },
+  { name: "Platinum", min: 500000, max: Infinity, color: "bg-violet-500", icon: Target, rate: "20%" },
+];
+
+function getCurrentTier(commissions: number) {
+  for (let i = TIERS.length - 1; i >= 0; i--) {
+    if (commissions >= TIERS[i].min) return { tier: TIERS[i], index: i };
+  }
+  return { tier: TIERS[0], index: 0 };
+}
+
 export default function Affiliate() {
   const { user } = useAuth();
   const { data: affiliate, isLoading } = useApiQuery<any>(["affiliate", "my"], "/api/affiliates/my");
@@ -45,7 +70,7 @@ export default function Affiliate() {
   const [rPage, setRPage] = useState(1);
   const [rPageSize, setRPageSize] = useState(10);
 
-  // Referrals sorting (whitelisted columns on the server: id, name, status, commissionEarned, createdAt, convertedAt)
+  // Referrals sorting
   const [rSortBy, setRSortBy] = useState("createdAt");
   const [rSortOrder, setRSortOrder] = useState<"asc" | "desc">("desc");
   const REFERRAL_SORT_COLUMNS: Array<{ key: string; label: string }> = [
@@ -86,7 +111,7 @@ export default function Affiliate() {
     );
   };
 
-  // Auto-generate code on mount if user has no affiliate record
+  // Auto-generate code on mount
   useEffect(() => {
     if (!isLoading && user && !affiliate) {
       generateCode.mutate({}, {
@@ -97,22 +122,20 @@ export default function Affiliate() {
     }
   }, [isLoading, user, affiliate, generateCode]);
 
-  // Payout history (server-driven pagination)
+  // Payout history
   const pParams = new URLSearchParams();
   pParams.set("page", String(pPage));
   pParams.set("pageSize", String(pPageSize));
   const pQuery = `/api/affiliates/payouts?${pParams.toString()}`;
-
   const { data: payoutsData, isLoading: pLoading } = useApiQuery<PayoutsResponse>(["affiliate", "payouts", pQuery], pQuery);
 
-  // Referrals list (server-driven pagination + sorting)
+  // Referrals list
   const rParams = new URLSearchParams();
   rParams.set("page", String(rPage));
   rParams.set("pageSize", String(rPageSize));
   rParams.set("sortBy", rSortBy);
   rParams.set("sortOrder", rSortOrder);
   const rQuery = `/api/affiliates/referrals?${rParams.toString()}`;
-
   const { data: referralsData, isLoading: rLoading } = useApiQuery<ReferralsResponse>(["affiliate", "referrals", rQuery], rQuery);
 
   const referrals = referralsData?.referrals || [];
@@ -123,26 +146,54 @@ export default function Affiliate() {
   const pTotal = payoutsData?.total || 0;
   const pTotalPages = payoutsData?.totalPages || 1;
 
-  // Reset to first page whenever page size or sort changes
-  useResetOnChange([pPageSize], () => {
-    setPPage(1);
-  });
-
-  // Clamp page if the current page exceeds total pages
+  useResetOnChange([pPageSize], () => { setPPage(1); });
   useResetOnChange([pTotalPages, pPage], () => setPPage(1), pPage > pTotalPages && pTotalPages > 0);
-
-  // Reset referrals page whenever page size or sort changes
-  useResetOnChange([rPageSize, rSortBy, rSortOrder], () => {
-    setRPage(1);
-  });
-
-  // Clamp referrals page if the current page exceeds total pages
+  useResetOnChange([rPageSize, rSortBy, rSortOrder], () => { setRPage(1); });
   useResetOnChange([rTotalPages, rPage], () => setRPage(1), rPage > rTotalPages && rTotalPages > 0);
 
   const pFrom = pTotal === 0 ? 0 : (pPage - 1) * pPageSize + 1;
   const pTo = Math.min(pPage * pPageSize, pTotal);
   const rFrom = rTotal === 0 ? 0 : (rPage - 1) * rPageSize + 1;
   const rTo = Math.min(rPage * rPageSize, rTotal);
+
+  // Build commission chart data from referral commissionEarned fields
+  const commissionChartData = useMemo(() => {
+    if (!referrals || referrals.length === 0) return [];
+    // Group by month and sum commissions
+    const monthlyData: Record<string, number> = {};
+    referrals.forEach((ref: any) => {
+      if (ref.commissionEarned && ref.createdAt) {
+        const date = new Date(ref.createdAt);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+        monthlyData[monthKey] = (monthlyData[monthKey] || 0) + ref.commissionEarned;
+      }
+    });
+    // Convert to sorted array and compute cumulative
+    const sorted = Object.entries(monthlyData)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, amount]) => {
+        const [y, m] = month.split("-");
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        return {
+          month: `${monthNames[parseInt(m, 10) - 1]} ${y}`,
+          amount,
+          cumulative: 0, // filled below
+        };
+      });
+    let cumulative = 0;
+    sorted.forEach((d) => {
+      cumulative += d.amount;
+      d.cumulative = cumulative;
+    });
+    return sorted;
+  }, [referrals]);
+
+  const totalCommissions = affiliate?.totalCommissions || 0;
+  const { tier: currentTier, index: tierIndex } = getCurrentTier(totalCommissions);
+  const nextTier = tierIndex < TIERS.length - 1 ? TIERS[tierIndex + 1] : null;
+  const tierProgress = nextTier
+    ? Math.min(((totalCommissions - currentTier.min) / (nextTier.min - currentTier.min)) * 100, 100)
+    : 100;
 
   if (isLoading || generateCode.isPending) {
     return (
@@ -157,9 +208,9 @@ export default function Affiliate() {
 
   const stats = [
     { label: "Total Referrals", value: affiliate?.totalReferrals || 0, icon: Users },
-    { label: "Active Referrals", value: affiliate?.activeReferrals || 0, icon: Users },
-    { label: "Total Commissions", value: `₦${(affiliate?.totalCommissions || 0).toLocaleString()}`, icon: DollarSign },
-    { label: "Pending Payout", value: `₦${(affiliate?.pendingCommissions || 0).toLocaleString()}`, icon: TrendingUp },
+    { label: "Active Referrals", value: affiliate?.activeReferrals || 0, icon: TrendingUp },
+    { label: "Total Commissions", value: formatMoney(affiliate?.totalCommissions || 0, "NGN"), icon: DollarSign },
+    { label: "Pending Payout", value: formatMoney(affiliate?.pendingCommissions || 0, "NGN"), icon: TrendingUp },
   ];
 
   const handlePayoutRequest = async () => {
@@ -204,6 +255,103 @@ export default function Affiliate() {
             <div className="text-lg font-semibold">{stat.value}</div>
           </div>
         ))}
+      </div>
+
+      {/* Commission Growth Chart */}
+      {commissionChartData.length > 1 && (
+        <div className="card-subtle p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-medium">Commission Growth</h2>
+          </div>
+          <div className="h-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={commissionChartData}>
+                <defs>
+                  <linearGradient id="commissionGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--brand))" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="hsl(var(--brand))" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                <XAxis dataKey="month" tick={{ fontSize: 10 }} className="text-muted-foreground" />
+                <YAxis tick={{ fontSize: 10 }} className="text-muted-foreground" />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "hsl(var(--card))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: "8px",
+                    fontSize: "12px",
+                  }}
+                  formatter={(value: number) => [`₦${value.toLocaleString()}`, "Cumulative"]}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="cumulative"
+                  stroke="hsl(var(--brand))"
+                  strokeWidth={2}
+                  fill="url(#commissionGradient)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* Affiliate Tier */}
+      <div className="card-subtle p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <currentTier.icon className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-medium">Your Tier: {currentTier.name}</h2>
+          </div>
+          <Badge variant="outline" className="text-[10px]">
+            {currentTier.rate} commission rate
+          </Badge>
+        </div>
+
+        {/* Tier Progress */}
+        <div className="space-y-3">
+          <div className="relative h-2 bg-secondary rounded-full overflow-hidden">
+            <div
+              className="h-full bg-brand rounded-full transition-all duration-500"
+              style={{ width: `${tierProgress}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-[10px] text-muted-foreground">
+            <span>₦{currentTier.min.toLocaleString()}</span>
+            {nextTier ? (
+              <span>Next: {nextTier.name} at ₦{nextTier.min.toLocaleString()}</span>
+            ) : (
+              <span>Maximum tier reached</span>
+            )}
+          </div>
+        </div>
+
+        {/* Tier Ladder */}
+        <div className="grid grid-cols-4 gap-2 mt-4">
+          {TIERS.map((t, i) => {
+            const isCurrentOrLower = i <= tierIndex;
+            const isCurrent = i === tierIndex;
+            return (
+              <div
+                key={t.name}
+                className={cn(
+                  "text-center p-2 rounded-lg border transition-all",
+                  isCurrent
+                    ? "border-brand bg-brand/10 ring-1 ring-brand/20"
+                    : isCurrentOrLower
+                    ? "border-border bg-secondary/50"
+                    : "border-border/50 bg-secondary/20 opacity-50"
+                )}
+              >
+                <t.icon className={cn("h-4 w-4 mx-auto mb-1", isCurrent ? "text-brand" : "text-muted-foreground")} />
+                <p className="text-[10px] font-medium">{t.name}</p>
+                <p className="text-[9px] text-muted-foreground">{t.rate}</p>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Referral Code Card */}
@@ -280,11 +428,11 @@ export default function Affiliate() {
         <div className="grid grid-cols-3 gap-3">
           <div className="card-subtle p-3">
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Available</div>
-            <div className="text-sm font-semibold mt-1">₦{pendingCommission.toLocaleString()}</div>
+            <div className="text-sm font-semibold mt-1">{formatMoney(pendingCommission, "NGN")}</div>
           </div>
           <div className="card-subtle p-3">
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Paid Out</div>
-            <div className="text-sm font-semibold mt-1">₦{(payoutStats?.paid || 0).toLocaleString()}</div>
+            <div className="text-sm font-semibold mt-1">{formatMoney(payoutStats?.paid || 0, "NGN")}</div>
           </div>
           <div className="card-subtle p-3">
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Requests</div>
@@ -293,7 +441,7 @@ export default function Affiliate() {
         </div>
 
         {pendingCommission < 5000 && (
-          <p className="text-[10px] text-muted-foreground">Minimum withdrawal is ₦5,000. You need ₦{(5000 - pendingCommission).toLocaleString()} more to request a payout.</p>
+          <p className="text-[10px] text-muted-foreground">Minimum withdrawal is ₦5,000. You need {formatMoney(5000 - pendingCommission, "NGN")} more to request a payout.</p>
         )}
 
         {/* Payout History */}
@@ -315,9 +463,9 @@ export default function Affiliate() {
                     )}
                   </div>
                   <div>
-                    <div className="text-sm font-medium">₦{p.amount.toLocaleString()}</div>
+                    <div className="text-sm font-medium">{formatMoney(p.amount, "NGN")}</div>
                     <div className="text-[10px] text-muted-foreground">
-                      {p.paymentMethod} · {p.requestedAt ? new Date(p.requestedAt).toLocaleDateString() : ""}
+                      {p.paymentMethod} · {p.requestedAt ? formatRelativeTime(p.requestedAt) : ""}
                     </div>
                   </div>
                 </div>
@@ -392,13 +540,13 @@ export default function Affiliate() {
                     <div className="min-w-0">
                       <div className="text-sm font-medium truncate">{ref.referredName || "New Trader"}</div>
                       <div className="text-[10px] text-muted-foreground">
-                        {ref.referredEmail || ""} · {ref.createdAt ? new Date(ref.createdAt).toLocaleDateString() : ""}
+                        {ref.referredEmail || ""} · {ref.createdAt ? formatRelativeTime(ref.createdAt) : ""}
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     {ref.commissionEarned ? (
-                      <span className="text-sm font-medium tabular-nums">₦{ref.commissionEarned.toLocaleString()}</span>
+                      <span className="text-sm font-medium tabular-nums">{formatMoney(ref.commissionEarned, "NGN")}</span>
                     ) : null}
                     <Badge
                       variant={ref.status === "converted" ? "default" : ref.status === "pending" ? "secondary" : "outline"}
@@ -439,7 +587,7 @@ export default function Affiliate() {
           {[
             { step: 1, text: "Share your referral link or code with friends" },
             { step: 2, text: "They sign up using your link and purchase a challenge" },
-            { step: 3, text: "You earn commission on their first purchase (10%)" },
+            { step: 3, text: "You earn commission on their first purchase (up to 20% at Platinum tier)" },
             { step: 4, text: "Withdraw your earnings once you reach ₦5,000" },
           ].map((item) => (
             <div key={item.step} className="flex items-start gap-3">
@@ -458,7 +606,7 @@ export default function Affiliate() {
           <DialogHeader>
             <DialogTitle className="text-base font-medium">Request Commission Payout</DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              Available balance: ₦{pendingCommission.toLocaleString()}. Minimum withdrawal: ₦5,000.
+              Available balance: {formatMoney(pendingCommission, "NGN")}. Minimum withdrawal: ₦5,000.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -479,7 +627,7 @@ export default function Affiliate() {
                   className="text-[10px] text-primary hover:underline"
                   onClick={() => setPayoutAmount(String(pendingCommission))}
                 >
-                  Max: ₦{pendingCommission.toLocaleString()}
+                  Max: {formatMoney(pendingCommission, "NGN")}
                 </button>
               </div>
             </div>
