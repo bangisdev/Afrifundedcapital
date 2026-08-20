@@ -222,25 +222,27 @@ export default function Overview() {
           <button
             key={stat.label}
             onClick={() => navigate(stat.path)}
-            className="card-subtle p-5 text-left hover:bg-secondary/30 transition-colors group"
+            className="glass-card p-5 text-left hover:bg-secondary/30 transition-all duration-300 group hover:shadow-lg hover:shadow-brand/5 hover:-translate-y-0.5"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground mb-1.5">
+                <p className="stat-label mb-2">
                   {stat.label}
                 </p>
-                <div className="kpi-value">{stat.value}</div>
+                <div className="text-2xl sm:text-3xl font-semibold tracking-tight tabular-nums">{stat.value}</div>
                 {stat.subtitle && (
-                  <p className="text-[10px] text-muted-foreground mt-1">{stat.subtitle}</p>
+                  <p className="text-[10px] text-muted-foreground mt-1.5 uppercase tracking-wider">{stat.subtitle}</p>
                 )}
                 {stat.trend && (
-                  <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">
-                    <Zap className="h-2.5 w-2.5" />
-                    {stat.trend}
-                  </p>
+                  <div className="mt-2">
+                    <span className="badge-subtle text-[10px]">
+                      <Zap className="h-2.5 w-2.5 mr-1" />
+                      {stat.trend}
+                    </span>
+                  </div>
                 )}
               </div>
-              <span className="icon-chip shrink-0">{stat.icon}</span>
+              <span className="icon-chip shrink-0 group-hover:scale-110 transition-transform duration-300">{stat.icon}</span>
             </div>
           </button>
         ))}
@@ -248,15 +250,15 @@ export default function Overview() {
 
       {/* Quick Actions */}
       <div>
-        <h2 className="text-sm font-medium mb-3">Quick Actions</h2>
+        <h2 className="eyebrow mb-3">Quick Actions</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {quickActions.map((action) => (
             <button
               key={action.label}
               onClick={() => navigate(action.path)}
-              className="card-subtle p-4 text-center hover:bg-secondary/30 transition-colors group"
+              className="glass-card p-4 text-center hover:bg-secondary/30 transition-all duration-300 group hover:-translate-y-0.5 hover:shadow-md"
             >
-              <div className={cn("h-10 w-10 rounded-xl mx-auto mb-2 flex items-center justify-center", action.color)}>
+              <div className={cn("h-10 w-10 rounded-xl mx-auto mb-2 flex items-center justify-center transition-transform duration-300 group-hover:scale-110", action.color)}>
                 {action.icon}
               </div>
               <span className="text-xs font-medium text-muted-foreground group-hover:text-foreground transition-colors">
@@ -376,32 +378,32 @@ export default function Overview() {
 
       {/* Wallet Summary & Payout Stats */}
       {wallet && (
-        <div className="card-subtle p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-medium">Wallet Summary</h2>
+        <div className="glass-card p-6">
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="eyebrow">Wallet Summary</h2>
             <button
               onClick={() => navigate("/dashboard/wallet")}
-              className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1"
+              className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
             >
               View wallet <ChevronRight className="h-3 w-3" />
             </button>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Balance</p>
-              <p className="text-lg font-semibold mt-1">{formatMoney(wallet.balance, wallet.currency || "NGN")}</p>
+            <div className="p-3 rounded-xl bg-secondary/50">
+              <p className="stat-label mb-1">Balance</p>
+              <p className="text-lg font-semibold tabular-nums">{formatMoney(wallet.balance, wallet.currency || "NGN")}</p>
             </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Spent</p>
-              <p className="text-lg font-semibold mt-1">{formatMoney(wallet.totalDeposits || 0, wallet.currency || "NGN")}</p>
+            <div className="p-3 rounded-xl bg-secondary/50">
+              <p className="stat-label mb-1">Total Spent</p>
+              <p className="text-lg font-semibold tabular-nums">{formatMoney(wallet.totalDeposits || 0, wallet.currency || "NGN")}</p>
             </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Payouts</p>
-              <p className="text-lg font-semibold mt-1">{formatMoney(wallet.totalWithdrawals || 0, wallet.currency || "NGN")}</p>
+            <div className="p-3 rounded-xl bg-secondary/50">
+              <p className="stat-label mb-1">Total Payouts</p>
+              <p className="text-lg font-semibold tabular-nums">{formatMoney(wallet.totalWithdrawals || 0, wallet.currency || "NGN")}</p>
             </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Pending Payouts</p>
-              <p className="text-lg font-semibold mt-1">{formatMoney(payoutStats?.totalPending || 0, wallet.currency || "NGN")}</p>
+            <div className="p-3 rounded-xl bg-secondary/50">
+              <p className="stat-label mb-1">Pending Payouts</p>
+              <p className="text-lg font-semibold tabular-nums">{formatMoney(payoutStats?.totalPending || 0, wallet.currency || "NGN")}</p>
             </div>
           </div>
         </div>

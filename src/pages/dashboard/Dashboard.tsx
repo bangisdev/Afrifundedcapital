@@ -13,6 +13,7 @@ import Notifications from "./Notifications";
 import NotificationPreferences from "./NotificationPreferences";
 import Payouts from "./Payouts";
 import Onboarding from "./Onboarding";
+import Leaderboard from "./Leaderboard";
 
 export default function Dashboard() {
   return (
@@ -31,6 +32,7 @@ export default function Dashboard() {
         <Route path="notifications" element={<Notifications />} />
         <Route path="notifications/preferences" element={<NotificationPreferences />} />
         <Route path="onboarding" element={<Onboarding />} />
+        <Route path="leaderboard" element={<Leaderboard />} />
       </Routes>
     </DashboardLayout>
   );

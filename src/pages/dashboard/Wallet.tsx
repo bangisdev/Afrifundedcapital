@@ -216,15 +216,14 @@ export default function Wallet() {
       />
 
       <div className="grid md:grid-cols-3 gap-4">
-        <div className="card-subtle p-6">
-          <div className="flex items-center gap-2 mb-2"><WalletIcon className="h-3.5 w-3.5 text-muted-foreground" /><span className="stat-label">Main Balance</span></div>
-          <div className="text-3xl font-light tracking-tight tabular-nums mt-1">{formatMoney(wallet?.balance, wallet?.currency || "NGN")}</div>
+        <div className="glass-card p-6">
+          <div className="flex items-center gap-2 mb-3"><WalletIcon className="h-3.5 w-3.5 text-brand" /><span className="stat-label">Main Balance</span></div>
+          <div className="text-3xl font-semibold tracking-tight tabular-nums mt-1">{formatMoney(wallet?.balance, wallet?.currency || "NGN")}</div>
         </div>
-        <div className="card-subtle p-6 flex flex-col justify-between">
-          <div className="flex items-center gap-2 mb-2"><TrendingUp className="h-3.5 w-3.5 text-muted-foreground" /><span className="stat-label">This Month</span></div>
+        <div className="glass-card p-6 flex flex-col justify-between">
+          <div className="flex items-center gap-2 mb-3"><TrendingUp className="h-3.5 w-3.5 text-brand" /><span className="stat-label">This Month</span></div>
           <div className="text-sm font-light">{completedPayments} completed payments</div>
         </div>
-
       </div>
 
       <div className="flex items-center border-b border-border/50">

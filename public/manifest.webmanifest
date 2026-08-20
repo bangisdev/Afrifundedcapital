@@ -1,17 +1,44 @@
 {
-  "name": "freebuff.com application",
-  "short_name": "freebuff.com",
-  "description": "freebuff.com application",
-  "start_url": "/",
+  "name": "AfriFundedCapital — Prop Trading Platform",
+  "short_name": "AfriFunded",
+  "description": "Trade with real capital. Pass our evaluation and receive up to $1M in trading capital. Keep 90% of profits.",
+  "start_url": "/dashboard",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#000000",
+  "background_color": "#faf9f7",
+  "theme_color": "#c08c30",
+  "orientation": "any",
+  "categories": ["finance", "business"],
   "icons": [
     {
       "src": "/logo.png",
       "sizes": "any",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "url": "/dashboard",
+      "description": "Go to your trading dashboard"
+    },
+    {
+      "name": "Challenges",
+      "url": "/dashboard/challenges",
+      "description": "Browse available challenges"
+    },
+    {
+      "name": "Trading",
+      "url": "/dashboard/trading",
+      "description": "View your trading metrics"
     }
   ]
 }
