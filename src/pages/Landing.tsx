@@ -1615,9 +1615,9 @@ export default function Landing() {
               >
                 Trading Rules
               </button>
-              <a href="#" className="hover:text-foreground transition-colors duration-200">Terms</a>
-              <a href="#" className="hover:text-foreground transition-colors duration-200">Privacy</a>
-              <a href="#" className="hover:text-foreground transition-colors duration-200">Contact</a>
+              <button onClick={() => navigate("/terms")} className="hover:text-foreground transition-colors duration-200">Terms</button>
+              <button onClick={() => navigate("/privacy")} className="hover:text-foreground transition-colors duration-200">Privacy</button>
+              <button onClick={() => navigate("/contact")} className="hover:text-foreground transition-colors duration-200">Contact</button>
               <span className="hidden md:inline text-muted-foreground/60">|</span>
               <span className="hidden md:inline">support@afrifundedcapital.com</span>
             </div>
