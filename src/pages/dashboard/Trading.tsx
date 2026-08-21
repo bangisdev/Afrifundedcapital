@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { PageLoader } from "@/components/dashboard/PageLoader";
 import { ProfitSplitCalculator } from "@/components/dashboard/ProfitSplitCalculator";
-import { formatMoney, formatShortDate, formatRelativeTime } from "@/lib/utils";
+import { formatMoney, formatRelativeTime } from "@/lib/utils";
 import {
   ChartContainer,
   ChartTooltip,
@@ -15,15 +15,21 @@ import {
 } from "@/components/ui/chart";
 import {
   Loader2, TrendingUp, TrendingDown, Minus, Server,
-  Activity, BarChart3, RefreshCw, Target, Shield, Zap,
-  ArrowUp, ArrowDown, ArrowUpDown, AlertTriangle, CheckCircle2,
-  Trophy, Flame, Clock, Sparkles,
+  Activity, RefreshCw, Target, Shield,
+  AlertTriangle, Trophy, Clock, Sparkles, Flame,
 } from "lucide-react";
 import {
-  LineChart, Line, AreaChart, Area, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Cell,
-} from "recharts";
-import { useMemo, useState, useEffect, useRef } from "react";
+  EnhancedEquityCurve,
+  EnhancedDailyPL,
+  EnhancedDrawdownChart,
+  CumulativePLChart,
+  WinLossDonut,
+  PerformanceByDayChart,
+  PnLDistribution,
+  TradingRadar,
+  MonthlyPerformanceGrid,
+} from "@/components/dashboard/TradingAnalytics";
+import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -31,12 +37,7 @@ import { useAuth } from "@/hooks/use-auth";
 //  Chart config
 // ═══════════════════════════════════════════════════════
 
-const chartConfig = {
-  balance: { label: "Balance", color: "var(--chart-1)" },
-  equity: { label: "Equity", color: "var(--chart-2)" },
-  drawdown: { label: "Drawdown", color: "var(--destructive)" },
-  dailyPL: { label: "Daily P&L", color: "var(--chart-1)" },
-};
+
 
 // ═══════════════════════════════════════════════════════
 //  Sub-components
@@ -214,43 +215,7 @@ export default function Trading() {
     setSeeding(false);
   };
 
-  // Chart data — equity curve
-  const equityCurveData = useMemo(() => {
-    if (!metricsHistory.length) return [];
-    const step = Math.max(1, Math.floor(metricsHistory.length / 60));
-    return metricsHistory
-      .filter((_: any, i: number) => i % step === 0 || i === metricsHistory.length - 1)
-      .map((m: any) => ({
-        time: formatShortDate(m.recordedAt),
-        balance: m.balance,
-        equity: m.equity,
-      }));
-  }, [metricsHistory]);
 
-  // Chart data — daily P&L
-  const dailyPLData = useMemo(() => {
-    if (!metricsHistory.length) return [];
-    const recent = metricsHistory.slice(-30);
-    return recent.map((m: any) => ({
-      time: formatShortDate(m.recordedAt),
-      pl: m.dailyPL,
-    }));
-  }, [metricsHistory]);
-
-  // Chart data — drawdown
-  const drawdownChartData = useMemo(() => {
-    if (!drawdownDataRaw.length && !metricsHistory.length) return [];
-    if (drawdownDataRaw.length) {
-      const step = Math.max(1, Math.floor(drawdownDataRaw.length / 60));
-      return drawdownDataRaw
-        .filter((_: any, i: number) => i % step === 0)
-        .map((d: any) => ({ time: formatShortDate(d.recordedAt), drawdown: d.drawdown, daily: d.dailyDrawdown }));
-    }
-    const step = Math.max(1, Math.floor(metricsHistory.length / 60));
-    return metricsHistory
-      .filter((_: any, i: number) => i % step === 0)
-      .map((m: any) => ({ time: formatShortDate(m.recordedAt), drawdown: m.currentDrawdown, daily: m.dailyDrawdown }));
-  }, [drawdownDataRaw, metricsHistory]);
 
   if (isLoading) {
     return (
@@ -285,7 +250,7 @@ export default function Trading() {
   }
 
   const totalPL = summary.floatingPL || 0;
-  const hasCharts = equityCurveData.length > 1;
+  const hasCharts = metricsHistory.length > 1;
 
   return (
     <div className="space-y-8">
@@ -507,88 +472,52 @@ export default function Trading() {
         </div>
       )}
 
-      {/* ─── Charts ─── */}
+      {/* ─── Enhanced Analytics ─── */}
       {hasCharts && (
         <div className="space-y-6">
-          <h2 className="text-sm font-medium">Performance Charts</h2>
+          <h2 className="text-sm font-medium">Performance Analytics</h2>
 
-          {/* Equity Curve */}
-          <Card className="gap-0">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Activity className="h-4 w-4 text-muted-foreground" /> Equity Curve
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ChartContainer config={chartConfig} className="aspect-[2.5/1] w-full">
-                <LineChart data={equityCurveData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                  <XAxis dataKey="time" tickLine={false} axisLine={false} tickMargin={8} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
-                  <YAxis tickLine={false} axisLine={false} tickMargin={8} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} domain={["auto", "auto"]} tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} />
-                  <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
-                  <Line type="monotone" dataKey="balance" stroke="var(--color-balance)" strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
-                  <Line type="monotone" dataKey="equity" stroke="var(--color-equity)" strokeWidth={1.5} strokeDasharray="4 4" dot={false} activeDot={{ r: 3, strokeWidth: 0 }} />
-                </LineChart>
-              </ChartContainer>
-              <p className="text-[10px] text-muted-foreground mt-2">Solid: Balance · Dashed: Equity</p>
-            </CardContent>
-          </Card>
+          {/* Row 1: Enhanced Equity Curve + Win/Loss Donut */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2">
+              <EnhancedEquityCurve metricsHistory={metricsHistory} />
+            </div>
+            <div>
+              {perfSummary && (
+                <WinLossDonut
+                  winRate={perfSummary.winRate || 0}
+                  totalTrades={perfSummary.closedTrades || 0}
+                  avgWin={perfSummary.largestWin || 0}
+                  avgLoss={Math.abs(perfSummary.largestLoss || 0)}
+                  profitFactor={perfSummary.profitFactor || 0}
+                  expectancy={perfSummary.expectancy || 0}
+                />
+              )}
+            </div>
+          </div>
 
-          {/* Daily P&L Bar Chart */}
-          {dailyPLData.length > 0 && (
-            <Card className="gap-0">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-muted-foreground" /> Daily P&L (Last 30 Days)
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ChartContainer config={chartConfig} className="aspect-[2.5/1] w-full">
-                  <BarChart data={dailyPLData}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                    <XAxis dataKey="time" tickLine={false} axisLine={false} tickMargin={8} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
-                    <YAxis tickLine={false} axisLine={false} tickMargin={8} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} tickFormatter={(v: number) => `$${v.toFixed(0)}`} />
-                    <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
-                    <Bar dataKey="pl" radius={[2, 2, 0, 0]}>
-                      {dailyPLData.map((entry: any, idx: number) => (
-                        <Cell key={idx} fill={entry.pl >= 0 ? "#10b981" : "#ef4444"} fillOpacity={0.8} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ChartContainer>
-                <p className="text-[10px] text-muted-foreground mt-2">Green: profitable days · Red: loss days</p>
-              </CardContent>
-            </Card>
-          )}
+          {/* Row 2: Cumulative P&L + Trading Radar */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <CumulativePLChart metricsHistory={metricsHistory} />
+            {perfSummary && (
+              <TradingRadar perfSummary={perfSummary} />
+            )}
+          </div>
 
-          {/* Drawdown Chart */}
-          {drawdownChartData.length > 0 && (
-            <Card className="gap-0">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-destructive" /> Drawdown Tracker
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ChartContainer config={chartConfig} className="aspect-[2.5/1] w-full">
-                  <AreaChart data={drawdownChartData}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                    <XAxis dataKey="time" tickLine={false} axisLine={false} tickMargin={8} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
-                    <YAxis tickLine={false} axisLine={false} tickMargin={8} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} domain={[0, "auto"]} tickFormatter={(v: number) => `$${v.toFixed(0)}`} />
-                    <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
-                    <defs>
-                      <linearGradient id="ddFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="var(--color-drawdown)" stopOpacity={0.2} />
-                        <stop offset="100%" stopColor="var(--color-drawdown)" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <Area type="monotone" dataKey="drawdown" stroke="var(--color-drawdown)" fill="url(#ddFill)" strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
-                  </AreaChart>
-                </ChartContainer>
-                <p className="text-[10px] text-muted-foreground mt-2">Drawdown from peak balance over time</p>
-              </CardContent>
-            </Card>
-          )}
+          {/* Row 3: Enhanced Daily P&L + P&L Distribution */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <EnhancedDailyPL metricsHistory={metricsHistory} />
+            <PnLDistribution metricsHistory={metricsHistory} />
+          </div>
+
+          {/* Row 4: Performance by Day + Monthly Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <PerformanceByDayChart metricsHistory={metricsHistory} />
+            <MonthlyPerformanceGrid metricsHistory={metricsHistory} />
+          </div>
+
+          {/* Row 5: Drawdown Tracker (full width) */}
+          <EnhancedDrawdownChart metricsHistory={metricsHistory} drawdownData={drawdownDataRaw} />
         </div>
       )}
 
