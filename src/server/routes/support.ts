@@ -70,6 +70,70 @@ app.get("/my", requireAuth, (c) => {
   });
 });
 
+// Public contact form submission (no auth required)
+app.post("/contact", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { name, email, subject, message } = body;
+
+    if (!name || !email || !subject || !message) {
+      return c.json({ error: "Name, email, subject, and message are required" }, 400);
+    }
+
+    const db = getDb();
+    const now = Date.now();
+
+    // Try to find existing user by email
+    let userId: number | null = null;
+    const existingUser = db
+      .select()
+      .from(users)
+      .where(eq(users.email, email.toLowerCase().trim()))
+      .get();
+    if (existingUser) {
+      userId = existingUser.id;
+    }
+
+    const ticket = db
+      .insert(supportTickets)
+      .values({
+        userId: userId || 0,
+        subject: `[Contact Form] ${subject}`,
+        category: "general",
+        priority: "medium",
+        status: "open",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+
+    // Notify admins
+    try {
+      const admins = db.select().from(users).where(eq(users.role, "super_admin")).all();
+      for (const admin of admins) {
+        createNotification(db, admin.id, {
+          type: "support",
+          title: "New Contact Form Submission",
+          message: `${name} (${email}) submitted: ${subject}`,
+          link: "/admin/support",
+        });
+      }
+    } catch (e) {
+      console.warn("[Support] Failed to notify admin:", e);
+    }
+
+    return c.json({
+      success: true,
+      message: "Your message has been received. We will respond within 24 hours.",
+      ticketId: ticket.id,
+    });
+  } catch (err) {
+    console.error("[Support] Contact form error:", err);
+    return c.json({ error: "Failed to submit message" }, 500);
+  }
+});
+
 // Create ticket
 app.post("/create", requireAuth, async (c) => {
   const userId = c.get("userId");

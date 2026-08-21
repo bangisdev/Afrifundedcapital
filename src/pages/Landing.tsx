@@ -44,6 +44,8 @@ import {
   Wallet,
   ArrowUpRight,
   ArrowDownRight,
+  Menu,
+  X,
 } from "lucide-react";
 import { LogoDropdown } from "@/components/LogoDropdown";
 import { readResponseBody } from "@/lib/api";
@@ -635,6 +637,7 @@ export default function Landing() {
   const [mousePos, setMousePos] = useState({ x: 0.5, y: 0.5 });
   const [autoplay, setAutoplay] = useState(true);
   const autoplayRef = useRef<NodeJS.Timeout | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Parallax mouse tracking
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
@@ -770,7 +773,7 @@ export default function Landing() {
                 variant="outline"
                 size="sm"
                 onClick={() => navigate("/dashboard")}
-                className="text-xs group"
+                className="text-xs group hidden sm:inline-flex"
               >
                 Dashboard
                 <ChevronRight className="ml-1 h-3 w-3 transition-transform group-hover:translate-x-0.5" />
@@ -779,14 +782,60 @@ export default function Landing() {
               <Button
                 size="sm"
                 onClick={() => navigate("/auth")}
-                className="text-xs group"
+                className="text-xs group hidden sm:inline-flex"
               >
                 Get Started
                 <ArrowRight className="ml-1 h-3 w-3 transition-transform group-hover:translate-x-1" />
               </Button>
             )}
+            {/* Mobile hamburger */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden h-9 w-9 inline-flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              aria-label="Toggle menu"
+            >
+              {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            </button>
           </div>
         </div>
+        {/* Mobile menu overlay */}
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t border-border/50 bg-background/95 backdrop-blur-lg">
+            <div className="container-page py-4 space-y-1">
+              {["features", "testimonials", "pricing", "faq"].map((section) => (
+                <a
+                  key={section}
+                  href={`#${section}`}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block py-2.5 px-3 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/50 rounded-lg transition-colors"
+                >
+                  {section.charAt(0).toUpperCase() + section.slice(1)}
+                </a>
+              ))}
+              <div className="pt-3 border-t border-border/50 space-y-2">
+                {isAuthenticated ? (
+                  <Button
+                    size="sm"
+                    onClick={() => { navigate("/dashboard"); setMobileMenuOpen(false); }}
+                    className="w-full text-xs justify-center"
+                  >
+                    Go to Dashboard
+                    <ChevronRight className="ml-1 h-3 w-3" />
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    onClick={() => { navigate("/auth"); setMobileMenuOpen(false); }}
+                    className="w-full text-xs justify-center btn-brand"
+                  >
+                    Get Started
+                    <ArrowRight className="ml-1 h-3 w-3" />
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* ─── HERO ─── */}
