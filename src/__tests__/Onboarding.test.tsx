@@ -110,7 +110,7 @@ describe("Onboarding Page", () => {
     it("renders Skip and Next buttons", () => {
       render(<Onboarding />);
       expect(screen.getByText("Skip")).toBeTruthy();
-      expect(screen.getByText("Next")).toBeTruthy();
+      expect(screen.getByRole("button", { name: /Next/ })).toBeTruthy();
     });
 
     it("renders Skip for now link", () => {
@@ -148,7 +148,7 @@ describe("Onboarding Page", () => {
     it("advances to step 2 on Next click", async () => {
       const user = userEvent.setup();
       render(<Onboarding />);
-      await user.click(screen.getByText("Next"));
+      await user.click(screen.getByRole("button", { name: /Next/ }));
       expect(screen.getByText("Trading Experience")).toBeTruthy();
       expect(screen.getByText("Step 2 of 3")).toBeTruthy();
     });
@@ -160,35 +160,35 @@ describe("Onboarding Page", () => {
       const user = userEvent.setup();
       render(<Onboarding />);
       await user.click(screen.getByText("Next"));
-      expect(screen.getByText("Beginner")).toBeTruthy();
-      expect(screen.getByText("Intermediate")).toBeTruthy();
-      expect(screen.getByText("Advanced")).toBeTruthy();
-      expect(screen.getByText("Professional")).toBeTruthy();
+      expect(screen.getByText(/beginner/i)).toBeTruthy();
+      expect(screen.getByText(/intermediate/i)).toBeTruthy();
+      expect(screen.getByText(/advanced/i)).toBeTruthy();
+      expect(screen.getByText(/professional/i)).toBeTruthy();
     });
 
     it("highlights selected experience", async () => {
       const user = userEvent.setup();
       render(<Onboarding />);
       await user.click(screen.getByText("Next"));
-      const intermediateBtn = screen.getByText("Intermediate");
+      const intermediateBtn = screen.getByText(/intermediate/i);
       await user.click(intermediateBtn);
       expect(intermediateBtn.closest("button")?.className).toContain("border-foreground");
     });
 
-    it("renders Skip and Next buttons on step 2", async () => {
+    it("renders Skip and Complete buttons on step 2", async () => {
       const user = userEvent.setup();
       render(<Onboarding />);
-      await user.click(screen.getByText("Next"));
+      await user.click(screen.getByRole("button", { name: /Next/ }));
       expect(screen.getByText("Skip")).toBeTruthy();
-      expect(screen.getByText("Next")).toBeTruthy();
+      expect(screen.getByRole("button", { name: /Complete/ })).toBeTruthy();
     });
 
-    it("advances to step 3 on Next click", async () => {
+    it("advances to step 3 on Complete click", async () => {
       const user = userEvent.setup();
       render(<Onboarding />);
-      await user.click(screen.getByText("Next"));
-      await user.click(screen.getByText("Next"));
-      expect(screen.getByText("Preferences")).toBeTruthy();
+      await user.click(screen.getByRole("button", { name: /Next/ }));
+      await user.click(screen.getByRole("button", { name: /Complete/ }));
+      expect(screen.getByText("All Set!")).toBeTruthy();
       expect(screen.getByText("Step 3 of 3")).toBeTruthy();
     });
   });
@@ -198,24 +198,24 @@ describe("Onboarding Page", () => {
     it("shows Go to Dashboard button", async () => {
       const user = userEvent.setup();
       render(<Onboarding />);
-      await user.click(screen.getByText("Next"));
-      await user.click(screen.getByText("Next"));
+      await user.click(screen.getByRole("button", { name: /Next/ }));
+      await user.click(screen.getByRole("button", { name: /Complete/ }));
       expect(screen.getByText("Go to Dashboard")).toBeTruthy();
     });
 
     it("shows confirmation message", async () => {
       const user = userEvent.setup();
       render(<Onboarding />);
-      await user.click(screen.getByText("Next"));
-      await user.click(screen.getByText("Next"));
-      expect(screen.getByText(/all set/)).toBeTruthy();
+      await user.click(screen.getByRole("button", { name: /Next/ }));
+      await user.click(screen.getByRole("button", { name: /Complete/ }));
+      expect(screen.getByText(/all set/i)).toBeTruthy();
     });
 
     it("calls API and navigates on Go to Dashboard click", async () => {
       const user = userEvent.setup();
       render(<Onboarding />);
-      await user.click(screen.getByText("Next"));
-      await user.click(screen.getByText("Next"));
+      await user.click(screen.getByRole("button", { name: /Next/ }));
+      await user.click(screen.getByRole("button", { name: /Complete/ }));
       await user.click(screen.getByText("Go to Dashboard"));
       await waitFor(() => {
         expect(mockOnboardingMutation).toHaveBeenCalled();
@@ -227,8 +227,8 @@ describe("Onboarding Page", () => {
     it("calls refetch after saving", async () => {
       const user = userEvent.setup();
       render(<Onboarding />);
-      await user.click(screen.getByText("Next"));
-      await user.click(screen.getByText("Next"));
+      await user.click(screen.getByRole("button", { name: /Next/ }));
+      await user.click(screen.getByRole("button", { name: /Complete/ }));
       await user.click(screen.getByText("Go to Dashboard"));
       await waitFor(() => {
         expect(mockRefetch).toHaveBeenCalled();
@@ -239,8 +239,8 @@ describe("Onboarding Page", () => {
       mockOnboardingMutation.mockRejectedValueOnce(new Error("Save failed"));
       const user = userEvent.setup();
       render(<Onboarding />);
-      await user.click(screen.getByText("Next"));
-      await user.click(screen.getByText("Next"));
+      await user.click(screen.getByRole("button", { name: /Next/ }));
+      await user.click(screen.getByRole("button", { name: /Complete/ }));
       await user.click(screen.getByText("Go to Dashboard"));
       await waitFor(() => {
         expect(toast.error).toHaveBeenCalledWith("Save failed");
@@ -252,8 +252,8 @@ describe("Onboarding Page", () => {
       mockOnboardingMutation.mockImplementation(() => new Promise((r) => { resolve = r; }));
       const user = userEvent.setup();
       render(<Onboarding />);
-      await user.click(screen.getByText("Next"));
-      await user.click(screen.getByText("Next"));
+      await user.click(screen.getByRole("button", { name: /Next/ }));
+      await user.click(screen.getByRole("button", { name: /Complete/ }));
       await user.click(screen.getByText("Go to Dashboard"));
       // Button should be disabled during save
       const btn = screen.getByRole("button", { name: /Go to Dashboard/ });
@@ -331,12 +331,12 @@ describe("Onboarding Page", () => {
       render(<Onboarding />);
       // Step 1
       expect(screen.getByText("Your Profile")).toBeTruthy();
-      await user.click(screen.getByText("Next"));
+      await user.click(screen.getByRole("button", { name: /Next/ }));
       // Step 2
       expect(screen.getByText("Trading Experience")).toBeTruthy();
-      await user.click(screen.getByText("Next"));
+      await user.click(screen.getByRole("button", { name: /Complete/ }));
       // Step 3
-      expect(screen.getByText("Preferences")).toBeTruthy();
+      expect(screen.getByText("All Set!")).toBeTruthy();
       await user.click(screen.getByText("Go to Dashboard"));
       await waitFor(() => {
         expect(mockOnboardingMutation).toHaveBeenCalled();

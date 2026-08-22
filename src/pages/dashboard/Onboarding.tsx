@@ -166,7 +166,7 @@ export default function Onboarding() {
               <Button
                 size="sm"
                 className="flex-1 text-xs h-9"
-                onClick={() => (step === 2 ? handleComplete() : setStep(step + 1))}
+                onClick={() => setStep(step + 1)}
                 disabled={step === 2 && !experience}
               >
                 {step === 2 ? "Complete" : "Next"}

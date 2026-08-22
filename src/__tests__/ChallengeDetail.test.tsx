@@ -165,13 +165,13 @@ describe("ChallengeDetail Page", () => {
 
   // ─── Loading state ─────────────────────────────────────
   describe("Loading State", () => {
-    it("shows a spinner when challenge data is loading", () => {
+    it("shows a loading skeleton when challenge data is loading", () => {
       setQueryData({});
       const { container } = render(<ChallengeDetail />);
-      expect(container.querySelector(".animate-spin")).toBeTruthy();
+      expect(container.querySelector('[aria-label="Loading"]')).toBeTruthy();
     });
 
-    it("shows a spinner when metrics history is loading", () => {
+    it("shows a loading skeleton when metrics history is loading", () => {
       setQueryData({
         "challenge/1": makeChallenge(),
       });
@@ -181,7 +181,7 @@ describe("ChallengeDetail Page", () => {
         // metrics/history key is "challenge/1/metrics" — not set = loading
       });
       const { container } = render(<ChallengeDetail />);
-      expect(container.querySelector(".animate-spin")).toBeTruthy();
+      expect(container.querySelector('[aria-label="Loading"]')).toBeTruthy();
     });
   });
 

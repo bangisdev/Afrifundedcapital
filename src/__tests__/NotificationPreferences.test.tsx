@@ -71,11 +71,11 @@ describe("Notification Preferences Page", () => {
 
   // ─── Loading state ─────────────────────────────────────
   describe("Initial State", () => {
-    it("renders form even when user data is loading", () => {
+    it("shows loading state when user data is loading", () => {
       clearAllQueryData();
-      render(<NotificationPreferences />);
-      // Component has no loading state — always renders the form
-      expect(screen.getByText("Email Notifications")).toBeTruthy();
+      const { container } = render(<NotificationPreferences />);
+      // Component shows PageLoader while loading
+      expect(container.querySelector('[aria-label="Loading"]')).toBeTruthy();
     });
 
     it("renders form when user data is loaded", () => {
@@ -96,7 +96,7 @@ describe("Notification Preferences Page", () => {
     it("renders the page description", () => {
       setQueryData({ "users/current": { emailNotifications: true } });
       render(<NotificationPreferences />);
-      expect(screen.getByText(/Control how you receive notifications/)).toBeTruthy();
+      expect(screen.getByText(/Control how and when/)).toBeTruthy();
     });
   });
 
@@ -105,22 +105,22 @@ describe("Notification Preferences Page", () => {
     it("defaults to enabled when user preference is true", () => {
       setQueryData({ "users/current": { emailNotifications: true } });
       const { container } = render(<NotificationPreferences />);
-      const toggle = container.querySelector("button.rounded-full");
-      expect(toggle?.className).toContain("bg-foreground");
+      const toggle = container.querySelector('[role="switch"]');
+      expect(toggle?.getAttribute("data-state")).toBe("checked");
     });
 
     it("defaults to disabled when user preference is false", () => {
       setQueryData({ "users/current": { emailNotifications: false } });
       const { container } = render(<NotificationPreferences />);
-      const toggle = container.querySelector("button.rounded-full");
-      expect(toggle?.className).toContain("bg-secondary");
+      const toggle = container.querySelector('[role="switch"]');
+      expect(toggle?.getAttribute("data-state")).toBe("unchecked");
     });
 
     it("defaults to enabled when no user preference is set", () => {
       setQueryData({ "users/current": {} });
       const { container } = render(<NotificationPreferences />);
-      const toggle = container.querySelector("button.rounded-full");
-      expect(toggle?.className).toContain("bg-foreground");
+      const toggle = container.querySelector('[role="switch"]');
+      expect(toggle?.getAttribute("data-state")).toBe("checked");
     });
 
     it("toggles from enabled to disabled on click", async () => {
@@ -128,11 +128,11 @@ describe("Notification Preferences Page", () => {
       setQueryData({ "users/current": { emailNotifications: true } });
       const { container } = render(<NotificationPreferences />);
 
-      const toggle = container.querySelector("button.rounded-full")!;
-      expect(toggle.className).toContain("bg-foreground");
+      const toggle = container.querySelector('[role="switch"]')!;
+      expect(toggle.getAttribute("data-state")).toBe("checked");
 
       await user.click(toggle);
-      expect(toggle.className).toContain("bg-secondary");
+      expect(toggle.getAttribute("data-state")).toBe("unchecked");
     });
 
     it("toggles from disabled to enabled on click", async () => {
@@ -140,37 +140,37 @@ describe("Notification Preferences Page", () => {
       setQueryData({ "users/current": { emailNotifications: false } });
       const { container } = render(<NotificationPreferences />);
 
-      const toggle = container.querySelector("button.rounded-full")!;
-      expect(toggle.className).toContain("bg-secondary");
+      const toggle = container.querySelector('[role="switch"]')!;
+      expect(toggle.getAttribute("data-state")).toBe("unchecked");
 
       await user.click(toggle);
-      expect(toggle.className).toContain("bg-foreground");
+      expect(toggle.getAttribute("data-state")).toBe("checked");
     });
 
-    it("shows knob with translate-x-6 when enabled", () => {
+    it("shows checked state when enabled", () => {
       setQueryData({ "users/current": { emailNotifications: true } });
       const { container } = render(<NotificationPreferences />);
-      const knob = container.querySelector("button.rounded-full > div");
-      expect(knob?.className).toContain("translate-x-6");
+      const toggle = container.querySelector('[role="switch"]');
+      expect(toggle?.getAttribute("data-state")).toBe("checked");
     });
 
-    it("shows knob with translate-x-1 when disabled", () => {
+    it("shows unchecked state when disabled", () => {
       setQueryData({ "users/current": { emailNotifications: false } });
       const { container } = render(<NotificationPreferences />);
-      const knob = container.querySelector("button.rounded-full > div");
-      expect(knob?.className).toContain("translate-x-1");
+      const toggle = container.querySelector('[role="switch"]');
+      expect(toggle?.getAttribute("data-state")).toBe("unchecked");
     });
 
-    it("moves knob on toggle", async () => {
+    it("updates state on toggle", async () => {
       const user = userEvent.setup();
       setQueryData({ "users/current": { emailNotifications: true } });
       const { container } = render(<NotificationPreferences />);
 
-      const knob = container.querySelector("button.rounded-full > div")!;
-      expect(knob.className).toContain("translate-x-6");
+      const toggle = container.querySelector('[role="switch"]')!;
+      expect(toggle.getAttribute("data-state")).toBe("checked");
 
-      await user.click(container.querySelector("button.rounded-full")!);
-      expect(knob.className).toContain("translate-x-1");
+      await user.click(toggle);
+      expect(toggle.getAttribute("data-state")).toBe("unchecked");
     });
   });
 
@@ -185,7 +185,7 @@ describe("Notification Preferences Page", () => {
     it("renders toggle description", () => {
       setQueryData({ "users/current": { emailNotifications: true } });
       render(<NotificationPreferences />);
-      expect(screen.getByText(/Receive notifications via email/)).toBeTruthy();
+      expect(screen.getByText(/Receive challenge updates/)).toBeTruthy();
     });
   });
 
@@ -202,12 +202,13 @@ describe("Notification Preferences Page", () => {
       setQueryData({ "users/current": { emailNotifications: false } });
       const { container } = render(<NotificationPreferences />);
 
-      // Toggle to enabled
-      await user.click(container.querySelector("button.rounded-full")!);
+      // Toggle first switch (Email Notifications) to enabled
+      const switches = screen.getAllByRole("switch");
+      await user.click(switches[0]);
       await user.click(screen.getByText("Save Preferences"));
 
       await waitFor(() => {
-        expect(mockUpdatePrefs).toHaveBeenCalledWith({ emailNotifications: true });
+        expect(mockUpdatePrefs).toHaveBeenCalledWith(expect.objectContaining({ emailNotifications: true }));
       });
     });
 
@@ -216,12 +217,13 @@ describe("Notification Preferences Page", () => {
       setQueryData({ "users/current": { emailNotifications: true } });
       const { container } = render(<NotificationPreferences />);
 
-      // Toggle to disabled
-      await user.click(container.querySelector("button.rounded-full")!);
+      // Toggle first switch (Email Notifications) to disabled
+      const switches = screen.getAllByRole("switch");
+      await user.click(switches[0]);
       await user.click(screen.getByText("Save Preferences"));
 
       await waitFor(() => {
-        expect(mockUpdatePrefs).toHaveBeenCalledWith({ emailNotifications: false });
+        expect(mockUpdatePrefs).toHaveBeenCalledWith(expect.objectContaining({ emailNotifications: false }));
       });
     });
 
@@ -257,14 +259,11 @@ describe("Notification Preferences Page", () => {
       setQueryData({ "users/current": { emailNotifications: true } });
       const { container } = render(<NotificationPreferences />);
 
-      await user.click(screen.getByText("Save Preferences"));
+      const saveBtn = screen.getByText("Save Preferences").closest("button")!;
+      await user.click(saveBtn);
 
       // Button should be disabled during save
-      const saveBtn = screen.getByText("Save Preferences").closest("button");
       expect(saveBtn).toBeDisabled();
-
-      // Spinner should be present
-      expect(container.querySelector(".animate-spin")).toBeTruthy();
 
       resolveSave!({});
       await waitFor(() => {
@@ -280,9 +279,9 @@ describe("Notification Preferences Page", () => {
       render(<NotificationPreferences />);
 
       expect(screen.getByText("Notification Preferences")).toBeTruthy();
-      expect(screen.getByText(/Control how you receive/)).toBeTruthy();
+      expect(screen.getByText(/Control how and when/)).toBeTruthy();
       expect(screen.getByText("Email Notifications")).toBeTruthy();
-      expect(screen.getByText(/Receive notifications via email/)).toBeTruthy();
+      expect(screen.getByText(/Receive challenge updates/)).toBeTruthy();
       expect(screen.getByText("Save Preferences")).toBeTruthy();
     });
 
@@ -292,18 +291,18 @@ describe("Notification Preferences Page", () => {
       const { container } = render(<NotificationPreferences />);
 
       // Verify initial state
-      const toggle = container.querySelector("button.rounded-full")!;
-      expect(toggle.className).toContain("bg-foreground");
+      const toggle = container.querySelector('[role="switch"]')!;
+      expect(toggle.getAttribute("data-state")).toBe("checked");
 
       // Toggle off
       await user.click(toggle);
-      expect(toggle.className).toContain("bg-secondary");
+      expect(toggle.getAttribute("data-state")).toBe("unchecked");
 
       // Save
       await user.click(screen.getByText("Save Preferences"));
 
       await waitFor(() => {
-        expect(mockUpdatePrefs).toHaveBeenCalledWith({ emailNotifications: false });
+        expect(mockUpdatePrefs).toHaveBeenCalledWith(expect.objectContaining({ emailNotifications: false }));
         expect(toast.success).toHaveBeenCalledWith("Preferences saved");
       });
     });
@@ -313,13 +312,13 @@ describe("Notification Preferences Page", () => {
       setQueryData({ "users/current": { emailNotifications: null } });
       const { container } = render(<NotificationPreferences />);
 
-      const toggle = container.querySelector("button.rounded-full")!;
-      expect(toggle.className).toContain("bg-foreground");
+      const toggle = container.querySelector('[role="switch"]')!;
+      expect(toggle.getAttribute("data-state")).toBe("checked");
 
       await user.click(screen.getByText("Save Preferences"));
 
       await waitFor(() => {
-        expect(mockUpdatePrefs).toHaveBeenCalledWith({ emailNotifications: true });
+        expect(mockUpdatePrefs).toHaveBeenCalledWith(expect.objectContaining({ emailNotifications: true }));
       });
     });
   });

@@ -134,16 +134,16 @@ describe("Support Page", () => {
 
   // ─── Loading state ─────────────────────────────────────
   describe("Loading State", () => {
-    it("shows a spinner when data is loading", () => {
+    it("shows a loading skeleton when data is loading", () => {
       clearAllQueryData();
       const { container } = render(<Support />);
-      expect(container.querySelector(".animate-spin")).toBeTruthy();
+      expect(container.querySelector('[aria-label="Loading"]')).toBeTruthy();
     });
 
-    it("hides spinner once data is loaded", () => {
+    it("hides loading skeleton once data is loaded", () => {
       setQueryData({});
       const { container } = render(<Support />);
-      expect(container.querySelector(".animate-spin")).toBeNull();
+      expect(container.querySelector('[aria-label="Loading"]')).toBeNull();
     });
   });
 
@@ -176,12 +176,12 @@ describe("Support Page", () => {
       expect(screen.getByText("No support tickets yet")).toBeTruthy();
     });
 
-    it("shows empty state when tickets is undefined", () => {
+    it("shows loading state when tickets is undefined", () => {
       setQueryData({});
       delete queryDataMap["support/my"];
       const { container } = render(<Support />);
-      // When support/my is undefined, isLoading is true → spinner
-      expect(container.querySelector(".animate-spin")).toBeTruthy();
+      // When support/my is undefined, isLoading is true → loading skeleton
+      expect(container.querySelector('[aria-label="Loading"]')).toBeTruthy();
     });
   });
 

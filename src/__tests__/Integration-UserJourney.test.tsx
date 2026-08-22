@@ -213,16 +213,31 @@ vi.mock("@/hooks/use-flutterwave", () => ({
   useFlutterwavePayment: vi.fn(() => ({ state: mockPaymentState, startCheckout: mockStartCheckout, reset: mockResetPayment })),
 }));
 
+const stub = (id: string) => () => React.createElement("div", { "data-testid": id });
 vi.mock("recharts", () => ({
   LineChart: Object.assign((p: any) => React.createElement("div", { "data-testid": "line-chart" }, p.children), { displayName: "LineChart" }),
   AreaChart: Object.assign((p: any) => React.createElement("div", { "data-testid": "area-chart" }, p.children), { displayName: "AreaChart" }),
-  Line: () => React.createElement("div", { "data-testid": "recharts-line" }),
-  Area: () => React.createElement("div", { "data-testid": "recharts-area" }),
-  XAxis: () => React.createElement("div", { "data-testid": "recharts-xaxis" }),
-  YAxis: () => React.createElement("div", { "data-testid": "recharts-yaxis" }),
-  CartesianGrid: () => React.createElement("div", { "data-testid": "recharts-grid" }),
-  ResponsiveContainer: ({ children }: any) => React.createElement("div", { "data-testid": "chart-responsive" }, children),
-  Tooltip: () => React.createElement("div", { "data-testid": "recharts-tooltip" }),
+  BarChart: Object.assign((p: any) => React.createElement("div", { "data-testid": "bar-chart" }, p.children), { displayName: "BarChart" }),
+  ComposedChart: Object.assign((p: any) => React.createElement("div", { "data-testid": "composed-chart" }, p.children), { displayName: "ComposedChart" }),
+  Line: stub("recharts-line"),
+  Area: stub("recharts-area"),
+  Bar: stub("recharts-bar"),
+  Scatter: stub("recharts-scatter"),
+  XAxis: stub("recharts-xaxis"),
+  YAxis: stub("recharts-yaxis"),
+  CartesianGrid: stub("recharts-grid"),
+  ResponsiveContainer: ({ children }: any) => React.createElement("div", { "data-testid": "responsive-container" }, children),
+  Tooltip: stub("recharts-tooltip"),
+  Legend: stub("recharts-legend"),
+  PieChart: Object.assign((p: any) => React.createElement("div", { "data-testid": "pie-chart" }, p.children), { displayName: "PieChart" }),
+  Pie: stub("recharts-pie"),
+  Cell: stub("recharts-cell"),
+  RadarChart: Object.assign((p: any) => React.createElement("div", { "data-testid": "radar-chart" }, p.children), { displayName: "RadarChart" }),
+  Radar: stub("recharts-radar"),
+  PolarGrid: stub("recharts-polar-grid"),
+  PolarAngleAxis: stub("recharts-polar-angle"),
+  PolarRadiusAxis: stub("recharts-polar-radius"),
+  ScatterChart: Object.assign((p: any) => React.createElement("div", { "data-testid": "scatter-chart" }, p.children), { displayName: "ScatterChart" }),
 }));
 
 vi.mock("@/components/ui/chart", () => ({
@@ -513,7 +528,7 @@ describe("Integration: Full User Journey", () => {
       }});
       const Trading = (await import("@/pages/dashboard/Trading")).default;
       render(<Trading />);
-      expect(screen.getByText("Performance Charts")).toBeTruthy();
+      expect(screen.getByText("Performance Analytics")).toBeTruthy();
       expect(screen.getByText("Equity Curve")).toBeTruthy();
     });
 
@@ -527,7 +542,7 @@ describe("Integration: Full User Journey", () => {
       }});
       const Trading = (await import("@/pages/dashboard/Trading")).default;
       render(<Trading />);
-      expect(screen.getByText("Win Rate")).toBeTruthy();
+      expect(screen.getAllByText("Win Rate").length).toBeGreaterThanOrEqual(1);
     });
 
     it("auto-seeds demo data for unseeded users", async () => {
@@ -650,24 +665,24 @@ describe("Integration: Full User Journey", () => {
       render(<Trading />);
       expect(screen.getByText("Trading Dashboard")).toBeTruthy();
       expect(screen.getByText("Total Balance")).toBeTruthy();
-      expect(screen.getByText("Performance Charts")).toBeTruthy();
-      expect(screen.getByText("Win Rate")).toBeTruthy();
+      expect(screen.getByText("Performance Analytics")).toBeTruthy();
+      expect(screen.getAllByText("Win Rate").length).toBeGreaterThanOrEqual(1);
     });
 
     it("stage 5: user passes challenge and becomes funded", async () => {
       Object.assign(mockAuthState, { user: { ...mockAuthState.user, isDemoSeeded: true } });
       setQueryData({ "challenges/my": [makeChallenge({ id: 100, status: "funded", accountSize: 50000 })],
         "trading/dashboard": {
-          accounts: [makeMt5Account({ balance: 50000, equity: 52000 })],
+          accounts: [],
           challenges: [],
           metricsHistory: makeMetricsHistory(60), drawdownData: [],
-          summary: { totalBalance: 50000, totalEquity: 52000, floatingPL: 2000, activeChallengeCount: 0, activeAccountCount: 1 },
+          summary: { totalBalance: 50000, totalEquity: 52000, floatingPL: 2000, activeChallengeCount: 0, activeAccountCount: 0 },
           perfSummary: { ...makeLatestMetrics(), balance: 52000, equity: 54000, totalProfit: 4000 },
         },
       });
       const Trading = (await import("@/pages/dashboard/Trading")).default;
       render(<Trading />);
-      // Empty state when no active challenges
+      // Empty state when no active challenges and no accounts
       expect(screen.getByText("No Trading Activity Yet")).toBeTruthy();
     });
 

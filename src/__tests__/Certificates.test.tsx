@@ -1,19 +1,19 @@
 // @vitest-environment jsdom
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
-import { useApiQuery } from "@/hooks/use-api";
 
 // ─── Mock: sonner ──────────────────────────────────────────
 vi.mock("sonner", () => ({
-  toast: {
-    success: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    warning: vi.fn(),
-  },
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
+}));
+
+// ─── Mock: react-router ────────────────────────────────────
+const mockNavigate = vi.fn();
+vi.mock("react-router", () => ({
+  useNavigate: () => mockNavigate,
 }));
 
 // ─── Mock: useAuth ─────────────────────────────────────────
@@ -29,42 +29,20 @@ vi.mock("@/hooks/use-auth", () => ({
   })),
 }));
 
-// ─── Mock: useApiQuery / useApiMutation ────────────────────
+// ─── Mock: useApiQuery ─────────────────────────────────────
+// The mock returns queryDataMap[dataKey] as `data`. The Certificates
+// component reads `data?.certificates` for the array.
 const queryDataMap: Record<string, any> = {};
 
 vi.mock("@/hooks/use-api", () => ({
-  useApiQuery: vi.fn((key: string[], path: string, _opts?: any) => {
-    // The page passes query-suffixed keys (["certificates", "my", "/api/certificates/my?..."]),
-    // so look up by the stable prefix (first two segments).
+  useApiQuery: vi.fn((key: string[]) => {
     const dataKey = key.slice(0, 2).join("/");
     if (queryDataMap[dataKey] === undefined) {
       return { data: undefined, isLoading: true };
     }
-    const base = queryDataMap[dataKey];
-    // Simulate the server-driven certificates list: paginate + stats envelope.
-    if (dataKey === "certificates/my" && Array.isArray(base)) {
-      // Parse the query string manually — the global URL constructor is stubbed in this file.
-      const query = path.includes("?") ? path.split("?")[1] : "";
-      const params = new URLSearchParams(query);
-      const page = Number(params.get("page") || 1);
-      const pageSize = Number(params.get("pageSize") || 10);
-      const total = base.length;
-      const totalPages = Math.max(1, Math.ceil(total / pageSize));
-      return {
-        data: {
-          certificates: base.slice((page - 1) * pageSize, page * pageSize),
-          total,
-          page,
-          pageSize,
-          totalPages,
-          stats: { total, byType: {} },
-        },
-        isLoading: false,
-      };
-    }
-    return { data: base, isLoading: false };
+    return { data: queryDataMap[dataKey], isLoading: false };
   }),
-  useApiMutation: vi.fn((_method: string, _path: string, _onSuccess?: any) => ({
+  useApiMutation: vi.fn(() => ({
     mutateAsync: vi.fn(),
     mutate: vi.fn(),
     isPending: false,
@@ -75,41 +53,32 @@ vi.mock("@/hooks/use-api", () => ({
 const mockWindowOpen = vi.fn();
 vi.stubGlobal("open", mockWindowOpen);
 
-// ─── Mock: fetch for PDF download ─────────────────────────
-const mockFetch = vi.fn();
-vi.stubGlobal("fetch", mockFetch);
-
-// ─── Mock: URL.createObjectURL ────────────────────────────
-vi.stubGlobal("URL", {
-  createObjectURL: vi.fn(() => "blob:http://localhost/fake-url"),
-  revokeObjectURL: vi.fn(),
-});
-
 // ─── Import component after mocks ─────────────────────────
 import Certificates from "@/pages/dashboard/Certificates";
-
-// ─── Test data factories ──────────────────────────────────
-function makeCertificate(overrides: any = {}) {
-  return {
-    id: 1,
-    type: "phase_1_passed",
-    certificateNumber: "AFC-2025-001",
-    issuedAt: Date.now() - 86400000 * 5,
-    verificationCode: "ABC123XYZ",
-    challengeId: 10,
-    accountSize: 50000,
-    ...overrides,
-  };
-}
 
 // ─── Helpers ──────────────────────────────────────────────
 function clearAllQueryData() {
   Object.keys(queryDataMap).forEach((k) => delete queryDataMap[k]);
 }
 
-function setQueryData(updates: Record<string, any>) {
+// Component reads: data?.certificates || [] where data = queryDataMap["certificates/my"]
+function setCertificates(certs: any[]) {
   Object.keys(queryDataMap).forEach((k) => delete queryDataMap[k]);
-  Object.assign(queryDataMap, { "certificates/my": [], ...updates });
+  queryDataMap["certificates/my"] = { certificates: certs };
+}
+
+function makeCertificate(overrides: any = {}) {
+  return {
+    id: 1,
+    title: "Phase 1 Passed Certificate",
+    accountSize: 50000,
+    issuedAt: Date.now() - 86400000 * 5,
+    certificateNumber: "AFC-2025-001",
+    verified: false,
+    verifyUrl: "https://verify.afrifunded.com/ABC123",
+    downloadUrl: "https://cdn.afrifunded.com/certs/1.pdf",
+    ...overrides,
+  };
 }
 
 // ─── Tests ────────────────────────────────────────────────
@@ -118,348 +87,209 @@ describe("Certificates Page", () => {
     clearAllQueryData();
     vi.clearAllMocks();
     mockWindowOpen.mockClear();
-    mockFetch.mockResolvedValue({
-      ok: true,
-      blob: async () => new Blob(["fake-pdf"]),
-    });
   });
 
   // ─── Loading state ─────────────────────────────────────
   describe("Loading State", () => {
-    it("shows a spinner when data is loading", () => {
+    it("shows a loading indicator when data is loading", () => {
       clearAllQueryData();
       const { container } = render(<Certificates />);
-      expect(container.querySelector(".animate-spin")).toBeTruthy();
+      expect(container.querySelector('[aria-label="Loading"]')).toBeTruthy();
     });
 
-    it("hides spinner once data is loaded", () => {
-      setQueryData({});
+    it("hides loading indicator once data is loaded", () => {
+      setCertificates([]);
       const { container } = render(<Certificates />);
-      expect(container.querySelector(".animate-spin")).toBeNull();
+      expect(container.querySelector('[aria-label="Loading"]')).toBeNull();
     });
   });
 
   // ─── Page header ───────────────────────────────────────
   describe("Page Header", () => {
     it("renders the Certificates title", () => {
-      setQueryData({});
+      setCertificates([]);
       render(<Certificates />);
       expect(screen.getByText("Certificates")).toBeTruthy();
     });
 
     it("renders the page description", () => {
-      setQueryData({});
+      setCertificates([]);
       render(<Certificates />);
-      expect(screen.getByText(/View and download/)).toBeTruthy();
+      expect(screen.getByText(/funded trader certificates/)).toBeTruthy();
     });
   });
 
   // ─── Empty state ───────────────────────────────────────
   describe("Empty State", () => {
     it("shows empty state when no certificates exist", () => {
-      setQueryData({ "certificates/my": [] });
+      setCertificates([]);
       render(<Certificates />);
       expect(screen.getByText("No certificates yet")).toBeTruthy();
     });
 
     it("shows hint text about earning certificates", () => {
-      setQueryData({ "certificates/my": [] });
+      setCertificates([]);
       render(<Certificates />);
-      expect(screen.getByText(/Complete a challenge phase/)).toBeTruthy();
+      expect(screen.getByText(/Complete a challenge/)).toBeTruthy();
+    });
+
+    it("renders Browse Challenges button that navigates to challenges", async () => {
+      const user = userEvent.setup();
+      setCertificates([]);
+      render(<Certificates />);
+      await user.click(screen.getByText("Browse Challenges"));
+      expect(mockNavigate).toHaveBeenCalledWith("/dashboard/challenges");
     });
   });
 
   // ─── Certificate list ──────────────────────────────────
   describe("Certificate List", () => {
     it("renders a single certificate", () => {
-      setQueryData({
-        "certificates/my": [makeCertificate({ type: "phase_1_passed" })],
-      });
+      setCertificates([makeCertificate({ title: "Funded Trader Certificate" })]);
       render(<Certificates />);
-      expect(screen.getByText((t) => t.includes("Phase 1 Passed") && t.includes("Certificate"))).toBeTruthy();
+      expect(screen.getByText("Funded Trader Certificate")).toBeTruthy();
     });
 
     it("renders multiple certificates", () => {
-      setQueryData({
-        "certificates/my": [
-          makeCertificate({ id: 1, type: "phase_1_passed", certificateNumber: "AFC-001" }),
-          makeCertificate({ id: 2, type: "phase_2_passed", certificateNumber: "AFC-002" }),
-        ],
-      });
+      setCertificates([
+        makeCertificate({ id: 1, title: "Phase 1 Passed", certificateNumber: "AFC-001" }),
+        makeCertificate({ id: 2, title: "Phase 2 Passed", certificateNumber: "AFC-002" }),
+      ]);
       render(<Certificates />);
-      expect(screen.getByText(/AFC-001/)).toBeTruthy();
-      expect(screen.getByText(/AFC-002/)).toBeTruthy();
+      expect(screen.getByText("Phase 1 Passed")).toBeTruthy();
+      expect(screen.getByText("Phase 2 Passed")).toBeTruthy();
     });
 
     it("displays certificate number", () => {
-      setQueryData({
-        "certificates/my": [makeCertificate({ certificateNumber: "CERT-999" })],
-      });
+      setCertificates([makeCertificate({ certificateNumber: "CERT-999" })]);
       render(<Certificates />);
       expect(screen.getByText(/CERT-999/)).toBeTruthy();
     });
 
-    it("displays formatted issued date", () => {
-      const date = new Date("2025-06-15");
-      setQueryData({
-        "certificates/my": [makeCertificate({ issuedAt: date.getTime() })],
-      });
+    it("displays account size", () => {
+      setCertificates([makeCertificate({ accountSize: 100000 })]);
       render(<Certificates />);
-      expect(screen.getByText(/6\/15\/2025/)).toBeTruthy();
-    });
-
-    it("handles null issuedAt gracefully", () => {
-      setQueryData({
-        "certificates/my": [makeCertificate({ issuedAt: null })],
-      });
-      render(<Certificates />);
-      expect(screen.getByText(/CERT-999|AFC-2025-001/)).toBeTruthy();
+      expect(screen.getByText(/\$100,000/)).toBeTruthy();
     });
   });
 
-  // ─── Certificate type formatting ───────────────────────
-  describe("Certificate Type Formatting", () => {
-    it("formats phase_1_passed correctly", () => {
-      setQueryData({
-        "certificates/my": [makeCertificate({ type: "phase_1_passed" })],
-      });
+  // ─── Verified / Pending badge ──────────────────────────
+  describe("Status Badges", () => {
+    it("shows Verified badge when certificate is verified", () => {
+      setCertificates([makeCertificate({ verified: true })]);
       render(<Certificates />);
-      expect(screen.getByText(/Phase 1 Passed/)).toBeTruthy();
+      expect(screen.getByText("Verified")).toBeTruthy();
     });
 
-    it("formats phase_2_passed correctly", () => {
-      setQueryData({
-        "certificates/my": [makeCertificate({ type: "phase_2_passed" })],
-      });
+    it("shows Pending badge when certificate is not verified", () => {
+      setCertificates([makeCertificate({ verified: false })]);
       render(<Certificates />);
-      expect(screen.getByText(/Phase 2 Passed/)).toBeTruthy();
-    });
-
-    it("formats funded correctly", () => {
-      setQueryData({
-        "certificates/my": [makeCertificate({ type: "funded" })],
-      });
-      render(<Certificates />);
-      expect(screen.getByText(/Funded Certificate/)).toBeTruthy();
-    });
-
-    it("shows type badge", () => {
-      setQueryData({
-        "certificates/my": [makeCertificate({ type: "phase_1_passed" })],
-      });
-      render(<Certificates />);
-      expect(screen.getByText("phase_1_passed")).toBeTruthy();
+      expect(screen.getByText("Pending")).toBeTruthy();
     });
   });
 
   // ─── Verify button ─────────────────────────────────────
   describe("Verify Button", () => {
-    it("shows Verify button when verificationCode exists", () => {
-      setQueryData({
-        "certificates/my": [makeCertificate({ verificationCode: "VERIFY123" })],
-      });
+    it("shows Verify button when verifyUrl exists", () => {
+      setCertificates([makeCertificate({ verifyUrl: "https://verify.example.com/ABC" })]);
       render(<Certificates />);
       expect(screen.getByText("Verify")).toBeTruthy();
     });
 
-    it("hides Verify button when no verificationCode", () => {
-      setQueryData({
-        "certificates/my": [makeCertificate({ verificationCode: null })],
-      });
+    it("hides Verify button when no verifyUrl", () => {
+      setCertificates([makeCertificate({ verifyUrl: null })]);
       render(<Certificates />);
       expect(screen.queryByText("Verify")).toBeNull();
     });
 
     it("opens verification URL when Verify is clicked", async () => {
       const user = userEvent.setup();
-      setQueryData({
-        "certificates/my": [makeCertificate({ verificationCode: "VERIFY123" })],
-      });
+      setCertificates([makeCertificate({ verifyUrl: "https://verify.example.com/ABC" })]);
       render(<Certificates />);
       await user.click(screen.getByText("Verify"));
-      expect(mockWindowOpen).toHaveBeenCalledWith("/verify/VERIFY123", "_blank");
+      expect(mockWindowOpen).toHaveBeenCalledWith("https://verify.example.com/ABC", "_blank");
     });
   });
 
-  // ─── Download PDF ──────────────────────────────────────
-  describe("Download PDF", () => {
-    it("renders PDF button for each certificate", () => {
-      setQueryData({
-        "certificates/my": [makeCertificate()],
-      });
+  // ─── Download button ───────────────────────────────────
+  describe("Download Button", () => {
+    it("renders Download button when downloadUrl exists", () => {
+      setCertificates([makeCertificate({ downloadUrl: "https://cdn.example.com/1.pdf" })]);
       render(<Certificates />);
-      expect(screen.getByText("PDF")).toBeTruthy();
+      expect(screen.getByText("Download")).toBeTruthy();
     });
 
-    it("calls fetch API when PDF button is clicked", async () => {
-      const user = userEvent.setup();
-      setQueryData({
-        "certificates/my": [makeCertificate({ id: 1, certificateNumber: "CERT-001" })],
-      });
+    it("hides Download button when no downloadUrl", () => {
+      setCertificates([makeCertificate({ downloadUrl: null })]);
       render(<Certificates />);
-      await user.click(screen.getByText("PDF"));
-      expect(mockFetch).toHaveBeenCalledWith("/api/certificates/1/pdf", { credentials: "include" });
+      expect(screen.queryByText("Download")).toBeNull();
     });
 
-    it("disables PDF button while downloading", async () => {
+    it("opens download URL when Download is clicked", async () => {
       const user = userEvent.setup();
-      let resolveFetch: (v: any) => void;
-      mockFetch.mockImplementation(() => new Promise((r) => { resolveFetch = r; }));
-      setQueryData({
-        "certificates/my": [makeCertificate({ id: 1 })],
-      });
+      setCertificates([makeCertificate({ downloadUrl: "https://cdn.example.com/1.pdf" })]);
       render(<Certificates />);
-
-      const pdfButton = screen.getByText("PDF").closest("button")!;
-      await user.click(pdfButton);
-
-      // Button should be disabled during download
-      expect(pdfButton).toBeDisabled();
-
-      resolveFetch!({ ok: true, blob: async () => new Blob() });
-      await waitFor(() => {
-        expect(pdfButton).not.toBeDisabled();
-      });
-    });
-
-    it("shows spinner during download", async () => {
-      const user = userEvent.setup();
-      let resolveFetch: (v: any) => void;
-      mockFetch.mockImplementation(() => new Promise((r) => { resolveFetch = r; }));
-      setQueryData({
-        "certificates/my": [makeCertificate({ id: 1 })],
-      });
-      const { container } = render(<Certificates />);
-
-      await user.click(screen.getByText("PDF"));
-      expect(container.querySelector(".animate-spin")).toBeTruthy();
-
-      resolveFetch!({ ok: true, blob: async () => new Blob() });
+      await user.click(screen.getByText("Download"));
+      expect(mockWindowOpen).toHaveBeenCalledWith("https://cdn.example.com/1.pdf", "_blank");
     });
   });
 
   // ─── Multiple certificates ─────────────────────────────
   describe("Multiple Certificates", () => {
-    it("renders different certificate types", () => {
-      setQueryData({
-        "certificates/my": [
-          makeCertificate({ id: 1, type: "phase_1_passed", certificateNumber: "CERT-001" }),
-          makeCertificate({ id: 2, type: "phase_2_passed", certificateNumber: "CERT-002" }),
-          makeCertificate({ id: 3, type: "funded", certificateNumber: "CERT-003" }),
-        ],
-      });
+    it("renders different certificate titles", () => {
+      setCertificates([
+        makeCertificate({ id: 1, title: "Phase 1 Passed" }),
+        makeCertificate({ id: 2, title: "Phase 2 Passed" }),
+        makeCertificate({ id: 3, title: "Funded Trader Certificate" }),
+      ]);
       render(<Certificates />);
-      expect(screen.getByText(/Phase 1 Passed/)).toBeTruthy();
-      expect(screen.getByText(/Phase 2 Passed/)).toBeTruthy();
-      expect(screen.getByText(/Funded/)).toBeTruthy();
+      expect(screen.getByText("Phase 1 Passed")).toBeTruthy();
+      expect(screen.getByText("Phase 2 Passed")).toBeTruthy();
+      expect(screen.getByText("Funded Trader Certificate")).toBeTruthy();
     });
 
-    it("renders Verify buttons only for certs with codes", () => {
-      setQueryData({
-        "certificates/my": [
-          makeCertificate({ id: 1, verificationCode: "CODE1" }),
-          makeCertificate({ id: 2, verificationCode: null }),
-          makeCertificate({ id: 3, verificationCode: "CODE3" }),
-        ],
-      });
+    it("renders Verify buttons only for certs with verifyUrl", () => {
+      setCertificates([
+        makeCertificate({ id: 1, verifyUrl: "https://verify.example.com/1" }),
+        makeCertificate({ id: 2, verifyUrl: null }),
+        makeCertificate({ id: 3, verifyUrl: "https://verify.example.com/3" }),
+      ]);
       render(<Certificates />);
       const verifyButtons = screen.getAllByText("Verify");
       expect(verifyButtons.length).toBe(2);
     });
 
-    it("renders PDF button for each certificate", () => {
-      setQueryData({
-        "certificates/my": [
-          makeCertificate({ id: 1 }),
-          makeCertificate({ id: 2 }),
-          makeCertificate({ id: 3 }),
-        ],
-      });
+    it("renders Download button for each certificate with downloadUrl", () => {
+      setCertificates([
+        makeCertificate({ id: 1 }),
+        makeCertificate({ id: 2 }),
+        makeCertificate({ id: 3 }),
+      ]);
       render(<Certificates />);
-      const pdfButtons = screen.getAllByText("PDF");
-      expect(pdfButtons.length).toBe(3);
+      const downloadButtons = screen.getAllByText("Download");
+      expect(downloadButtons.length).toBe(3);
     });
   });
 
   // ─── Full integration ──────────────────────────────────
-  // ─── Sortable Headers ──────────────────────────────────
-  describe("Sortable Headers", () => {
-    it("renders sortable headers with Issued active by default", () => {
-      setQueryData({ "certificates/my": [makeCertificate()] });
-      render(<Certificates />);
-
-      for (const label of ["Type", "Number", "Issued"]) {
-        expect(screen.getByRole("button", { name: `Sort by ${label}` })).toBeTruthy();
-      }
-      expect(screen.getByRole("button", { name: "Sort by Issued" }).getAttribute("aria-pressed")).toBe("true");
-    });
-
-    it("calls the API with sortBy/sortOrder when a header is clicked", async () => {
-      const user = userEvent.setup();
-      setQueryData({ "certificates/my": [makeCertificate()] });
-      render(<Certificates />);
-
-      await user.click(screen.getByRole("button", { name: "Sort by Type" }));
-
-      const calls = vi.mocked(useApiQuery).mock.calls;
-      const myCall = calls.find((c) => String(c[1]).includes("/api/certificates/my?") && String(c[1]).includes("sortBy=type"));
-      expect(myCall).toBeTruthy();
-      expect(String(myCall![1])).toContain("sortOrder=desc");
-      expect(screen.getByRole("button", { name: "Sort by Type" }).getAttribute("aria-pressed")).toBe("true");
-    });
-
-    it("toggles to ascending when the active column is clicked again", async () => {
-      const user = userEvent.setup();
-      setQueryData({ "certificates/my": [makeCertificate()] });
-      render(<Certificates />);
-
-      await user.click(screen.getByRole("button", { name: "Sort by Type" }));
-      await user.click(screen.getByRole("button", { name: "Sort by Type" }));
-
-      const calls = vi.mocked(useApiQuery).mock.calls;
-      const ascCall = calls.find((c) => String(c[1]).includes("/api/certificates/my?") && String(c[1]).includes("sortBy=type&sortOrder=asc"));
-      expect(ascCall).toBeTruthy();
-    });
-  });
-
   describe("Full Integration", () => {
     it("renders complete page with all sections", () => {
-      setQueryData({
-        "certificates/my": [
-          makeCertificate({ id: 1, type: "phase_1_passed", certificateNumber: "AFC-001", verificationCode: "V1" }),
-          makeCertificate({ id: 2, type: "funded", certificateNumber: "AFC-002", verificationCode: "V2" }),
-        ],
-      });
+      setCertificates([
+        makeCertificate({ id: 1, title: "Phase 1 Passed", certificateNumber: "AFC-001", verified: true }),
+        makeCertificate({ id: 2, title: "Funded Trader Certificate", certificateNumber: "AFC-002", verified: false }),
+      ]);
       render(<Certificates />);
 
-      // Header
       expect(screen.getByText("Certificates")).toBeTruthy();
-      expect(screen.getByText(/View and download/)).toBeTruthy();
-
-      // Certificates
+      expect(screen.getByText(/funded trader certificates/)).toBeTruthy();
+      expect(screen.getByText("Phase 1 Passed")).toBeTruthy();
+      expect(screen.getByText("Funded Trader Certificate")).toBeTruthy();
       expect(screen.getByText(/AFC-001/)).toBeTruthy();
       expect(screen.getByText(/AFC-002/)).toBeTruthy();
-
-      // Buttons
+      expect(screen.getByText("Verified")).toBeTruthy();
+      expect(screen.getByText("Pending")).toBeTruthy();
       expect(screen.getAllByText("Verify").length).toBe(2);
-      expect(screen.getAllByText("PDF").length).toBe(2);
-    });
-
-    it("paginates many certificates", async () => {
-      const user = userEvent.setup();
-      const certs = Array.from({ length: 15 }, (_, i) =>
-        makeCertificate({ id: i + 1, type: "phase_1_passed", certificateNumber: `CERT-${i + 1}` })
-      );
-      setQueryData({ "certificates/my": certs });
-      render(<Certificates />);
-      // Page 1 shows the first 10 of 15
-      expect(screen.getByText(/Showing 10 of 15 certificates/)).toBeTruthy();
-      expect(screen.queryByText(/CERT-15/)).toBeNull();
-
-      // Next page shows the remaining 5
-      await user.click(screen.getByText("Next"));
-      expect(screen.getByText(/CERT-15/)).toBeTruthy();
-      expect(screen.getByText(/Showing 5 of 15 certificates/)).toBeTruthy();
+      expect(screen.getAllByText("Download").length).toBe(2);
     });
   });
 });

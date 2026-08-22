@@ -179,7 +179,7 @@ describe("Profile Page", () => {
 
   // ─── Loading state ─────────────────────────────────────
   describe("Loading State", () => {
-    it("shows spinner when user is null", () => {
+    it("shows loading skeleton when user is null", () => {
       vi.mocked(useAuth).mockReturnValue({
         isLoading: false,
         isAuthenticated: true,
@@ -190,7 +190,7 @@ describe("Profile Page", () => {
         refetch: vi.fn() as any,
       });
       const { container } = render(<Profile />);
-      expect(container.querySelector(".animate-spin")).toBeTruthy();
+      expect(container.querySelector('[aria-label="Loading"]')).toBeTruthy();
     });
   });
 
@@ -759,7 +759,7 @@ describe("Profile Page", () => {
         error: null, signIn: vi.fn() as any, signOut: vi.fn() as any, refetch: vi.fn() as any,
       });
       const { container } = render(<Profile />);
-      expect(container.querySelector(".animate-spin")).toBeTruthy();
+      expect(container.querySelector('[aria-label="Loading"]')).toBeTruthy();
 
       vi.mocked(useAuth).mockReturnValue({
         isLoading: false, isAuthenticated: true, user: { ...mockUser } as any,
