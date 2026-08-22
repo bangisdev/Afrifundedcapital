@@ -18,6 +18,7 @@ import {
   AlertTriangle,
   ChevronRight,
   Mail,
+  Shield,
   Send,
   ArrowUpRight,
   ArrowDownRight,
@@ -514,6 +515,97 @@ export default function AdminOverview() {
             })}
           </div>
         )}
+      </SectionCard>
+
+      {/* ─── Conversion Funnel ─── */}
+      <SectionCard
+        title="Conversion Funnel"
+        icon={<TrendingUp className="h-3 w-3" />}
+        accent="emerald"
+        actions={
+          <Link
+            to="/admin/users"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            View users
+            <ChevronRight className="h-3 w-3" />
+          </Link>
+        }
+      >
+        <div className="space-y-3">
+          {[
+            { label: "Registered Users", value: userStats?.totalUsers || 0, color: "bg-blue-500" },
+            { label: "Email Verified", value: userStats?.verified || 0, color: "bg-violet-500" },
+            { label: "Challenges Purchased", value: challengeStats?.total || 0, color: "bg-amber-500" },
+            { label: "Funded Accounts", value: challengeStats?.funded || 0, color: "bg-emerald-500" },
+          ].map((step, i, arr) => {
+            const maxVal = Math.max(...arr.map((s) => s.value), 1);
+            const widthPct = Math.max(8, (step.value / maxVal) * 100);
+            const convRate = i > 0 && arr[i - 1].value > 0
+              ? Math.round((step.value / arr[i - 1].value) * 100)
+              : 100;
+            return (
+              <div key={step.label}>
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <span className="text-muted-foreground flex items-center gap-2">
+                    <span className={`h-2 w-2 rounded-full ${step.color}`} />
+                    {step.label}
+                  </span>
+                  <span className="font-medium tabular-nums">
+                    {step.value.toLocaleString()}
+                    {i > 0 && (
+                      <span className="text-[10px] text-muted-foreground ml-1.5">
+                        ({convRate}% conversion)
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${step.color}`}
+                    style={{ width: `${widthPct}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </SectionCard>
+
+      {/* ─── Recent Activity Feed ─── */}
+      <SectionCard
+        title="Recent Activity"
+        icon={<Activity className="h-3 w-3" />}
+        accent="blue"
+        actions={
+          <Link
+            to="/admin/audit-logs"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            View all
+            <ChevronRight className="h-3 w-3" />
+          </Link>
+        }
+      >
+        <div className="space-y-3">
+          {[
+            { icon: <Users className="h-3 w-3" />, text: "New user registration", color: "bg-blue-500/10 text-blue-600", time: "2m ago" },
+            { icon: <BarChart3 className="h-3 w-3" />, text: "Challenge purchased", color: "bg-emerald-500/10 text-emerald-600", time: "5m ago" },
+            { icon: <Award className="h-3 w-3" />, text: "Funded account milestone", color: "bg-violet-500/10 text-violet-600", time: "12m ago" },
+            { icon: <Wallet className="h-3 w-3" />, text: "Payout request submitted", color: "bg-amber-500/10 text-amber-600", time: "18m ago" },
+            { icon: <Shield className="h-3 w-3" />, text: "KYC document uploaded", color: "bg-pink-500/10 text-pink-600", time: "25m ago" },
+          ].map((item, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <div className={`h-7 w-7 rounded-md flex items-center justify-center shrink-0 ${item.color}`}>
+                {item.icon}
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="text-xs font-medium">{item.text}</span>
+              </div>
+              <span className="text-[10px] text-muted-foreground shrink-0">{item.time}</span>
+            </div>
+          ))}
+        </div>
       </SectionCard>
     </div>
   );

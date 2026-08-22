@@ -15,6 +15,10 @@ import AdminMT5 from "./AdminMT5";
 import AdminNotifications from "./AdminNotifications";
 import AdminReports from "./AdminReports";
 import AdminPayouts from "./AdminPayouts";
+import AdminSystemHealth from "./AdminSystemHealth";
+import AdminAnnouncements from "./AdminAnnouncements";
+import AdminEmailTemplates from "./AdminEmailTemplates";
+import AdminAutomation from "./AdminAutomation";
 
 export default function AdminDashboard() {
   return (
@@ -35,6 +39,10 @@ export default function AdminDashboard() {
         <Route path="audit-logs" element={<AdminAuditLogs />} />
         <Route path="notifications" element={<AdminNotifications />} />
         <Route path="reports" element={<AdminReports />} />
+        <Route path="system-health" element={<AdminSystemHealth />} />
+        <Route path="announcements" element={<AdminAnnouncements />} />
+        <Route path="email-templates" element={<AdminEmailTemplates />} />
+        <Route path="automation" element={<AdminAutomation />} />
       </Routes>
     </DashboardLayout>
   );

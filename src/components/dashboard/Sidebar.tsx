@@ -19,6 +19,10 @@ import {
   Percent,
   DollarSign,
   ScrollText,
+  HeartPulse,
+  Megaphone,
+  Mail,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -95,7 +99,16 @@ const adminNavGroups: NavGroup[] = [
     label: "System",
     items: [
       { label: "Audit Logs", icon: <ScrollText className="h-4 w-4" />, path: "/admin/audit-logs" },
+      { label: "System Health", icon: <HeartPulse className="h-4 w-4" />, path: "/admin/system-health" },
+      { label: "Automation", icon: <Zap className="h-4 w-4" />, path: "/admin/automation" },
       { label: "Settings", icon: <Settings className="h-4 w-4" />, path: "/admin/settings" },
+    ],
+  },
+  {
+    label: "Communications",
+    items: [
+      { label: "Announcements", icon: <Megaphone className="h-4 w-4" />, path: "/admin/announcements" },
+      { label: "Email Templates", icon: <Mail className="h-4 w-4" />, path: "/admin/email-templates" },
     ],
   },
 ];
