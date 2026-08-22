@@ -1,6 +1,7 @@
 import '@vly-ai/integrations';
 import { Toaster } from "@/components/ui/sonner";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
+import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import React, { StrictMode, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router";
@@ -20,6 +21,16 @@ const TermsOfService = lazy(() => import("./pages/TermsOfService.tsx"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy.tsx"));
 const Contact = lazy(() => import("./pages/Contact.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
+
+// Register service worker for PWA support
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("/sw.js")
+      .then((reg) => console.log("[SW] Registered:", reg.scope))
+      .catch((err) => console.warn("[SW] Registration failed:", err));
+  });
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -108,6 +119,7 @@ createRoot(document.getElementById("root")!).render(
               </Routes>
             </Suspense>
           </BrowserRouter>
+          <PWAInstallPrompt />
           <Toaster
             position="bottom-right"
             toastOptions={{
