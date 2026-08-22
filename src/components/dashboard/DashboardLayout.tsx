@@ -164,7 +164,7 @@ export function DashboardLayout({ isAdmin = false, children }: { isAdmin?: boole
   const sectionTitle = currentSectionTitle(location.pathname, isAdmin);
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="h-dvh bg-background flex overflow-hidden">
       <Sidebar isAdmin={isAdmin} mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
