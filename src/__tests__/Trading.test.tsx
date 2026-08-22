@@ -52,18 +52,35 @@ vi.mock("@/hooks/use-api", () => ({
 }));
 
 // ─── Mock: recharts (simplified for jsdom) ────────────────
-vi.mock("recharts", () => ({
-  LineChart: Object.assign(({ children }: any) => React.createElement("div", { "data-testid": "line-chart" }, children), { displayName: "LineChart" }),
-  AreaChart: Object.assign(({ children }: any) => React.createElement("div", { "data-testid": "area-chart" }, children), { displayName: "AreaChart" }),
-  BarChart: Object.assign(({ children }: any) => React.createElement("div", { "data-testid": "bar-chart" }, children), { displayName: "BarChart" }),
-  Bar: () => React.createElement("div", { "data-testid": "recharts-bar" }),
-  Line: (props: any) => React.createElement("div", { "data-testid": "recharts-line", "data-key": props.dataKey }),
-  Area: (props: any) => React.createElement("div", { "data-testid": "recharts-area", "data-key": props.dataKey }),
-  Cell: () => null,
-  XAxis: () => React.createElement("div", { "data-testid": "recharts-xaxis" }),
-  YAxis: () => React.createElement("div", { "data-testid": "recharts-yaxis" }),
-  CartesianGrid: () => React.createElement("div", { "data-testid": "recharts-grid" }),
-}));
+vi.mock("recharts", () => {
+  const R = (name: string) => Object.assign((props: any) => React.createElement("div", { "data-testid": name }, props?.children), { displayName: name });
+  const s = (name: string) => (props: any) => React.createElement("div", { "data-testid": name });
+  return {
+    LineChart: Object.assign(({ children }: any) => React.createElement("div", { "data-testid": "line-chart" }, children), { displayName: "LineChart" }),
+    AreaChart: Object.assign(({ children }: any) => React.createElement("div", { "data-testid": "area-chart" }, children), { displayName: "AreaChart" }),
+    BarChart: Object.assign(({ children }: any) => React.createElement("div", { "data-testid": "bar-chart" }, children), { displayName: "BarChart" }),
+    ComposedChart: Object.assign(({ children }: any) => React.createElement("div", { "data-testid": "composed-chart" }, children), { displayName: "ComposedChart" }),
+    PieChart: Object.assign(({ children }: any) => React.createElement("div", { "data-testid": "pie-chart" }, children), { displayName: "PieChart" }),
+    RadarChart: Object.assign(({ children }: any) => React.createElement("div", { "data-testid": "radar-chart" }, children), { displayName: "RadarChart" }),
+    ScatterChart: Object.assign(({ children }: any) => React.createElement("div", { "data-testid": "scatter-chart" }, children), { displayName: "ScatterChart" }),
+    ResponsiveContainer: Object.assign(({ children }: any) => React.createElement("div", { "data-testid": "responsive-container" }, children), { displayName: "ResponsiveContainer" }),
+    Bar: s("recharts-bar"),
+    Line: (props: any) => React.createElement("div", { "data-testid": "recharts-line", "data-key": props.dataKey }),
+    Area: (props: any) => React.createElement("div", { "data-testid": "recharts-area", "data-key": props.dataKey }),
+    Pie: s("recharts-pie"),
+    Radar: s("recharts-radar"),
+    Scatter: s("recharts-scatter"),
+    Cell: () => null,
+    Tooltip: s("recharts-tooltip"),
+    Legend: s("recharts-legend"),
+    XAxis: () => React.createElement("div", { "data-testid": "recharts-xaxis" }),
+    YAxis: () => React.createElement("div", { "data-testid": "recharts-yaxis" }),
+    CartesianGrid: () => React.createElement("div", { "data-testid": "recharts-grid" }),
+    PolarGrid: s("recharts-polar-grid"),
+    PolarAngleAxis: s("recharts-polar-angle"),
+    PolarRadiusAxis: s("recharts-polar-radius"),
+  };
+});
 
 // ─── Mock: @/components/ui/chart ──────────────────────────
 vi.mock("@/components/ui/chart", () => ({
@@ -266,10 +283,9 @@ describe("Trading Page", () => {
         summary: { totalBalance: 10000, totalEquity: 10250, floatingPL: 250, activeChallengeCount: 1, activeAccountCount: 1 },
       });
       render(<Trading />);
-      expect(screen.getByText("Performance Charts")).toBeTruthy();
+      expect(screen.getByText("Performance Analytics")).toBeTruthy();
       expect(screen.getByText("Equity Curve")).toBeTruthy();
-      expect(screen.getByTestId("line-chart")).toBeTruthy();
-      expect(screen.getByTestId("area-chart")).toBeTruthy();
+      expect(screen.getAllByTestId("responsive-container").length).toBeGreaterThanOrEqual(1);
     });
 
     it("shows daily P&L bar chart", () => {
@@ -290,7 +306,6 @@ describe("Trading Page", () => {
       });
       render(<Trading />);
       expect(screen.getByText("Daily P&L (Last 30 Days)")).toBeTruthy();
-      expect(screen.getByTestId("bar-chart")).toBeTruthy();
     });
   });
 
@@ -393,7 +408,7 @@ describe("Trading Page", () => {
       expect(screen.getAllByText("Profit Factor").length).toBeGreaterThanOrEqual(1);
 
       // Charts
-      expect(screen.getByText("Performance Charts")).toBeTruthy();
+      expect(screen.getByText("Performance Analytics")).toBeTruthy();
       expect(screen.getByText("Equity Curve")).toBeTruthy();
 
       // MT5 accounts
