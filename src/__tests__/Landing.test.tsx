@@ -77,6 +77,8 @@ vi.mock("lucide-react", () => {
     CreditCard: createIcon("CreditCard"),
     ShieldCheck: createIcon("ShieldCheck"),
     Headphones: createIcon("Headphones"),
+    Menu: createIcon("Menu"),
+    X: createIcon("X"),
     ExternalLink: createIcon("ExternalLink"),
     Activity: createIcon("Activity"),
     Wallet: createIcon("Wallet"),
@@ -214,10 +216,13 @@ describe("Landing Page", () => {
     it("hides nav CTA buttons when auth is loading", () => {
       (useAuth as any).mockReturnValue({ isLoading: true, isAuthenticated: false, user: null });
       render(<Landing />);
-      // When loading, header buttons should not be visible
+      // When loading, nav CTA buttons (Get Started/Dashboard) should not be visible
       const header = document.querySelector("header")!;
       const buttons = header.querySelectorAll("button");
-      expect(buttons.length).toBe(0);
+      // Only the mobile hamburger menu button should exist, not CTA buttons
+      const ctaTexts = Array.from(buttons).map((b) => b.textContent?.trim() || "");
+      expect(ctaTexts.some((t) => t.includes("Get Started"))).toBe(false);
+      expect(ctaTexts.some((t) => t.includes("Dashboard"))).toBe(false);
     });
   });
 
