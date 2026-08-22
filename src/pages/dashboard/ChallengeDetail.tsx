@@ -5,12 +5,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { ArrowLeft, Activity, BarChart3, AlertTriangle, Check, X, ExternalLink, Shield } from "lucide-react";
+import { ArrowLeft, Activity, BarChart3, AlertTriangle, Check, X, ExternalLink, Shield, Trophy } from "lucide-react";
 import { PageLoader } from "@/components/dashboard/PageLoader";
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts";
 import { useMemo, useState } from "react";
 import { newsBlackoutWindow, RULE_HINTS } from "@/lib/utils";
 import { ComplianceSection } from "@/components/dashboard/ComplianceSection";
+import { ChallengeTimeline } from "@/components/dashboard/ChallengeTimeline";
 import { cn } from "@/lib/utils";
 
 const chartConfig = {
@@ -67,7 +68,7 @@ function ruleRow(label: string, allowed: boolean, value?: string, hint?: string)
   );
 }
 
-type Tab = "compliance" | "metrics" | "rules";
+type Tab = "timeline" | "compliance" | "metrics" | "rules";
 
 export default function ChallengeDetail() {
   const { id } = useParams();
@@ -108,9 +109,10 @@ export default function ChallengeDetail() {
   }
 
   const tabs: Array<{ key: Tab; label: string; icon: React.ElementType }> = [
-    { key: "compliance", label: "Compliance Dashboard", icon: Shield },
-    { key: "metrics", label: "Performance Charts", icon: Activity },
-    { key: "rules", label: "Trading Rules", icon: BarChart3 },
+    { key: "timeline", label: "Journey", icon: Trophy },
+    { key: "compliance", label: "Compliance", icon: Shield },
+    { key: "metrics", label: "Performance", icon: Activity },
+    { key: "rules", label: "Rules", icon: BarChart3 },
   ];
 
   return (
@@ -203,6 +205,10 @@ export default function ChallengeDetail() {
       </div>
 
       {/* Tab Content */}
+      {activeTab === "timeline" && (
+        <ChallengeTimeline challenge={challenge} />
+      )}
+
       {activeTab === "compliance" && (
         <ComplianceSection
           challenge={challenge}
