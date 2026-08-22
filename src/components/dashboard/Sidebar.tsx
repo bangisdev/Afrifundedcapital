@@ -48,6 +48,7 @@ const clientNavGroups: NavGroup[] = [
       { label: "Challenges", icon: <BarChart3 className="h-4 w-4" />, path: "/dashboard/challenges" },
       { label: "Trading", icon: <TrendingUp className="h-4 w-4" />, path: "/dashboard/trading" },
       { label: "Leaderboard", icon: <Award className="h-4 w-4" />, path: "/dashboard/leaderboard" },
+      { label: "Journal", icon: <ScrollText className="h-4 w-4" />, path: "/dashboard/journal" },
     ],
   },
   {

@@ -853,3 +853,57 @@ export const mt5SyncQueue = sqliteTable(
   },
   (table) => [index("idx_msq_mt5").on(table.mt5AccountId), index("idx_msq_status").on(table.status)],
 );
+
+// ═══════════════════════════════════════════════
+//  TRADER JOURNAL
+// ═══════════════════════════════════════════════
+
+export const journalEntries = sqliteTable(
+  "journal_entries",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id").notNull(),
+    challengeId: integer("challenge_id"),
+
+    // Trade details
+    symbol: text("symbol").notNull(), // e.g. EURUSD, XAUUSD
+    direction: text("direction").notNull(), // buy | sell
+    lotSize: real("lot_size"),
+    entryPrice: real("entry_price"),
+    exitPrice: real("exit_price"),
+    stopLoss: real("stop_loss"),
+    takeProfit: real("take_profit"),
+    pnl: real("pnl").default(0),
+    commission: real("commission").default(0),
+    swap: real("swap"),
+    pips: real("pips"),
+
+    // Timing
+    openTime: integer("open_time"),
+    closeTime: integer("close_time"),
+    duration: integer("duration"), // minutes
+
+    // Analysis
+    strategy: text("strategy"), // e.g. 'Breakout', 'Mean Reversion'
+    timeframe: text("timeframe"), // e.g. '1H', '4H', 'Daily'
+    setupQuality: integer("setup_quality"), // 1-5 rating
+    emotionalState: text("emotional_state"), // confident, anxious, neutral, fomo, revenge
+    outcome: text("outcome"), // win | loss | breakeven
+    tags: text("tags"), // JSON array of tags
+    notes: text("notes"),
+    lessonsLearned: text("lessons_learned"),
+
+    // Screenshots (stored as JSON array of base64 data URLs)
+    screenshots: text("screenshots"), // JSON array of { name, dataUrl } objects
+
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    index("idx_je_user_id").on(table.userId),
+    index("idx_je_challenge_id").on(table.challengeId),
+    index("idx_je_symbol").on(table.symbol),
+    index("idx_je_outcome").on(table.outcome),
+    index("idx_je_created").on(table.createdAt),
+  ],
+);

@@ -14,6 +14,7 @@ import NotificationPreferences from "./NotificationPreferences";
 import Payouts from "./Payouts";
 import Onboarding from "./Onboarding";
 import Leaderboard from "./Leaderboard";
+import Journal from "./Journal";
 
 export default function Dashboard() {
   return (
@@ -33,6 +34,7 @@ export default function Dashboard() {
         <Route path="notifications/preferences" element={<NotificationPreferences />} />
         <Route path="onboarding" element={<Onboarding />} />
         <Route path="leaderboard" element={<Leaderboard />} />
+        <Route path="journal" element={<Journal />} />
       </Routes>
     </DashboardLayout>
   );

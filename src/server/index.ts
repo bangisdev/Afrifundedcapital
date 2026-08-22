@@ -36,6 +36,7 @@ import secretsRouter from "./routes/secrets";
 import securityRouter from "./routes/security";
 import metricsRouter from "./routes/metrics";
 import rolesRouter from "./routes/roles";
+import journalRouter from "./routes/journal";
 import { metricsMiddleware } from "./lib/metrics";
 import { startMT5Scheduler } from "./lib/mt5/scheduler";
 import { startViolationDigestScheduler } from "./lib/violation-digest";
@@ -892,6 +893,7 @@ app.route("/api/seed", seedRouter);
 app.route("/api/test-email", testEmailRouter);
 app.route("/api/admin/secrets", secretsRouter);
 app.route("/api/admin/roles", rolesRouter);
+app.route("/api/journal", journalRouter);
 app.route("/api/auth", securityRouter);
 app.route("/api/metrics", metricsRouter);
 
