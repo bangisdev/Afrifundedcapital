@@ -15,7 +15,7 @@ import {
 import {
   Loader2, TrendingUp, TrendingDown, Minus, Server,
   Activity, RefreshCw, Target, Shield,
-  AlertTriangle, Trophy, Clock, Sparkles, Flame,
+  AlertTriangle, Trophy, Clock, Sparkles, Flame, Calendar,
 } from "lucide-react";
 import {
   EnhancedEquityCurve,
@@ -28,6 +28,7 @@ import {
   TradingRadar,
   MonthlyPerformanceGrid,
 } from "@/components/dashboard/TradingAnalytics";
+import { EconomicCalendar } from "@/components/dashboard/EconomicCalendar";
 import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
@@ -514,6 +515,15 @@ export default function Trading() {
           <EnhancedDrawdownChart metricsHistory={metricsHistory} drawdownData={drawdownDataRaw} />
         </div>
       )}
+
+      {/* ─── Economic Calendar ─── */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Calendar className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-medium">Economic Calendar</h2>
+        </div>
+        <EconomicCalendar />
+      </div>
 
       {/* ─── MT5 Accounts ─── */}
       {accounts.length > 0 && (
