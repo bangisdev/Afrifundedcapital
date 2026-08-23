@@ -32,6 +32,8 @@ import { EconomicCalendar } from "@/components/dashboard/EconomicCalendar";
 import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
+import { generatePerformanceReport, type ReportData } from "@/lib/pdf-report";
+import { Download } from "lucide-react";
 
 // ═══════════════════════════════════════════════════════
 //  Chart config
@@ -215,6 +217,55 @@ export default function Trading() {
     setSeeding(false);
   };
 
+  const handleExportPDF = () => {
+    try {
+      const reportData: ReportData = {
+        traderName: user?.name || "Trader",
+        traderEmail: user?.email || undefined,
+        challenge: {
+          name: primaryChallenge?.templateName || `Challenge #${primaryChallenge?.id}`,
+          accountSize: primaryChallenge?.accountSize || 0,
+          phase: primaryChallenge?.currentPhase || 1,
+          status: primaryChallenge?.status || "active",
+          profitTarget: primaryChallenge?.profitTarget || 0,
+          maxDrawdown: primaryChallenge?.maxDrawdown || 0,
+          dailyDrawdown: primaryChallenge?.dailyDrawdown || 0,
+          minTradingDays: primaryChallenge?.minTradingDays || 0,
+          maxLeverage: primaryChallenge?.maxLeverage || 0,
+        },
+        metrics: {
+          balance: primaryMetrics?.balance ?? primaryChallenge?.accountSize ?? 0,
+          equity: primaryMetrics?.equity ?? primaryChallenge?.accountSize ?? 0,
+          floatingPL: primaryMetrics?.floatingPL ?? 0,
+          totalPL: summary.floatingPL || 0,
+          winRate: primaryMetrics?.winRate ?? 0,
+          profitFactor: primaryMetrics?.profitFactor ?? 0,
+          closedTrades: primaryMetrics?.closedTrades ?? 0,
+          openPositions: primaryMetrics?.openPositions ?? 0,
+          tradingDays: primaryMetrics?.tradingDaysCount ?? 0,
+          currentDrawdown: primaryMetrics?.currentDrawdown ?? 0,
+          dailyDrawdown: primaryMetrics?.dailyDrawdown ?? 0,
+          remainingDrawdown: primaryMetrics?.remainingDrawdown ?? 0,
+          profitTargetProgress: primaryMetrics?.profitTargetProgress ?? 0,
+          healthScore: primaryMetrics?.healthScore ?? 0,
+          largestWin: perfSummary?.largestWin,
+          largestLoss: perfSummary?.largestLoss,
+          averageRR: perfSummary?.averageRR,
+          consecutiveWins: perfSummary?.consecutiveWins,
+          consecutiveLosses: perfSummary?.consecutiveLosses,
+        },
+        equityCurve: metricsHistory.map((m: any) => ({
+          date: m.date || m.createdAt || "",
+          equity: m.equity ?? m.balance ?? 0,
+        })),
+      };
+      generatePerformanceReport(reportData);
+      toast.success("Performance report downloaded!");
+    } catch (err) {
+      toast.error("Failed to generate report");
+    }
+  };
+
 
 
   if (isLoading) {
@@ -269,6 +320,10 @@ export default function Trading() {
             <Button variant="outline" size="sm" className="text-xs" onClick={handleSync} disabled={syncing}>
               {syncing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}
               {syncing ? "Syncing…" : "Sync Now"}
+            </Button>
+            <Button variant="default" size="sm" className="text-xs" onClick={handleExportPDF}>
+              <Download className="h-3 w-3 mr-1" />
+              Export Report
             </Button>
           </div>
         }
