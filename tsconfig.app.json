@@ -26,10 +26,7 @@
     "noPropertyAccessFromIndexSignature": false,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "convex/react": ["./src/convex/react.ts"],
-      "convex/values": ["./src/convex/values.ts"],
-      "convex/server": ["./src/convex/server.ts"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["src", "vly-toolbar-readonly.tsx", "e2e", "playwright.config.ts"]

@@ -13,29 +13,26 @@ The following environment variables are automatically set during project creatio
 
 The `@vly-ai/integrations` package is already included in package.json.
 
-## Usage in Convex Actions
+## Usage in Server Routes
 
 ```typescript
-"use node";
-
+import { Hono } from 'hono';
 import { vly } from '../lib/vly-integrations';
-import { action } from "./_generated/server";
 
-export const generateAIResponse = action({
-  handler: async (ctx, args) => {
-    // AI Completions
-    const completion = await freebuff.com.completion({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: 'You are a helpful assistant.' },
-        { role: 'user', content: 'Hello!' }
-      ],
-      temperature: 0.7,
-      maxTokens: 150
-    });
-    
-    return completion;
-  }
+const app = new Hono();
+
+app.post('/ai/complete', async (c) => {
+  const completion = await vly.ai.completion({
+    model: 'gpt-4o-mini',
+    messages: [
+      { role: 'system', content: 'You are a helpful assistant.' },
+      { role: 'user', content: 'Hello!' }
+    ],
+    temperature: 0.7,
+    maxTokens: 150
+  });
+
+  return c.json(completion);
 });
 ```
 
@@ -44,7 +41,7 @@ export const generateAIResponse = action({
 ### AI Integration
 ```typescript
 // Create completion
-const completion = await freebuff.com.completion({
+const completion = await vly.ai.completion({
   model: 'gpt-4o-mini', // or 'gpt-4o', 'claude-3-haiku', etc.
   messages: [...],
   temperature: 0.7,
@@ -52,13 +49,13 @@ const completion = await freebuff.com.completion({
 });
 
 // Stream completion
-await freebuff.com.streamCompletion(
+await vly.ai.streamCompletion(
   request,
   (chunk: string) => console.log(chunk)
 );
 
 // Generate embeddings
-const embeddings = await freebuff.com.embeddings("Your text here");
+const embeddings = await vly.ai.embeddings("Your text here");
 ```
 
 ### Email Integration
@@ -113,7 +110,7 @@ interface ApiResponse<T> {
 Example error handling:
 
 ```typescript
-const result = await freebuff.com.completion({ ... });
+const result = await vly.ai.completion({ ... });
 
 if (result.success) {
   console.log('Response:', result.data);
@@ -127,7 +124,7 @@ if (result.success) {
 
 1. The integration key (`VLY_INTEGRATION_KEY`) is automatically injected during project creation
 2. All API calls are automatically billed to your deployment based on usage
-3. Must be used in Convex actions with `"use node"` directive
+3. Must be used in server-side routes (Hono route handlers)
 4. The integration key should never be exposed to the client
 
 ## Checking Integration Status

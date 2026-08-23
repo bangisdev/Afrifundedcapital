@@ -55,7 +55,7 @@ Use bun for the package manager.
 
 **Stack notes**
 
-- One process serves both the SPA and the `/api/*` endpoints: the Hono app is a **Vite plugin** in `src/server/index.ts`. The `src/convex/` files are unused template stubs — the template's Convex/auth sections further down describe the original scaffold, not the live app.
+- One process serves both the SPA and the `/api/*` endpoints: the Hono app is a **Vite plugin** in `src/server/index.ts`.
 - The database is SQLite via `better-sqlite3` + Drizzle (schema in `src/server/schema.ts`, migrations in `src/server/migrate.ts`).
 - Auth is **session-cookie based**: scrypt-hashed passwords, an HttpOnly `afc_session` cookie (7-day expiry), and `requireAuth` / `requireAdmin` middleware. No JWT.
 - Client state uses **TanStack Query** over the shared `src/lib/api.ts` fetch wrapper.
@@ -195,7 +195,7 @@ Account security features implemented on top of the session-cookie auth (all und
 
 ## Setup
 
-This project is set up already and running on a cloud environment, as well as a convex development in the sandbox.
+This project is set up already and running on a cloud environment.
 
 ## Environment Variables
 
@@ -229,11 +229,6 @@ Only the public key may be persisted (in the `flutterwave_config` setting). The 
 | `APP_URL` | Base URL baked into transactional email links (confirmations, alerts, etc.) |
 | `DB_PATH` | SQLite database file path (the Docker image defaults to `/app/data/afrifundedcapital.db`) |
 
-### Platform-managed
-
-- **Client (`VITE_*`)**: `CONVEX_DEPLOYMENT` and `VITE_CONVEX_URL` are set by the platform.
-- **Convex backend**: `JWKS`, `JWT_PRIVATE_KEY`, and `SITE_URL` are consumed by the auth layer via the Convex environment.
-
 E2E-only variables (`PLAYWRIGHT_BASE_URL`, `E2E_ADMIN_EMAIL`, `E2E_ADMIN_PASSWORD`, `E2E_TESTING`) are documented under [End-to-end tests](#end-to-end-tests-playwright).
 
 
@@ -243,17 +238,9 @@ You must follow these conventions when using authentication.
 
 ## Auth is already set up.
 
-All convex authentication functions are already set up. The auth currently uses email OTP and anonymous users, but can support more.
+All authentication functions are already set up using session-cookie auth with scrypt-hashed passwords.
 
-The email OTP configuration is defined in `src/convex/auth/emailOtp.ts`. DO NOT MODIFY THIS FILE.
-
-Also, DO NOT MODIFY THESE AUTH FILES: `src/convex/auth.config.ts` and `src/convex/auth.ts`.
-
-## Using Convex Auth on the backend
-
-On the `src/convex/users.ts` file, you can use the `getCurrentUser` function to get the current user's data.
-
-## Using Convex Auth on the frontend
+## Using Auth on the frontend
 
 The `/auth` page is already set up to use auth. Navigate to `/auth` for all log in / sign up sequences.
 
@@ -278,7 +265,7 @@ You can perform authorization checks on the frontend and backend.
 
 On the frontend, you can use the `useAuth` hook to get the current user's data and authentication state.
 
-You should also be protecting queries, mutations, and actions at the base level, checking for authorization securely.
+On the backend, the `requireAuth` and `requireAdmin` middleware in `src/server/middleware.ts` protect route handlers. Granular permission checks use `requirePermission("<perm>")` which resolves roles, permissions, and inheritance from the database.
 
 ## Adding a redirect after auth
 
@@ -408,60 +395,27 @@ Always ensure your larger dialogs have a scroll in its content to ensure that it
 
 Ideally, instead of using a new page, use a Dialog instead. 
 
-# Using the Convex backend
+# Backend Conventions
 
-You will be implementing the convex backend. Follow your knowledge of convex and the documentation to implement the backend.
+The backend is built with Hono (mounted as a Vite plugin) and SQLite via Drizzle ORM.
 
-## The Convex Schema
+## The Database Schema
 
-You must correctly follow the convex schema implementation.
+The schema is defined in `src/server/schema.ts`. Tables are managed by Drizzle ORM with migrations in `src/server/migrate.ts`.
 
-The schema is defined in `src/convex/schema.ts`.
+## Adding New Routes
 
-Do not include the `_id` and `_creationTime` fields in your queries (it is included by default for each table).
-Do not index `_creationTime` as it is indexed for you. Never have duplicate indexes.
+1. Create a new route file in `src/server/routes/`.
+2. Define your Hono routes with appropriate middleware (`requireAuth`, `requireAdmin`, `requirePermission`).
+3. Import and mount the router in `src/server/index.ts` under the `/api` prefix.
+4. Use `getDb()` from `src/server/db.ts` for database access.
 
+## Common Patterns
 
-## Convex Actions: Using CRUD operations
-
-When running anything that involves external connections, you must use a convex action with "use node" at the top of the file.
-
-You cannot have queries or mutations in the same file as a "use node" action file. Thus, you must use pre-built queries and mutations in other files.
-
-You can also use the pre-installed internal crud functions for the database:
-
-```ts
-// in convex/users.ts
-import { crud } from "convex-helpers/server/crud";
-import schema from "./schema.ts";
-
-export const { create, read, update, destroy } = crud(schema, "users");
-
-// in some file, in an action:
-const user = await ctx.runQuery(internal.users.read, { id: userId });
-
-await ctx.runMutation(internal.users.update, {
-  id: userId,
-  patch: {
-    status: "inactive",
-  },
-});
-```
-
-
-## Common Convex Mistakes To Avoid
-
-When using convex, make sure:
-- Document IDs are referenced as `_id` field, not `id`.
-- Document ID types are referenced as `Id<"TableName">`, not `string`.
-- Document object types are referenced as `Doc<"TableName">`.
-- Keep schemaValidation to false in the schema file.
-- You must correctly type your code so that it passes the type checker.
-- You must handle null / undefined cases of your convex queries for both frontend and backend, or else it will throw an error that your data could be null or undefined.
-- Always use the `@/folder` path, with `@/convex/folder/file.ts` syntax for importing convex files.
-- This includes importing generated files like `@/convex/_generated/server`, `@/convex/_generated/api`
-- Remember to import functions like useQuery, useMutation, useAction, etc. from `convex/react`
-- NEVER have return type validators.
+- Always use the `@/` path alias for imports (e.g. `@/lib/utils`, `@/components/ui/button`).
+- Handle errors gracefully — return `c.json({ error: "..." }, 500)` for server errors.
+- Use the shared `src/lib/api.ts` fetch wrapper on the frontend to consume API routes.
+- All sensitive routes must use auth middleware. Never expose internal data to unauthenticated users.
 
 # MT5 Integration
 
