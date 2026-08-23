@@ -14,8 +14,11 @@ import {
   Clock, Star, Brain, Tag, Camera, Trash2, Edit3, Eye,
   ArrowUpRight, ArrowDownRight, DollarSign, Trophy, Flame,
   AlertTriangle, ImagePlus, XCircle, ChevronLeft, RefreshCw,
+  Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { exportJournalToCSV } from "@/lib/csv-export";
+import { toast } from "sonner";
 
 // ═══════════════════════════════════════════════════════
 //  Types
@@ -201,9 +204,19 @@ export default function Journal() {
         title="Trade Journal"
         subtitle="Log every trade, review your performance, and improve your edge"
         actions={
-          <Button size="sm" className="text-xs" onClick={() => { setEditingEntry(null); setShowForm(true); }}>
-            <Plus className="h-3 w-3 mr-1" /> New Entry
-          </Button>
+          <div className="flex gap-2">
+            {entries.length > 0 && (
+              <Button variant="outline" size="sm" className="text-xs" onClick={() => {
+                exportJournalToCSV(entries);
+                toast.success(`Exported ${entries.length} trade(s) to CSV`);
+              }}>
+                <Download className="h-3 w-3 mr-1" /> Export CSV
+              </Button>
+            )}
+            <Button size="sm" className="text-xs" onClick={() => { setEditingEntry(null); setShowForm(true); }}>
+              <Plus className="h-3 w-3 mr-1" /> New Entry
+            </Button>
+          </div>
         }
       />
 

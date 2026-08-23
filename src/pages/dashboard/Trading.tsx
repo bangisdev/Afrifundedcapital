@@ -33,6 +33,7 @@ import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { generatePerformanceReport, type ReportData } from "@/lib/pdf-report";
+import { exportTradingToCSV } from "@/lib/csv-export";
 import { Download } from "lucide-react";
 
 // ═══════════════════════════════════════════════════════
@@ -266,6 +267,30 @@ export default function Trading() {
     }
   };
 
+  const handleExportCSV = () => {
+    try {
+      if (metricsHistory.length === 0) {
+        toast.error("No trading data to export");
+        return;
+      }
+      const csvData = metricsHistory.map((m: any) => ({
+        date: m.date || m.createdAt || new Date().toISOString().split("T")[0],
+        balance: m.balance ?? null,
+        equity: m.equity ?? null,
+        floatingPL: m.floatingPL ?? null,
+        dailyPL: m.dailyPL ?? null,
+        drawdown: m.drawdown ?? null,
+        dailyDrawdown: m.dailyDrawdown ?? null,
+        closedTrades: m.closedTrades ?? null,
+        winRate: m.winRate ?? null,
+        profitFactor: m.profitFactor ?? null,
+      }));
+      exportTradingToCSV(csvData);
+      toast.success(`Exported ${csvData.length} day(s) of trading data to CSV`);
+    } catch {
+      toast.error("Failed to export CSV");
+    }
+  };
 
 
   if (isLoading) {
@@ -323,7 +348,11 @@ export default function Trading() {
             </Button>
             <Button variant="default" size="sm" className="text-xs" onClick={handleExportPDF}>
               <Download className="h-3 w-3 mr-1" />
-              Export Report
+              Export PDF
+            </Button>
+            <Button variant="outline" size="sm" className="text-xs" onClick={handleExportCSV}>
+              <Download className="h-3 w-3 mr-1" />
+              Export CSV
             </Button>
           </div>
         }
