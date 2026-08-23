@@ -32,6 +32,12 @@ const sectionTitles: Record<string, string> = {
   affiliate: "Affiliate",
   profile: "Profile",
   onboarding: "Onboarding",
+  journal: "Journal",
+  leaderboard: "Leaderboard",
+  "system-health": "System Health",
+  announcements: "Announcements",
+  "email-templates": "Email Templates",
+  automation: "Automation",
 };
 
 function currentSectionTitle(pathname: string, isAdmin: boolean): string {
