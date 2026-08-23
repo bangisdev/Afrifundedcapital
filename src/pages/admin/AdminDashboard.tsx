@@ -1,5 +1,6 @@
 import { Route, Routes } from "react-router";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import AdminOverview from "./AdminOverview";
 import AdminUsers from "./AdminUsers";
 import AdminChallenges from "./AdminChallenges";
@@ -19,31 +20,35 @@ import AdminSystemHealth from "./AdminSystemHealth";
 import AdminAnnouncements from "./AdminAnnouncements";
 import AdminEmailTemplates from "./AdminEmailTemplates";
 import AdminAutomation from "./AdminAutomation";
+import NotFound from "../dashboard/NotFound";
 
 export default function AdminDashboard() {
   return (
     <DashboardLayout isAdmin>
-      <Routes>
-        <Route index element={<AdminOverview />} />
-        <Route path="users" element={<AdminUsers />} />
-        <Route path="challenges" element={<AdminChallenges />} />
-        <Route path="payments" element={<AdminPayments />} />
-        <Route path="payouts" element={<AdminPayouts />} />
-        <Route path="kyc" element={<AdminKyc />} />
-        <Route path="affiliates" element={<AdminAffiliates />} />
-        <Route path="coupons" element={<AdminCoupons />} />
-        <Route path="support" element={<AdminSupport />} />
-        <Route path="certificates" element={<AdminCertificates />} />
-        <Route path="settings" element={<AdminSettings />} />
-        <Route path="mt5" element={<AdminMT5 />} />
-        <Route path="audit-logs" element={<AdminAuditLogs />} />
-        <Route path="notifications" element={<AdminNotifications />} />
-        <Route path="reports" element={<AdminReports />} />
-        <Route path="system-health" element={<AdminSystemHealth />} />
-        <Route path="announcements" element={<AdminAnnouncements />} />
-        <Route path="email-templates" element={<AdminEmailTemplates />} />
-        <Route path="automation" element={<AdminAutomation />} />
-      </Routes>
+      <ErrorBoundary fallbackTitle="Admin page error" fallbackDescription="This admin page encountered an error. Try navigating to a different section or return to the overview.">
+        <Routes>
+          <Route index element={<AdminOverview />} />
+          <Route path="users" element={<AdminUsers />} />
+          <Route path="challenges" element={<AdminChallenges />} />
+          <Route path="payments" element={<AdminPayments />} />
+          <Route path="payouts" element={<AdminPayouts />} />
+          <Route path="kyc" element={<AdminKyc />} />
+          <Route path="affiliates" element={<AdminAffiliates />} />
+          <Route path="coupons" element={<AdminCoupons />} />
+          <Route path="support" element={<AdminSupport />} />
+          <Route path="certificates" element={<AdminCertificates />} />
+          <Route path="settings" element={<AdminSettings />} />
+          <Route path="mt5" element={<AdminMT5 />} />
+          <Route path="audit-logs" element={<AdminAuditLogs />} />
+          <Route path="notifications" element={<AdminNotifications />} />
+          <Route path="reports" element={<AdminReports />} />
+          <Route path="system-health" element={<AdminSystemHealth />} />
+          <Route path="announcements" element={<AdminAnnouncements />} />
+          <Route path="email-templates" element={<AdminEmailTemplates />} />
+          <Route path="automation" element={<AdminAutomation />} />
+          <Route path="*" element={<NotFound isAdmin />} />
+        </Routes>
+      </ErrorBoundary>
     </DashboardLayout>
   );
 }

@@ -1,10 +1,11 @@
 import { Component, type ReactNode } from "react";
 import { AlertTriangle, RefreshCw, Home } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
 interface Props {
   children: ReactNode;
-  fallback?: ReactNode;
+  fallbackTitle?: string;
+  fallbackDescription?: string;
+  onReset?: () => void;
 }
 
 interface State {
@@ -26,54 +27,51 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error("[ErrorBoundary]", error, errorInfo);
   }
 
-  handleReset = () => {
+  handleRetry = () => {
     this.setState({ hasError: false, error: null });
+    this.props.onReset?.();
   };
 
   handleGoHome = () => {
-    this.setState({ hasError: false, error: null });
     window.location.href = "/dashboard";
   };
 
   render() {
     if (this.state.hasError) {
-      if (this.props.fallback) {
-        return this.props.fallback;
-      }
-
       return (
-        <div className="min-h-[60vh] flex flex-col items-center justify-center p-8">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive/10 mb-6">
-            <AlertTriangle className="h-7 w-7 text-destructive" />
+        <div className="flex flex-col items-center justify-center min-h-[400px] px-6">
+          <div className="w-16 h-16 rounded-2xl bg-destructive/10 flex items-center justify-center mb-6">
+            <AlertTriangle className="h-8 w-8 text-destructive" />
           </div>
-          <h2 className="text-lg font-semibold mb-2">Something went wrong</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-2">
+            {this.props.fallbackTitle || "Something went wrong"}
+          </h2>
           <p className="text-sm text-muted-foreground text-center max-w-md mb-6">
-            An unexpected error occurred. Your data is safe — this has been logged
-            and our team has been notified.
+            {this.props.fallbackDescription ||
+              "An unexpected error occurred while loading this page. You can try again or return to the dashboard."}
           </p>
           {this.state.error && (
-            <div className="mb-6 w-full max-w-lg">
-              <details className="rounded-lg border border-border bg-secondary/30 p-3">
-                <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-                  Technical details
-                </summary>
-                <pre className="mt-2 text-[10px] text-muted-foreground/80 whitespace-pre-wrap break-words max-h-40 overflow-auto">
-                  {this.state.error.message}
-                  {"\n\n"}
-                  {this.state.error.stack}
-                </pre>
-              </details>
+            <div className="w-full max-w-md mb-6 p-3 rounded-lg bg-muted/50 border border-border">
+              <p className="text-xs font-mono text-muted-foreground break-all">
+                {this.state.error.message}
+              </p>
             </div>
           )}
           <div className="flex items-center gap-3">
-            <Button size="sm" variant="outline" onClick={this.handleReset}>
-              <RefreshCw className="h-3 w-3 mr-1.5" />
+            <button
+              onClick={this.handleRetry}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+            >
+              <RefreshCw className="h-4 w-4" />
               Try Again
-            </Button>
-            <Button size="sm" onClick={this.handleGoHome}>
-              <Home className="h-3 w-3 mr-1.5" />
-              Go to Dashboard
-            </Button>
+            </button>
+            <button
+              onClick={this.handleGoHome}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
+            >
+              <Home className="h-4 w-4" />
+              Dashboard
+            </button>
           </div>
         </div>
       );
