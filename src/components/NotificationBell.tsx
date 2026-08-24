@@ -103,6 +103,7 @@ export function NotificationBell({ isAdmin = false }: { isAdmin?: boolean }) {
         size="icon"
         className="h-8 w-8 relative"
         onClick={() => setOpen(!open)}
+        aria-label={`Notifications${unreadCount != null && unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
       >
         <Bell className="h-4 w-4" />
         {unreadCount != null && unreadCount > 0 && (

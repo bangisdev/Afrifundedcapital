@@ -522,7 +522,7 @@ Gateway API keys (`FLW_SECRET_KEY`, `FLW_SECRET_HASH`, `RESEND_API_KEY`, `PAYSTA
 
 ## Unit & integration tests (Vitest)
 
-The project has 48 test files: server tests (`src/server/__tests__/*.test.ts`, node environment — routes, auth, KYC, payments, MT5 connector, retry-queue backoff, reconciliation drift, scheduler) and frontend tests (`src/__tests__/*.test.tsx`, jsdom environment — pages and the full user journey).
+The project has 66 test files: 31 server tests (`src/server/__tests__/*.test.ts`, node environment — routes, auth, KYC, payments, MT5 connector, retry-queue backoff, reconciliation drift, scheduler) and 35 frontend tests (`src/__tests__/*.test.tsx`, jsdom environment — pages and the full user journey).
 
 The `test` script runs the two environments as **two separate phases** (`src/server/__tests__` first, then `src/__tests__`). Bun's runtime cannot switch vitest's environment (node → jsdom) inside a single fork (`pool: "forks"` + `singleFork: true`), which corrupted shared global state when all 48 files ran in one command. Splitting keeps every file in one homogeneous environment, so `bun run test` is green under Bun and Node alike.
 

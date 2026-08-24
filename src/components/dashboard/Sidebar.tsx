@@ -221,6 +221,7 @@ export function Sidebar({
                   <button
                     key={item.path}
                     onClick={() => go(item.path)}
+                    aria-label={item.label}
                     className={cn(
                       "relative w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-xs transition-all duration-150",
                       active
@@ -251,6 +252,7 @@ export function Sidebar({
         {!isAdmin && user?.role && ["super_admin", "support_admin", "finance_admin", "client_manager", "compliance_admin", "marketing_admin", "affiliate_manager"].includes(user.role) && (
           <button
             onClick={() => go("/admin")}
+            aria-label="Admin Console"
             className={cn(
               "w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors",
               effCollapsed && "justify-center px-0",
@@ -262,6 +264,7 @@ export function Sidebar({
         )}
         <button
           onClick={handleSignOut}
+          aria-label="Sign Out"
           className={cn(
             "w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/5 transition-colors",
             effCollapsed && "justify-center px-0",

@@ -692,7 +692,7 @@ function RuleEnginePanel() {
   const { data, isLoading } = useApiQuery<any>(["admin", "mt5", "rules"], "/api/trading/admin/rules");
   const challenges: any[] = data?.challenges || [];
 
-  const statusVariant = (status: string) =>
+  const statusVariant = (status: string): "destructive" | "default" | "secondary" =>
     status === "violated" ? "destructive" : status === "active" ? "default" : "secondary";
 
   const ruleChips = (rules: any) => {
@@ -741,7 +741,7 @@ function RuleEnginePanel() {
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium truncate">{ch.label || `Challenge #${ch.challengeId}`}</span>
-                <Badge variant={statusVariant(ch.status) as any} className="text-[10px]">{ch.status}</Badge>
+                <Badge variant={statusVariant(ch.status)} className="text-[10px]">{ch.status}</Badge>
               </div>
               <div className="text-[11px] text-muted-foreground mt-0.5 truncate">
                 {ch.trader?.name || ch.trader?.email || `User #${ch.trader?.id}`} · ${ch.accountSize?.toLocaleString()} · phase {ch.currentPhase ?? 1}

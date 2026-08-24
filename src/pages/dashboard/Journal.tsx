@@ -55,6 +55,11 @@ interface JournalEntry {
   updatedAt: number;
 }
 
+interface ScreenshotItem {
+  name: string;
+  dataUrl: string;
+}
+
 interface JournalStats {
   totalTrades: number;
   wins: number;
@@ -674,7 +679,7 @@ function TradeForm({ entry, onSubmit, onClose }: {
       const reader = new FileReader();
       reader.onload = () => {
         const dataUrl = reader.result as string;
-        const existing = (form.screenshotsData as any[]) || [];
+        const existing: ScreenshotItem[] = Array.isArray(form.screenshotsData) ? form.screenshotsData : [];
         updateField("screenshotsData", [...existing, { name: file.name, dataUrl }]);
       };
       reader.readAsDataURL(file);
@@ -682,7 +687,7 @@ function TradeForm({ entry, onSubmit, onClose }: {
   };
 
   const removeScreenshot = (idx: number) => {
-    const updated = (form.screenshotsData as any[]).filter((_: any, i: number) => i !== idx);
+    const updated = (form.screenshotsData as ScreenshotItem[]).filter((_: ScreenshotItem, i: number) => i !== idx);
     updateField("screenshotsData", updated);
   };
 
@@ -811,7 +816,7 @@ function TradeForm({ entry, onSubmit, onClose }: {
                 <input
                   type="number"
                   step="any"
-                  value={(form as any)[field] ?? ""}
+                  value={(form as Record<string, number | null>)[field] ?? ""}
                   onChange={(e) => updateField(field, e.target.value ? parseFloat(e.target.value) : null)}
                   className="w-full px-3 py-2 text-sm bg-secondary/50 border border-border rounded-lg font-mono"
                   placeholder={placeholder}
@@ -1015,9 +1020,9 @@ function TradeForm({ entry, onSubmit, onClose }: {
             <Button variant="outline" size="sm" className="text-xs" onClick={() => screenshotRef.current?.click()} type="button">
               <ImagePlus className="h-3 w-3 mr-1" /> Add Screenshots
             </Button>
-            {(form.screenshotsData as any[]).length > 0 && (
+            {Array.isArray(form.screenshotsData) && form.screenshotsData.length > 0 && (
               <div className="flex gap-2 mt-2 flex-wrap">
-                {(form.screenshotsData as any[]).map((ss: any, idx: number) => (
+                {(form.screenshotsData as ScreenshotItem[]).map((ss: ScreenshotItem, idx: number) => (
                   <div key={idx} className="relative group">
                     <img src={ss.dataUrl} alt={ss.name} className="h-16 w-16 object-cover rounded-lg border border-border" />
                     <button
