@@ -911,10 +911,10 @@ export default function Landing() {
             custom={1}
             className="text-[clamp(1.5rem,7.5vw,2.25rem)] sm:text-5xl md:text-7xl font-light tracking-tight leading-[1.05] mb-6"
           >
-            Trade with Real
+            Get Funded to Trade
             <br />
-            <span className="relative">
-              <span className="font-medium text-brand">Capital</span>
+            Keep <span className="relative">
+              <span className="font-medium text-brand">90% of Profits</span>
               <motion.span
                 className="absolute -bottom-1 left-0 right-0 h-[3px] bg-brand/40 rounded-full"
                 initial={{ scaleX: 0 }}
@@ -922,7 +922,6 @@ export default function Landing() {
                 transition={{ delay: 1.2, duration: 0.8, ease: "easeOut" }}
               />
             </span>
-            {" "}Keep <span className="font-medium">90% of Profits</span>
           </motion.h1>
 
           {/* Subtitle */}
