@@ -47,7 +47,6 @@ import {
   Menu,
   X,
 } from "lucide-react";
-import { LogoDropdown } from "@/components/LogoDropdown";
 import { readResponseBody } from "@/lib/api";
 
 // ─── Animation Variants ───
@@ -753,8 +752,10 @@ export default function Landing() {
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border/50">
         <div className="container-page flex items-center justify-between h-16">
           <div className="flex items-center gap-3">
-            <LogoDropdown />
-            <span className="text-sm font-medium tracking-tight">AfriFundedCapital</span>
+            <div className="h-7 w-7 rounded-lg bg-brand text-brand-foreground flex items-center justify-center text-[11px] font-semibold tracking-tight shrink-0 shadow-sm">
+              AFC
+            </div>
+            <span className="text-sm font-semibold tracking-tight">AfriFundedCapital</span>
           </div>
           <nav className="hidden md:flex items-center gap-8 text-xs text-muted-foreground">
             {["features", "testimonials", "pricing", "faq"].map((section) => (
